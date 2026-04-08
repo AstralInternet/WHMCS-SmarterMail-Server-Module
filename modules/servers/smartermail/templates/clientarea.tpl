@@ -424,7 +424,7 @@
           {if $basePrice > 0}
           <span style="display:inline-block;margin-left:12px;font-size:13px;color:#555;">
             <strong style="color:#222;">${$estimatedPrice|number_format:2}</strong>
-            <span style="color:#aaa;font-size:11px;"> ({$tiers} {$lang.dash_storage_tiers}{if $tiers > 1}s{/if} × {$gbPerTier} {$lang.dash_storage_go} × ${$basePrice|number_format:2})</span>
+            <span style="color:#aaa;font-size:11px;"> ({$tiers} {$lang.dash_storage_tiers}{if $tiers > 1}s{/if} {$lang.dash_storage_of} {$gbPerTier} {$lang.dash_storage_go} × ${$basePrice|number_format:2})</span>
           </span>
           {/if}
         </div>
@@ -1313,7 +1313,7 @@
         <div class="sm-billing-detail-line">
           <span class="sm-bd-email">
             {$tiers} {$lang.dash_storage_tiers}{if $tiers > 1}s{/if}
-            × {$gbPerTier} {$lang.dash_storage_go}
+            {$lang.dash_storage_of} {$gbPerTier} {$lang.dash_storage_go}
             × ${$basePrice|number_format:2}
           </span>
           <span class="sm-bd-price">${$estimatedPrice|number_format:2}{$lang.per_month}</span>
