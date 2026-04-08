@@ -616,4 +616,10 @@ $_lang = [
     'err_redirect_conflicts_mailbox'  => 'This name is already used by an existing email mailbox.',
     'err_redirect_alias_exists'       => 'A redirect or alias with this name already exists.',
 
+    // ── Client area Actions menu ──────────────────────────────────────────────
+    // Label for the button displayed in the WHMCS "Actions" dropdown menu.
+    // The key in ClientAreaCustomButtonArray IS the button text shown to the
+    // client — it must come from the language file, never be hardcoded.
+    'action_btn_add_email' => 'Add an Email Address',
+
 ];

@@ -619,4 +619,10 @@ $_lang = [
     'err_redirect_conflicts_mailbox'  => 'Ce nom est déjà utilisé par une boîte courriel existante.',
     'err_redirect_alias_exists'       => 'Une redirection ou un alias avec ce nom existe déjà.',
 
+    // ── Menu Actions de l'espace client ──────────────────────────────────────
+    // Libellé du bouton affiché dans le menu déroulant "Actions" de WHMCS.
+    // La clé du tableau ClientAreaCustomButtonArray DOIT être traduite ici
+    // car WHMCS utilise directement la clé comme texte du bouton.
+    'action_btn_add_email' => 'Ajouter une adresse courriel',
+
 ];

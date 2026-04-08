@@ -2498,20 +2498,36 @@ function smartermail_ClientArea(array $params): array
 
 
 /**
- * Définit les boutons personnalisés affichés dans l'espace client.
+ * Définit les boutons personnalisés affichés dans le menu "Actions" de l'espace client.
  *
- * Ces boutons apparaissent dans la vue du service, en dessous des infos.
- * Chaque bouton appelle une fonction du module (via ClientAreaAllowedFunctions).
+ * IMPORTANT — TRADUCTION DES LIBELLÉS :
+ *   Dans WHMCS, la CLÉ du tableau retourné par cette fonction est utilisée
+ *   directement comme texte du bouton affiché au client. Elle ne passe par
+ *   aucun système de traduction automatique. Si la clé est codée en dur dans
+ *   une seule langue, le bouton reste dans cette langue quelle que soit la
+ *   langue du compte client.
  *
- * Clé   = Libellé du bouton (affiché à l'utilisateur)
+ *   SOLUTION : on charge le fichier de langue du client via _sm_lang($params)
+ *   et on utilise la clé 'action_btn_add_email' pour obtenir le libellé traduit.
+ *   Fallback vers le français canadien si la clé est absente du fichier de langue.
+ *
+ * Clé   = Libellé traduit du bouton (affiché à l'utilisateur)
  * Valeur = Nom de la fonction à appeler (sans le préfixe "smartermail_")
  *
- * @return array Tableau bouton => action
+ * @param  array $params Paramètres WHMCS du service (inclut clientsdetails.language)
+ * @return array         Tableau libellé traduit => action
  */
 function smartermail_ClientAreaCustomButtonArray(array $params): array
 {
+    // Charger le fichier de langue correspondant à la langue du compte client.
+    // _sm_lang() utilise $params['clientsdetails']['language'] avec fallback
+    // vers la langue par défaut de WHMCS, puis vers l'anglais si introuvable.
+    $lang = _sm_lang($params);
+
     return [
-        'Ajouter une adresse courriel' => 'adduserpage',
+        // La clé DOIT être traduite — c'est elle qui s'affiche dans le menu Actions.
+        // Fallback explicite en français canadien si la clé est absente du fichier de langue.
+        ($lang['action_btn_add_email'] ?? 'Ajouter une adresse courriel') => 'adduserpage',
     ];
 }
 
@@ -2522,7 +2538,11 @@ function smartermail_ClientAreaCustomButtonArray(array $params): array
  * avec une erreur "Not Authorized". C'est une mesure de sécurité pour
  * éviter qu'un client appelle des fonctions admin via manipulation d'URL.
  *
- * Clé   = Description lisible (non affiché, sert de documentation)
+ * NOTE : Les clés de ce tableau sont de simples descriptions internes pour
+ * la lisibilité du code — elles ne sont jamais affichées au client. On les
+ * écrit en anglais pour cohérence avec les conventions WHMCS.
+ *
+ * Clé   = Description interne (non affiché, documentation uniquement)
  * Valeur = Nom de la fonction (sans le préfixe "smartermail_")
  *
  * @return array Tableau description => action
@@ -2530,13 +2550,13 @@ function smartermail_ClientAreaCustomButtonArray(array $params): array
 function smartermail_ClientAreaAllowedFunctions(): array
 {
     return [
-        'Ajouter une adresse courriel'       => 'adduserpage',
-        'Gérer une adresse courriel'         => 'edituserpage',
-        'Créer une adresse courriel'         => 'createuser',
-        'Sauvegarder une adresse'            => 'saveuser',
-        'Changer le mot de passe'            => 'savepassword',
-        'Supprimer une adresse'              => 'deleteuser',
-        'Activer ou désactiver le DKIM'      => 'toggledkim',  // Toggle DKIM client
+        'Add email address'          => 'adduserpage',
+        'Edit email address'         => 'edituserpage',
+        'Create email address'       => 'createuser',
+        'Save email address'         => 'saveuser',
+        'Change password'            => 'savepassword',
+        'Delete email address'       => 'deleteuser',
+        'Toggle DKIM signing'        => 'toggledkim',
     ];
 }
 
