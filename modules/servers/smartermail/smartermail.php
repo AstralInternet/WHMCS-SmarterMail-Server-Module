@@ -414,43 +414,132 @@ function smartermail_ConfigOptions(): array
  * @return string     Username aléatoire en minuscules
  */
 /**
- * Charge et retourne le tableau de traductions selon la langue du client.
+ * Charge et retourne le tableau de traductions selon la langue active du client.
  *
- * Stratégie de résolution de langue :
- *   1. Langue du client ($params['clientsdetails']['language'])
- *   2. Langue par défaut du système WHMCS ($GLOBALS['CONFIG']['Language'])
- *   3. Fallback : english
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  ORDRE DE RÉSOLUTION DE LA LANGUE
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  1. $_SESSION['Language'] — langue sélectionnée par le sélecteur de langue
+ *     du portail client WHMCS. C'est la source la plus fiable car elle reflète
+ *     le choix actif de la session, même si le client n'a pas de préférence
+ *     enregistrée dans son profil.
  *
- * Les fichiers sont dans modules/servers/smartermail/lang/{langue}.php
- * et définissent un tableau local $_lang.
+ *  2. $params['clientsdetails']['language'] — préférence de langue stockée
+ *     dans le profil du compte client WHMCS. Peut être vide ('') si le client
+ *     n'a jamais défini de préférence explicite (valeur vide ≠ null — l'ancien
+ *     opérateur ?? ne capturait pas les chaînes vides, ce qui forçait toujours
+ *     le retour en anglais). On utilise !empty() pour ignorer les chaînes vides.
  *
- * @param array $params Paramètres WHMCS
- * @return array        Tableau de traductions ['clé' => 'texte traduit']
+ *  3. $GLOBALS['CONFIG']['Language'] — langue par défaut configurée par
+ *     l'administrateur WHMCS dans Paramètres → Général. Même traitement
+ *     !empty() pour ignorer les valeurs vides éventuelles.
+ *
+ *  4. Fallback final : 'english' — valeur sûre si toutes les sources sont vides.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  SÉCURITÉ — PATH TRAVERSAL
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  Le nom de langue est nettoyé par preg_replace (lettres et tirets uniquement)
+ *  avant d'être utilisé pour construire le chemin du fichier. Cela neutralise
+ *  les tentatives d'injection via la session ou le profil client
+ *  (ex : "../../config", "../../../etc/passwd").
+ *  realpath() valide ensuite que le fichier résolu reste bien dans /lang/.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  CACHE STATIQUE
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  Le tableau est mis en cache par nom de langue résolu pour éviter de relire
+ *  le fichier à chaque appel dans la même requête PHP.
+ *  La clé de cache est la langue nettoyée (jamais '') — l'ancienne implémentation
+ *  pouvait mettre en cache les traductions anglaises sous la clé '' et ne jamais
+ *  réévaluer la langue active lors d'un appel suivant dans la même requête.
+ *
+ * @param  array $params Paramètres WHMCS du service
+ * @return array<string,string> Tableau de traductions ['clé' => 'texte traduit']
  */
 function _sm_lang(array $params): array
 {
+    // Cache statique indexé par langue résolue (pas par langue brute).
+    // Jamais de clé vide — une langue vide sera toujours résolue en 'english'
+    // avant d'être utilisée comme clé de cache.
     static $cache = [];
 
-    $language = strtolower(trim(
-        $params['clientsdetails']['language']
-        ?? $GLOBALS['CONFIG']['Language']
-        ?? 'english'
-    ));
+    // ── Étape 1 : collecter la langue brute selon l'ordre de priorité ────────
+    //
+    // On teste chaque source avec !empty() pour ignorer les chaînes vides
+    // (cas fréquent quand le client n'a pas de préférence enregistrée dans WHMCS).
+    // L'ancien opérateur ?? ne capturait que null, pas les chaînes vides.
+    $rawLanguage = '';
 
+    // Source 1 — Sélecteur de langue actif dans la session du portail client.
+    // WHMCS stocke la langue choisie via le sélecteur dans $_SESSION['Language'].
+    // C'est la source la plus fiable pour l'espace client car elle reflète
+    // le choix effectif de navigation, indépendamment du profil enregistré.
+    if (!empty($_SESSION['Language'])) {
+        $rawLanguage = $_SESSION['Language'];
+    }
+
+    // Source 2 — Préférence de langue enregistrée dans le profil client WHMCS.
+    // Disponible via $params['clientsdetails']['language']. Peut être '' si
+    // le client n'a jamais défini de préférence — on ignore les chaînes vides.
+    if (empty($rawLanguage) && !empty($params['clientsdetails']['language'])) {
+        $rawLanguage = $params['clientsdetails']['language'];
+    }
+
+    // Source 3 — Langue par défaut du système WHMCS (Admin → Paramètres → Général).
+    // Exposée via $GLOBALS['CONFIG']['Language']. Dernier recours avant le fallback.
+    if (empty($rawLanguage) && !empty($GLOBALS['CONFIG']['Language'])) {
+        $rawLanguage = $GLOBALS['CONFIG']['Language'];
+    }
+
+    // ── Étape 2 : normaliser et sécuriser le nom de langue ───────────────────
+    //
+    // strtolower() : harmonise la casse ('French' → 'french').
+    // preg_replace() : supprime tout caractère non-alphabétique et non-tiret
+    //   pour prévenir les attaques path traversal via la session ou le profil
+    //   client (ex: '../../etc/passwd' → '', '../config' → 'config').
+    // Si le résultat est vide (langue non définie partout), on force 'english'.
+    $language = preg_replace('/[^a-z\-]/', '', strtolower(trim((string) $rawLanguage)));
+    if (empty($language)) {
+        $language = 'english';
+    }
+
+    // Retour depuis le cache si cette langue a déjà été résolue dans la requête
     if (isset($cache[$language])) {
         return $cache[$language];
     }
 
-    $langFile = __DIR__ . '/lang/' . $language . '.php';
+    // ── Étape 3 : résoudre le chemin du fichier de langue avec realpath() ────
+    //
+    // realpath() résout les symlinks et les séquences '..' — garantit que
+    // $langDir pointe bien sur le répertoire /lang/ du module, jamais ailleurs.
+    $langDir = realpath(__DIR__ . '/lang');
 
-    // Fallback vers l'anglais si la langue demandée n'existe pas
-    if (!file_exists($langFile)) {
-        $langFile = __DIR__ . '/lang/english.php';
+    // Sécurité : si realpath() échoue (répertoire absent ou droits insuffisants),
+    // on retourne un tableau vide plutôt que de risquer une inclusion hors-path.
+    if ($langDir === false) {
+        return $cache[$language] = [];
     }
 
+    $langFile = $langDir . '/' . $language . '.php';
+
+    // Vérification de confinement : realpath() du fichier résolu doit commencer
+    // par $langDir pour confirmer que le chemin n'a pas traversé les '..' résiduels.
+    if (!file_exists($langFile) || strpos((string) realpath($langFile), $langDir) !== 0) {
+        // Fallback vers l'anglais si la langue demandée est introuvable ou hors-path.
+        // Ne pas logguer ici — une langue non supportée est un cas normal
+        // (ex : client avec préférence 'spanish' non traduit dans ce module).
+        $langFile = $langDir . '/english.php';
+    }
+
+    // ── Étape 4 : charger le tableau $_lang depuis le fichier de langue ───────
+    //
+    // Le fichier de langue déclare : $_lang = [ 'clé' => 'valeur', ... ]
+    // On l'inclut dans la portée locale — $_lang sera disponible juste après.
+    // Initialisation explicite à [] pour éviter tout résidu d'un include précédent.
     $_lang = [];
     if (file_exists($langFile)) {
-        include $langFile;
+        include $langFile; // $_lang est peuplé par le fichier inclus
     }
 
     return $cache[$language] = $_lang;
