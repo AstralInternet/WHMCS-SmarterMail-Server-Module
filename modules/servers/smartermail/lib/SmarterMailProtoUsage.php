@@ -583,6 +583,14 @@ function _sm_getProtoUsageDetail(
         $effectiveBundle = $bundlePrice > 0 ? $bundlePrice : ($easPrice + $mapiPrice);
         $result          = [];
 
+        // ── Horodatage de référence pour le calcul du seuil grace→active ──────
+        // Défini ici (et non dans la fermeture) pour éviter de l'évaluer N fois
+        // et pour s'assurer que $now est capturé correctement via use().
+        // Sans cette ligne, la fermeture ci-dessous reçoit null via use($now),
+        // ce qui provoque une TypeError dans new DateTime(null) sous PHP 8 —
+        // interceptée par le catch, mais qui force toujours le retour 'grace'.
+        $now = date('Y-m-d H:i:s');
+
         // ── Helper : statut effectif d'une ligne ─────────────────────────────
         // Si la DB indique encore 'grace' mais que le seuil est dépassé,
         // on retourne 'active' pour l'affichage — sans attendre le cron quotidien.

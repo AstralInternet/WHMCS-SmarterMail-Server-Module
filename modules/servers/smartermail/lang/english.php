@@ -354,6 +354,7 @@ $_lang = [
     // These messages are returned by admin module commands and displayed in
     // WHMCS Admin → Services → Module Commands panel.
     'err_billing_period'       => 'Unable to determine billing period (nextduedate missing?).',
+    'info_free_account_skip'   => 'This service is a Free Account — EAS/MAPI tracking is not applicable (no billing).',
     // %s = PHP exception message
     'err_sync'                 => 'Error during synchronisation: %s',
     'msg_cleanup_none'         => 'Cleanup complete — no obsolete records found (no Cancelled/Fraud/Terminated services with tracking data).',
@@ -523,7 +524,7 @@ $_lang = [
     'proto_billing_active_from'    => 'Active from ',
     'proto_billing_active_to'      => ' to ',
     'proto_billing_total'          => 'Estimated total',
-    'proto_billing_live_note'      => 'Detail will be available after the first EAS or MAPI activation with usage tracking enabled.',
+    'proto_billing_live_note'      => 'Amounts shown are real-time estimates. Full historical detail will be available after the first billing cycle with EAS/MAPI usage tracking enabled.',
     'proto_billing_threshold_note' => 'EAS and MAPI → If deactivated after {days} day(s) → it will be billed with the deactivation date on the next invoice.',
     // ── Protocol states in billing popup ─────────────────────────────────────
     'proto_status_grace'           => 'Grace period in progress',
@@ -563,8 +564,8 @@ $_lang = [
     //   err_redirect_*  → PHP error messages
 
     // ── List buttons ──────────────────────────────────────────────────────────
-    'list_add_email_btn'    => '+ Email',           // Replaces old '+ Add'
-    'list_add_redirect_btn' => '+ Redirect',        // New button
+    'list_add_email_btn'    => 'Email',           // Replaces old '+ Add'
+    'list_add_redirect_btn' => 'Redirect',        // New button
 
     // ── Type column in account list ───────────────────────────────────────────
     'list_col_type'      => 'Type',

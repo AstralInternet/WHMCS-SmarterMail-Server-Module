@@ -357,6 +357,7 @@ $_lang = [
     // Ces messages sont retournés par les commandes de module admin et affichés
     // dans le panneau WHMCS Admin → Services → Module Commands.
     'err_billing_period'       => 'Impossible de déterminer la période de facturation (nextduedate manquant ?).',
+    'info_free_account_skip'   => 'Ce service est un compte gratuit (Free Account) — le suivi EAS/MAPI n\'est pas applicable (aucune facturation).',
     // %s = message d'exception PHP
     'err_sync'                 => 'Erreur lors de la synchronisation : %s',
     'msg_cleanup_none'         => 'Nettoyage terminé — aucun enregistrement obsolète trouvé (aucun service Annulé/Fraude/Résilié avec des données de suivi).',
@@ -526,7 +527,7 @@ $_lang = [
     'proto_billing_active_from'    => 'du ',
     'proto_billing_active_to'      => ' au ',
     'proto_billing_total'          => 'Total estimé',
-    'proto_billing_live_note'      => 'Le détail sera disponible après la première activation EAS ou MAPI avec le suivi d\'utilisation activé.',
+    'proto_billing_live_note'      => 'Les montants affichés sont des estimations en temps réel. Le détail historique complet sera disponible après le premier cycle de facturation avec le suivi d\'utilisation EAS/MAPI activé.',
     'proto_billing_threshold_note' => 'EAS et MAPI → Si désactivé après {days} jour(s) → il sera facturé avec date de désactivation sur la prochaine facture.',
     // ── États des protocoles dans le popup de facturation ────────────────────
     'proto_status_grace'           => 'Période de grâce en cours',
@@ -566,8 +567,8 @@ $_lang = [
     //   err_redirect_*  → messages d'erreur retournés par PHP
 
     // ── Boutons de la liste ───────────────────────────────────────────────────
-    'list_add_email_btn'    => '+ Courriel',       // Remplace l'ancien '+ Ajouter'
-    'list_add_redirect_btn' => '+ Redirection',    // Nouveau bouton
+    'list_add_email_btn'    => 'Courriel',       // Remplace l'ancien '+ Ajouter'
+    'list_add_redirect_btn' => 'Redirection',    // Nouveau bouton
 
     // ── Colonne type dans la liste ────────────────────────────────────────────
     'list_col_type'     => 'Type',

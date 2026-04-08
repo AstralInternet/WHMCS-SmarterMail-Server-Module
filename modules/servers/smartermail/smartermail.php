@@ -2044,6 +2044,92 @@ function smartermail_ClientArea(array $params): array
         $mapiPrice,
         $bundlePrice
     );
+
+    // ── FALLBACK LIVE : injection des mailboxes actives si la DB est vide ───
+    //
+    // PROBLÈME : _sm_getProtoUsageDetail() lit uniquement mod_sm_proto_usage.
+    // Si le suivi d'utilisation a été activé APRÈS l'activation EAS/MAPI sur
+    // des comptes existants, la table est vide → billingCombinedLines,
+    // billingMapiLines et billingEasLines sont tous vides → le modal "Billing
+    // Detail" affiche seulement "Le détail sera disponible après..." même si
+    // des mailboxes EAS/MAPI sont bien actives.
+    //
+    // SOLUTION : quand la DB ne contient aucune ligne pour ce service ET que
+    // l'API live retourne des mailboxes EAS/MAPI actives, on construit un
+    // $protoDetail provisoire à partir des données live (status='active').
+    //
+    // Ce fallback est purement d'affichage — il ne modifie pas la DB et ne
+    // déclenche aucune facturation. Les prix affichés sont identiques à ceux
+    // utilisés pour la facturation réelle.
+    //
+    // SÉCURITÉ :
+    //   - Les adresses proviennent de l'API SmarterMail (interne), pas du $_POST.
+    //   - filter_var FILTER_VALIDATE_EMAIL filtre tout format inattendu.
+    //   - Les prix sont castés en float depuis les configoptions (jamais du $_GET).
+    if (empty($protoDetail) && ($easEnabled || $mapiEnabled)) {
+
+        // Prix effectif bundle : si bundlePrice = 0, on cumule les deux prix
+        $effectiveBundleFallback = $bundlePrice > 0
+            ? $bundlePrice
+            : ($easPrice + $mapiPrice);
+
+        // Collecter toutes les adresses présentes dans les mailboxes live
+        $liveEmails = array_unique(array_merge(
+            array_keys($easMailboxes),
+            array_keys($mapiMailboxes)
+        ));
+
+        foreach ($liveEmails as $liveEmail) {
+            // Validation stricte du format courriel — rejet silencieux si invalide
+            if (filter_var($liveEmail, FILTER_VALIDATE_EMAIL) === false) {
+                continue;
+            }
+
+            $hasE = isset($easMailboxes[$liveEmail]);
+            $hasM = isset($mapiMailboxes[$liveEmail]);
+
+            // Construire la ligne de détail provisoire (même structure que
+            // les lignes produites par _sm_getProtoUsageDetail)
+            if ($hasE && $hasM) {
+                $protoDetail[] = [
+                    'email'      => $liveEmail,
+                    'type'       => 'combined',
+                    'status'     => 'active',   // Actif en live → pas de période grace
+                    'deleted_at' => null,
+                    'billed'     => false,       // Non encore facturé (fallback)
+                    'price'      => $effectiveBundleFallback,
+                ];
+            } elseif ($hasE) {
+                $protoDetail[] = [
+                    'email'      => $liveEmail,
+                    'type'       => 'eas',
+                    'status'     => 'active',
+                    'deleted_at' => null,
+                    'billed'     => false,
+                    'price'      => $easPrice,
+                ];
+            } elseif ($hasM) {
+                $protoDetail[] = [
+                    'email'      => $liveEmail,
+                    'type'       => 'mapi',
+                    'status'     => 'active',
+                    'deleted_at' => null,
+                    'billed'     => false,
+                    'price'      => $mapiPrice,
+                ];
+            }
+        }
+
+        // Trier selon le même ordre que _sm_getProtoUsageDetail :
+        // combined → mapi → eas, puis alphabétique
+        usort($protoDetail, function ($a, $b) {
+            $order = ['combined' => 0, 'mapi' => 1, 'eas' => 2];
+            $diff  = ($order[$a['type']] ?? 9) <=> ($order[$b['type']] ?? 9);
+            return $diff !== 0 ? $diff : strcmp($a['email'], $b['email']);
+        });
+    }
+    // ── Fin du fallback live ─────────────────────────────────────────────────
+
     $deletedProtoCost = 0.0;
     foreach ($protoDetail as $line) {
         if ($line['status'] === 'deleted' && !$line['billed']) {
@@ -3355,10 +3441,30 @@ function smartermail_syncprotousage(array $params): string
     $domain    = $params['domain'];
     $serviceId = (int) $params['serviceid'];
 
-    // Récupérer la période de facturation courante
+    // Récupérer la période de facturation courante.
+    // Un Free Account (billingcycle = 'Free Account') n'a pas de nextduedate valide —
+    // ce n'est PAS une erreur : EAS/MAPI ne sont simplement pas facturés sur ce service.
+    // On détecte le cas AVANT d'appeler _sm_getBillingPeriod pour afficher un message
+    // informatif au lieu d'un message d'erreur.
+    $billingCycle = strtolower(trim(
+        Capsule::table('tblhosting')
+            ->where('id', $serviceId)
+            ->value('billingcycle') ?? ''
+    ));
+    if ($billingCycle === 'free account') {
+        logActivity(sprintf(
+            'SmarterMail [syncprotousage] Service #%d (%s) : Free Account — suivi EAS/MAPI ignoré (non facturé).',
+            $serviceId, $domain
+        ));
+        return _sm_lang($params)['info_free_account_skip']
+            ?? 'Ce service est un Free Account — le suivi EAS/MAPI n\'est pas applicable (aucune facturation).';
+    }
+
     $period = _sm_getBillingPeriod($serviceId);
     if (!$period['start']) {
-        return _sm_lang($params)['err_billing_period'] ?? 'Impossible de déterminer la période de facturation (nextduedate manquant ?).';
+        // Ici, ce n'est pas un Free Account — la date est vraiment manquante ou invalide.
+        return _sm_lang($params)['err_billing_period']
+            ?? 'Impossible de déterminer la période de facturation (nextduedate manquant ?).';
     }
 
     // Seuil en heures depuis configoption16
