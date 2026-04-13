@@ -2581,6 +2581,18 @@ function smartermail_ClientArea(array $params): array
             'billingPeriod'  => _sm_getBillingPeriod((int) $params['serviceid']),
             'lockDays'       => max(1, (int) ($params['configoption16'] ?? 1)),
             'error'          => null,
+            // ── URL du webmail SmarterMail ────────────────────────────
+            // Construite à partir du hostname du serveur (tblservers.hostname)
+            // pour permettre un lien direct vers l'interface de connexion.
+            // Le protocole est forcé en HTTPS — les déploiements SmarterMail
+            // modernes exigent TLS. Le chemin /interface/root#/login est le
+            // point d'entrée standard du webmail SmarterMail 100.x.
+            //
+            // SÉCURITÉ : $params['serverhostname'] provient de tblservers,
+            // accessible uniquement aux administrateurs WHMCS. Aucune donnée
+            // utilisateur n'entre dans cette URL. Le template applique |escape
+            // sur la valeur avant injection dans l'attribut href.
+            'webmailUrl'     => 'https://' . ($params['serverhostname'] ?? '') . '/interface/root#/login',
         ],
     ];
 }

@@ -97,6 +97,16 @@ $_lang = [
     'mbox_redirect'        => 'No',
     'mbox_disabled'        => 'Disabled',
 
+    // ── Webmail link (mailbox icon in the accounts grid) ────────────────
+    // Tooltip displayed on hover over the fa-inbox icon that serves as a
+    // link to the SmarterMail webmail interface (opens in a new tab).
+    'list_webmail_link'    => 'Open webmail',
+
+    // ── Webmail button (below the Statistics block) ─────────────────────
+    // Label for the full-width button that opens the webmail in a new
+    // tab. Displayed alongside an fa-external-link icon.
+    'btn_open_webmail'     => 'Open webmail',
+
     // ── DKIM Modal ────────────────────────────────────────────────────────
     'dkim_modal_title'     => 'DKIM Key',
     'dkim_desc'            => 'Add this DNS TXT record at your registrar to authenticate outgoing emails.',
@@ -540,12 +550,17 @@ $_lang = [
     // Placeholders:
     //   inv_usage_label   : %1$s = usage in GB (formatted), %2$d = tier count,
     //                       %3$d = GB per tier, %4$s = unit price
+    //   inv_usage_prefix  : prefix shown BEFORE the usage detail on the second
+    //                       line of the invoice. The "\n" (line break) is added
+    //                       in PHP — this prefix follows immediately after it.
+    //                       Character used: right-pointing double angle quote "»" (U+00BB)
     //   inv_disabled_on   : %s = date formatted as d-M-y (e.g. 15-Jan-26)
     //   inv_entry_prefix  : bullet prefix before each email address line
     //   inv_combined_hdr  : header for combined EAS + MAPI invoice lines
     //   inv_eas_hdr       : header for ActiveSync (EAS)-only invoice lines
     //   inv_mapi_hdr      : header for MAPI/Exchange-only invoice lines
     'inv_usage_label'  => '%1$s GB used · %2$d Tier(s) of %3$d GB × $%4$s',
+    'inv_usage_prefix' => '» ',
     'inv_disabled_on'  => '(Disabled on %s)',
     'inv_entry_prefix' => '- ',
     'inv_combined_hdr' => 'EAS + MAPI/Exchange:',

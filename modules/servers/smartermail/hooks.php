@@ -61,7 +61,8 @@
  *    Hébergement courriel (client.com) ... 6.00$
  *
  *  APRÈS hook :
- *    Hébergement courriel (client.com) (21.00 Go utilisés sur 30 Go facturés) ... 18.00$
+ *    Hébergement courriel (client.com) (2026/05/12 - 2026/06/11)
+ *    » 21.00 Go utilisé · 3 Tranche(s) de 10 Go × $6 .......................... 18.00$
  *    EAS + MAPI/Exchange : jean@client.com ................................................ 4.50$
  *    ActiveSync (EAS) : marie@client.com .................................................. 2.00$
  *    ─────────────────────────────────────────────────────────────────────────
@@ -387,6 +388,19 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         // Le gabarit est lu depuis le fichier de langue via _sm_hookLang() afin
         // de supporter l'anglais et le français canadien selon la langue système.
         // Clé : 'inv_usage_label' — paramètres sprintf : %1$s %2$d %3$d %4$s
+        //
+        // MISE EN FORME DE LA FACTURE (retour de ligne) :
+        //   Le détail d'utilisation apparaît sur une SECONDE ligne, préfixé par
+        //   le caractère 'inv_usage_prefix' (par défaut "» ") afin d'améliorer
+        //   la lisibilité sur la facture PDF/courriel. Résultat visuel :
+        //
+        //     Hébergement courriel (SM+) - domaine.ca (2026/05/12 - 2026/06/11)
+        //     » 155.58 Go utilisé · 16 Tranche(s) de 10 Go × $6
+        //
+        //   Le retour de ligne est un "\n" codé en dur (fonctionne dans les
+        //   factures WHMCS PDF et HTML). Le préfixe "» " est externalisé dans
+        //   les fichiers de langue (clé 'inv_usage_prefix') pour permettre
+        //   une personnalisation par langue (ex: "» " en FR, "» " en EN).
         $usageFormatted = number_format($usageGB, 2);
         $hookLang       = _sm_hookLang(); // Chargé une seule fois (cache statique)
         $usageLabel     = sprintf(
@@ -409,7 +423,18 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         //   [autres produits existants]   ← ids inchangés
         //   [courriel] ← DELETE + INSERT  ← nouvel id élevé
         //   [EAS/MAPI] ← INSERT           ← ids encore plus élevés
-        $updatedDescription = $item->description . ' (' . $usageLabel . ')';
+        // Construire la description finale avec retour de ligne et préfixe "»".
+        // Le préfixe est lu depuis le fichier de langue (clé 'inv_usage_prefix')
+        // afin de respecter la convention d'externalisation des textes visibles.
+        // Le "\n" est un saut de ligne reconnu par le moteur PDF de WHMCS
+        // (TCPDF/mPDF) et par les templates HTML de factures courriel.
+        //
+        // SÉCURITÉ : $item->description provient de WHMCS (description générée
+        // automatiquement par le système) ; $usageLabel est construit à partir
+        // de number_format() et de paramètres numériques castés — aucun risque
+        // d'injection dans ces deux valeurs.
+        $usagePrefix        = $hookLang['inv_usage_prefix'] ?? '» ';
+        $updatedDescription = $item->description . "\n" . $usagePrefix . $usageLabel;
 
         // Supprimer l'ancienne ligne puis réinsérer avec les nouvelles valeurs
         Capsule::table('tblinvoiceitems')->where('id', $item->id)->delete();

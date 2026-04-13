@@ -95,6 +95,13 @@
 .sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:18px;overflow:hidden}
 .sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:10px 16px;font-weight:600;font-size:13px;color:#444;display:flex;align-items:center;gap:8px;justify-content:space-between}
 .sm-card-body{padding:14px 16px}
+/* ── Bouton « Ouvrir le webmail » ─────────────────────────────────────
+   Lien pleine largeur placé sous le bloc Statistiques. Stylé comme un
+   bouton mais sémantiquement un <a> (navigation vers le webmail).
+   Couleur cohérente avec le thème de l'en-tête domaine (#2c3e50). */
+.sm-webmail-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:10px 16px;background:#0080c4;color:#fff !important;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;transition:background .15s,box-shadow .15s;margin-bottom:18px;box-sizing:border-box}
+.sm-webmail-btn:hover{background:#0091de;box-shadow:0 2px 8px rgba(0,0,0,.15);text-decoration:none}
+.sm-webmail-btn i{font-size:14px}
 .sm-domain-header{background:linear-gradient(135deg,#2c3e50 0%,#3d5166 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .sm-domain-name{font-size:18px;font-weight:700;letter-spacing:.3px}
 .sm-domain-name i{margin-right:8px;opacity:.8}
@@ -361,6 +368,12 @@
 .sm-list-legend-item{display:inline-flex;align-items:center;gap:5px}
 /* Icône boîte courriel — bleu discret */
 .sm-icon-mailbox{color:#3949ab;font-size:13px}
+/* Lien webmail : enveloppe l'icône fa-inbox dans un <a> cliquable.
+   Hérite la couleur de l'icône, ajoute un effet hover subtil.
+   Le curseur pointer signale l'interaction au client. */
+.sm-webmail-link{color:inherit;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:opacity .15s}
+.sm-webmail-link:hover{opacity:.7}
+.sm-webmail-link:hover .sm-icon-mailbox{color:#1a237e}
 /* Icône redirection autonome — vert discret */
 .sm-icon-redirect{color:#2e7d32;font-size:13px}
 .sm-dns-guide-link{
@@ -496,6 +509,33 @@
 
       </div>
     </div>
+
+    {*
+     * ── Bouton « Ouvrir le webmail » ──────────────────────────────────────
+     *
+     * Lien direct vers l'interface webmail SmarterMail du serveur.
+     * Placé juste sous le bloc Statistiques, dans la même colonne (col-md-7).
+     *
+     * SÉCURITÉ :
+     *   - $webmailUrl est construit côté PHP à partir de tblservers.hostname
+     *     (champ accessible uniquement aux administrateurs WHMCS).
+     *   - |escape neutralise toute injection XSS dans l'attribut href.
+     *   - target="_blank" avec rel="noopener noreferrer" empêche l'accès
+     *     à window.opener depuis la page ouverte (prévention tabnabbing).
+     *
+     * ACCESSIBILITÉ :
+     *   - Le bouton est un <a> stylé en bouton pour conserver la sémantique
+     *     de navigation (pas un <button> qui exigerait du JS).
+     *   - Le title reprend le libellé traduit pour les lecteurs d'écran.
+     *}
+    <a href="{$webmailUrl|escape}"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="sm-webmail-btn"
+       title="{$lang.btn_open_webmail|escape}">
+      <i class="fa fa-external-link"></i> {$lang.btn_open_webmail}
+    </a>
+
   </div>
 
   {* ── Informations du service ────────────────────────────────────────── *}
@@ -1152,15 +1192,29 @@
 
           {*
            * Colonne type : icône visuelle distinguant boîte et redirection.
-           * Un title HTML décrit le type pour l'accessibilité (lecteurs d'écran).
+           * - Boîte courriel : l'icône fa-inbox est un LIEN vers le webmail
+           *   SmarterMail ($webmailUrl). Ouvre dans un nouvel onglet (target=_blank)
+           *   avec rel="noopener noreferrer" pour la sécurité (empêche window.opener).
+           *   Le title affiche un libellé traduit invitant à se connecter au webmail.
+           * - Redirection : icône fa-share simple (pas de lien — pas de boîte).
+           *
+           * SÉCURITÉ : $webmailUrl est construit côté PHP à partir de
+           * tblservers.hostname (admin-only). |escape dans l'attribut href
+           * neutralise toute valeur inattendue (XSS via hostname corrompu).
            *}
           <div class="sm-col-type">
             {if $user._isRedirectOnly}
               <i class="fa fa-share sm-icon-redirect"
                  title="{$lang.list_type_redirect|escape}"></i>
             {else}
-              <i class="fa fa-inbox sm-icon-mailbox"
-                 title="{$lang.list_type_mailbox|escape}"></i>
+              {* Lien webmail : l'icône de boîte courriel pointe vers le webmail *}
+              <a href="{$webmailUrl|escape}"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 class="sm-webmail-link"
+                 title="{$lang.list_webmail_link|escape}">
+                <i class="fa fa-inbox sm-icon-mailbox"></i>
+              </a>
             {/if}
           </div>
 

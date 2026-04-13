@@ -100,6 +100,16 @@ $_lang = [
     'mbox_redirect'        => 'Non',
     'mbox_disabled'        => 'Désactivé',
 
+    // ── Lien webmail (icône boîte courriel dans la grille des comptes) ──
+    // Tooltip affiché au survol de l'icône fa-inbox qui sert de lien
+    // vers l'interface webmail SmarterMail (nouvel onglet).
+    'list_webmail_link'    => 'Ouvrir le webmail',
+
+    // ── Bouton webmail (sous le bloc Statistiques) ──────────────────────
+    // Libellé du bouton pleine largeur qui ouvre le webmail dans un
+    // nouvel onglet. Affiché avec une icône fa-external-link.
+    'btn_open_webmail'     => 'Ouvrir le webmail',
+
     // ── DKIM Modal ────────────────────────────────────────────────────────
     'dkim_modal_title'     => 'Clé DKIM',
     'dkim_desc'            => 'Ajoutez cet enregistrement DNS TXT chez votre registraire pour authentifier les courriels sortants.',
@@ -541,14 +551,19 @@ $_lang = [
     // tblinvoiceitems.description.
     //
     // Paramètres de substitution (sprintf) :
-    //   inv_usage_label  : %1$s = utilisation en Go (formaté), %2$d = nb tranches,
-    //                      %3$d = Go par tranche, %4$s = prix unitaire
-    //   inv_disabled_on  : %s = date au format d-M-y (ex : 15-jan-26)
-    //   inv_entry_prefix : préfixe de puce avant chaque adresse courriel
-    //   inv_combined_hdr : en-tête pour les lignes EAS + MAPI combinés
-    //   inv_eas_hdr      : en-tête pour les lignes ActiveSync (EAS) uniquement
-    //   inv_mapi_hdr     : en-tête pour les lignes MAPI/Exchange uniquement
+    //   inv_usage_label   : %1$s = utilisation en Go (formaté), %2$d = nb tranches,
+    //                       %3$d = Go par tranche, %4$s = prix unitaire
+    //   inv_usage_prefix  : préfixe affiché AVANT le détail d'utilisation sur la
+    //                       deuxième ligne de la facture. Le "\n" (retour de ligne)
+    //                       est ajouté côté PHP — ce préfixe suit immédiatement.
+    //                       Caractère utilisé : guillemet double fermant « » » (U+00BB)
+    //   inv_disabled_on   : %s = date au format d-M-y (ex : 15-jan-26)
+    //   inv_entry_prefix  : préfixe de puce avant chaque adresse courriel
+    //   inv_combined_hdr  : en-tête pour les lignes EAS + MAPI combinés
+    //   inv_eas_hdr       : en-tête pour les lignes ActiveSync (EAS) uniquement
+    //   inv_mapi_hdr      : en-tête pour les lignes MAPI/Exchange uniquement
     'inv_usage_label'  => '%1$s Go utilisé · %2$d Tranche(s) de %3$d Go × $%4$s',
+    'inv_usage_prefix' => '» ',
     'inv_disabled_on'  => '(Désactivé le %s)',
     'inv_entry_prefix' => '- ',
     'inv_combined_hdr' => 'EAS + MAPI/Exchange :',
