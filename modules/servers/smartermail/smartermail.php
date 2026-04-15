@@ -2938,7 +2938,7 @@ function smartermail_adddomainalias(array $params): string
         return $lang['err_domain_alias_same_as_primary'] ?? 'L\'alias ne peut pas être identique au domaine principal.';
     }
 
-    // ── Initialisation API — token Domain Admin ──────────────────────────
+    // ── Initialisation API — tokens DA + SA ─────────────────────────────
     $init = _sm_initDomainAdmin($params);
     if (isset($init['error'])) {
         return $init['error'];
@@ -2946,12 +2946,46 @@ function smartermail_adddomainalias(array $params): string
 
     $api     = $init['api'];
     $daToken = $init['token'];
+    $saToken = $init['saToken'] ?? null;
+
+    // ── Obtenir un token DA impersonifié via le SA ───────────────────────
+    //
+    // POURQUOI : L'ajout d'alias de domaine avec checkMx=false nécessite
+    // un token qui combine DEUX choses :
+    //   1. Le CONTEXTE DOMAINE (pour que SmarterMail sache à quel domaine
+    //      ajouter l'alias — sans ça, erreur « Domain does not exist »)
+    //   2. Les PRIVILÈGES SA (pour pouvoir contourner la vérification MX
+    //      — sans ça, erreur « MX record does not match »)
+    //
+    // Le token DA direct (login credentials) a le contexte domaine mais
+    // pas les privilèges SA. Le token SA brut a les privilèges mais pas
+    // le contexte domaine.
+    //
+    // La solution : loginDomainAdmin(saToken, domain) crée un
+    // « impersonateAccessToken » — un token DA généré par le SA qui
+    // hérite des privilèges élevés de l'impersonification SA.
+    // C'est exactement ce que fait l'interface admin de SmarterMail
+    // quand un SA navigue dans les paramètres d'un domaine spécifique.
+    //
+    // SÉCURITÉ :
+    //   - Le token impersonifié est limité au domaine spécifié
+    //   - Il expire rapidement (JWT courte durée)
+    //   - Le $saToken provient de _sm_initDomainAdmin qui l'obtient
+    //     depuis les credentials serveur WHMCS (tblservers)
+    $impersonatedToken = null;
+    if ($saToken) {
+        $impersonatedToken = $api->loginDomainAdmin($saToken, $params['domain']);
+    }
+
+    if (!$impersonatedToken) {
+        logActivity('SmarterMail [adddomainalias] Impossible d\'obtenir un token impersonifié pour '
+            . $params['domain'] . ' | service: ' . $params['serviceid']
+            . ' | saToken: ' . ($saToken ? 'présent' : 'absent'));
+        return $lang['err_domain_alias_add_failed'] ?? 'Impossible d\'ajouter l\'alias de domaine.';
+    }
 
     // ── Vérifier la limite EN TEMPS RÉEL ─────────────────────────────────
-    // On recharge la liste depuis l'API pour éviter les dépassements
-    // par requêtes concurrentes (le client ouvre deux onglets et soumet
-    // en même temps). Le coût d'un GET supplémentaire est négligeable
-    // comparé au risque de dépassement.
+    // La liste des alias est récupérée avec le token DA standard (lecture).
     $currentAliases = $api->getDomainAliases($daToken);
     if (count($currentAliases) >= $maxAliases) {
         return sprintf(
@@ -2961,7 +2995,6 @@ function smartermail_adddomainalias(array $params): string
     }
 
     // ── Vérifier que l'alias n'existe pas déjà ──────────────────────────
-    // Comparaison insensible à la casse (strtolower déjà appliqué sur $aliasName)
     foreach ($currentAliases as $existing) {
         if (strtolower($existing['name'] ?? '') === $aliasName) {
             return $lang['err_domain_alias_already_exists'] ?? 'Cet alias de domaine existe déjà.';
@@ -2969,10 +3002,9 @@ function smartermail_adddomainalias(array $params): string
     }
 
     // ── Appel API — Création de l'alias ──────────────────────────────────
-    // checkMx = false : on ne vérifie pas les MX avant l'ajout car le client
-    // peut configurer ses DNS après. SmarterMail livrera le courrier dès que
-    // les MX pointeront vers le serveur.
-    $resp = $api->addDomainAlias($aliasName, $daToken, false);
+    // On utilise le token DA impersonifié (SA → DA) qui possède à la fois
+    // le contexte du domaine ET les privilèges pour contourner checkMx.
+    $resp = $api->addDomainAlias($aliasName, $impersonatedToken, false);
 
     if (!$resp['success']) {
         // Journaliser l'erreur API avec le maximum de détails pour le diagnostic.

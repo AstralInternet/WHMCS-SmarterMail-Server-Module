@@ -2265,32 +2265,63 @@ class SmarterMailApi
      */
     public function addDomainAlias(string $aliasName, string $daToken, bool $checkMx = false): array
     {
-        // ── Construction de l'URL avec les paramètres dans le chemin ──────
-        // L'API SmarterMail attend les paramètres dans l'URL, pas dans le corps.
+        // ── Construction de l'URL ────────────────────────────────────────
         //
-        // IMPORTANT : Le paramètre checkMx est OPTIONNEL (noté {checkMx?}
-        // dans la documentation). S'il n'est pas nécessaire, il faut l'OMETTRE
-        // complètement de l'URL — passer « /false » provoque une erreur 400
-        // sur certaines versions de SmarterMail car le routeur d'URL ne
-        // reconnaît pas « false » comme un segment valide.
+        // NOTE IMPORTANTE SUR L'AUTHENTIFICATION :
+        //   Le paramètre $daToken est nommé ainsi par convention, mais pour
+        //   cet endpoint, l'appelant DOIT passer un token System Admin (SA).
+        //   Avec un token Domain Admin, SmarterMail ignore le paramètre
+        //   checkMx=false et vérifie systématiquement les enregistrements MX.
+        //   Seul le SA a le privilège de contourner cette vérification.
         //
-        // URL générée :
-        //   checkMx = false → api/v1/settings/domain/domain-alias-put/client.ca
-        //   checkMx = true  → api/v1/settings/domain/domain-alias-put/client.ca/true
+        // Le slash final (/) est obligatoire — confirmé via l'interface
+        // d'administration SmarterMail.
         $endpoint = 'api/v1/settings/domain/domain-alias-put/'
-            . urlencode($aliasName);
+            . urlencode($aliasName)
+            . '/' . ($checkMx ? 'true' : 'false')
+            . '/';
 
-        // N'ajouter le paramètre checkMx que s'il est explicitement demandé
-        if ($checkMx) {
-            $endpoint .= '/true';
+        $url = $this->baseUrl . '/' . ltrim($endpoint, '/');
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $this->verifySsl);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $this->verifySsl ? 2 : 0);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+        // Corps vide — tous les paramètres sont dans l'URL
+        curl_setopt($ch, CURLOPT_POSTFIELDS, '');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Content-Length: 0',
+            'Authorization: Bearer ' . $daToken,
+        ]);
+
+        $result    = curl_exec($ch);
+        $httpCode  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            return [
+                'success' => false,
+                'code'    => 0,
+                'data'    => null,
+                'error'   => 'Erreur réseau cURL : ' . $curlError,
+            ];
         }
 
-        // ── Appel POST sans corps (paramètres dans l'URL) ────────────────
-        // Le corps vide {} est envoyé car la méthode post() encode toujours
-        // un tableau en JSON. SmarterMail l'ignore pour cet endpoint.
-        $resp = $this->post($endpoint, [], $daToken);
+        $decoded = !empty($result) ? json_decode($result, true) : null;
+        $success = ($httpCode >= 200 && $httpCode < 300);
 
-        return $resp;
+        return [
+            'success' => $success,
+            'code'    => $httpCode,
+            'data'    => $decoded,
+            'error'   => $success ? null : ($decoded['message'] ?? 'Erreur HTTP ' . $httpCode),
+        ];
     }
 
     /**
