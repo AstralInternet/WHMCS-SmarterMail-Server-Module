@@ -773,9 +773,11 @@ function _sm_initApi(array $params): array
     $saToken = $api->loginSysAdminFromParams($params);
 
     if (!$saToken) {
-        // Utilise la clé de langue pour le message d'erreur de connexion SA.
-        // _sm_lang() reçoit $params qui contient les détails du client/service.
-        return ['error' => (_sm_lang($params)['err_server_connect'] ?? 'Impossible de se connecter au serveur SmarterMail. Vérifiez les identifiants du serveur.')];
+        // Journaliser l'erreur technique pour l'admin — le message client reste générique
+        logActivity('SmarterMail [initApi] Échec connexion SA'
+            . ' | serveur: ' . ($params['serverhostname'] ?? '')
+            . ' | domaine: ' . ($params['domain'] ?? ''));
+        return ['error' => (_sm_lang($params)['err_server_connect'] ?? 'Le service courriel est temporairement indisponible.')];
     }
 
     return ['api' => $api, 'token' => $saToken];
@@ -827,7 +829,11 @@ function _sm_initDomainAdmin(array $params): array
     // ── Étape 1 : Connexion SA ───────────────────────────────────
     $saToken = $api->loginSysAdminFromParams($params);
     if (!$saToken) {
-        return ['error' => (_sm_lang($params)['err_server_connect'] ?? 'Impossible de se connecter au serveur SmarterMail.')];
+        // Journaliser l'erreur technique pour l'admin — le message client reste générique
+        logActivity('SmarterMail [initDA] Échec connexion SA'
+            . ' | serveur: ' . ($params['serverhostname'] ?? '')
+            . ' | domaine: ' . $domain);
+        return ['error' => (_sm_lang($params)['err_server_connect'] ?? 'Le service courriel est temporairement indisponible.')];
     }
 
     // ── Étape 2 : Authentification Domain Admin ────────────────────
@@ -886,22 +892,24 @@ function _sm_initDomainAdmin(array $params): array
         }
 
         // ── Message d'erreur contextuel selon le code HTTP reçu ──────────────
-        // Chaque cas correspond à une situation opérationnelle précise.
-        // Les clés de langue permettent de localiser ces messages techniques
-        // qui s'affichent dans le panneau admin WHMCS (pas en espace client).
+        // Les détails techniques sont journalisés pour l'admin via logActivity().
+        // Le message affiché au client reste générique et non technique.
         $l = _sm_lang($params);
         $hint = match (true) {
-            $code === 401 => $l['err_sa_token_invalid']  ?? 'Jeton SA invalide ou expiré.',
-            $code === 403 => $l['err_sa_no_impersonate'] ?? 'Le compte SA n\'a pas les droits d\'impersonification.',
-            $code === 0   => $l['err_server_unreachable'] ?? 'Serveur SmarterMail injoignable — vérifiez le nom d\'hôte et le port.',
-            default       => sprintf($l['err_api_http'] ?? 'Erreur API HTTP %d.', $code),
+            $code === 401 => 'Jeton SA invalide ou expiré.',
+            $code === 403 => 'Le compte SA n\'a pas les droits d\'impersonification.',
+            $code === 0   => 'Serveur SmarterMail injoignable (erreur réseau/DNS/SSL).',
+            default       => sprintf('Erreur API HTTP %d.', $code),
         };
 
+        // Journaliser les détails techniques pour l'admin — le client ne voit
+        // JAMAIS ces informations (identifiants, codes HTTP, messages API).
         logActivity('SmarterMail [initDA] ' . $hint . ' | API: ' . $apiError . ' | domain: ' . $domain);
 
-        // err_contact_admin est un SUFFIXE ajouté aux messages d'erreur techniques
-        // pour guider l'admin vers la prochaine action.
-        return ['error' => $hint . ($l['err_contact_admin'] ?? ' Veuillez contacter votre administrateur ou ouvrir un ticket de support.')];
+        // Message client générique — pas de détails techniques, pas de mention
+        // d'identifiants, de serveur ou de codes HTTP. Le client est guidé
+        // vers le support technique si le problème persiste.
+        return ['error' => $l['err_server_connect'] ?? 'Le service courriel est temporairement indisponible.'];
     }
 
     return ['api' => $api, 'token' => $daResult['token'], 'saToken' => $saToken];
@@ -4466,7 +4474,7 @@ function smartermail_editredirectpage(array $params): array
             . $aliasName . ' (service #' . $params['serviceid'] . '): ' . $e->getMessage());
         return [
             'templatefile' => 'error',
-            'vars'         => ['error' => $lang['err_connection'] ?? 'Erreur de connexion.', 'lang' => $lang],
+            'vars'         => ['error' => $lang['err_connection'] ?? 'Le service courriel est temporairement indisponible.', 'lang' => $lang],
         ];
     }
 

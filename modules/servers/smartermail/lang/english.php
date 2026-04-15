@@ -213,7 +213,7 @@ $_lang = [
     // ── Error ─────────────────────────────────────────────────────────────
     'err_title'            => 'Error',
     'err_default'          => 'An unexpected error occurred.',
-    'err_connection'       => 'Unable to connect to the SmarterMail server.',
+    'err_connection'       => 'The email service is temporarily unavailable. Please try again later or contact support.',
 
     // ── Password criteria (additions) ────────────────────────────────────
     'pwd_crit_no_user'     => 'Must not contain the username',
@@ -306,7 +306,7 @@ $_lang = [
     //   %d → integer (character count, HTTP code, record count)
 
     // ── Connection / server ───────────────────────────────────────────────────
-    'err_server_connect'       => 'Unable to connect to SmarterMail server. Please check server credentials.',
+    'err_server_connect'       => 'The email service is temporarily unavailable. Please try again later or contact support if the issue persists.',
     'err_server_unreachable'   => 'SmarterMail server unreachable — please check the hostname and port.',
     'err_sa_token_invalid'     => 'SA token invalid or expired.',
     'err_sa_no_impersonate'    => 'SA account does not have impersonation rights.',

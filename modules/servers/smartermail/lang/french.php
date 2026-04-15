@@ -216,7 +216,7 @@ $_lang = [
     // ── Erreur ────────────────────────────────────────────────────────────
     'err_title'            => 'Erreur',
     'err_default'          => 'Une erreur inattendue est survenue.',
-    'err_connection'       => 'Impossible de se connecter au serveur SmarterMail.',
+    'err_connection'       => 'Le service courriel est temporairement indisponible. Veuillez réessayer plus tard ou contacter le soutien technique.',
 
     // ── Critères mot de passe (ajouts) ───────────────────────────────────
     'pwd_crit_no_user'     => 'Ne doit pas contenir le nom d\'utilisateur',
@@ -309,7 +309,7 @@ $_lang = [
     //   %d → entier (nombre de caractères, code HTTP, nombre d'enregistrements)
 
     // ── Connexion / serveur ───────────────────────────────────────────────────
-    'err_server_connect'       => 'Impossible de se connecter au serveur SmarterMail. Vérifiez les identifiants du serveur.',
+    'err_server_connect'       => 'Le service courriel est temporairement indisponible. Veuillez réessayer plus tard ou contacter le soutien technique si le problème persiste.',
     'err_server_unreachable'   => 'Serveur SmarterMail injoignable — vérifiez le nom d\'hôte et le port.',
     'err_sa_token_invalid'     => 'Jeton SA invalide ou expiré.',
     'err_sa_no_impersonate'    => 'Le compte SA n\'a pas les droits d\'impersonification.',
