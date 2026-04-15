@@ -638,4 +638,60 @@ $_lang = [
     // client — it must come from the language file, never be hardcoded.
     'action_btn_add_email' => 'Add an Email Address',
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  DOMAIN ALIASES
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    //  A domain alias lets the primary domain receive mail addressed to another
+    //  domain name. For example, if "client.com" is the primary domain and
+    //  "client.ca" is a domain alias, then "info@client.ca" will be delivered
+    //  to the "info@client.com" mailbox.
+    //
+    //  These strings are used in the client area panel displayed below the DNS
+    //  records section. The panel shows existing aliases as pills, lets the
+    //  client add new ones (up to configoption17), and delete them after
+    //  confirmation.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ── Section title and description ─────────────────────────────────────────
+    // The title appears in the card header, the tooltip explains the feature.
+    'domain_alias_title'            => 'Domain Aliases',
+    'domain_alias_tooltip'          => 'A domain alias lets all mailboxes on your primary domain receive emails addressed to another domain name. For example, if your domain is "example.com" and you add "example.ca" as an alias, then an email sent to "info@example.ca" will be delivered to "info@example.com".',
+    // Counter shown in the card header: "2 / 5"
+    'domain_alias_counter'          => '%d / %d',
+
+    // ── Empty state ──────────────────────────────────────────────────────────
+    // Shown when no domain aliases exist yet.
+    'domain_alias_empty'            => 'No domain alias configured.',
+
+    // ── Add button and modal ─────────────────────────────────────────────────
+    'domain_alias_add_btn'          => '+ Domain Alias',
+    'domain_alias_add_title'        => 'Add a Domain Alias',
+    'domain_alias_add_label'        => 'Domain name',
+    'domain_alias_add_placeholder'  => 'example.ca',
+    'domain_alias_add_help'         => 'Enter the domain name you want to use as an alias. Emails sent to this domain will be delivered to your primary domain mailboxes.',
+    'domain_alias_add_submit'       => 'Add Alias',
+
+    // ── Delete confirmation modal ────────────────────────────────────────────
+    'domain_alias_del_title'        => 'Remove Domain Alias',
+    'domain_alias_del_confirm'      => 'Are you sure you want to remove the following domain alias?',
+    'domain_alias_del_warning'      => 'Emails sent to addresses at this domain will no longer be delivered to your mailboxes.',
+    'domain_alias_del_submit'       => 'Remove Permanently',
+
+    // ── Limit reached message ────────────────────────────────────────────────
+    // Shown as a disabled tooltip when the maximum number of aliases is reached.
+    'domain_alias_limit_reached'    => 'Maximum number of domain aliases reached.',
+
+    // ── Error messages (PHP server-side) ─────────────────────────────────────
+    // These are returned by the PHP action functions and displayed on the
+    // generic error page if something goes wrong.
+    'err_domain_alias_disabled'         => 'The domain alias feature is not enabled for this service.',
+    'err_domain_alias_invalid_name'     => 'Invalid domain alias name. Enter a valid domain name (e.g., example.ca).',
+    'err_domain_alias_same_as_primary'  => 'The alias cannot be the same as your primary domain.',
+    'err_domain_alias_limit_reached'    => 'Limit reached (%d domain aliases maximum).',
+    'err_domain_alias_already_exists'   => 'This domain alias already exists.',
+    'err_domain_alias_add_failed'       => 'Unable to add the domain alias. Please try again or contact support.',
+    'err_domain_alias_not_found'        => 'Domain alias not found.',
+    'err_domain_alias_delete_failed'    => 'Unable to remove the domain alias. Please try again or contact support.',
+
 ];

@@ -2169,4 +2169,163 @@ class SmarterMailApi
 
         return $url;
     }
+
+
+    // =========================================================================
+    //  ALIAS DE DOMAINE (Domain Aliases)
+    // =========================================================================
+    //
+    //  Les alias de domaine permettent à un domaine de recevoir du courrier
+    //  adressé à un autre nom de domaine. Par exemple, si « exemple.com » est
+    //  le domaine principal et « exemple.ca » est un alias de domaine, alors
+    //  un courriel envoyé à « info@exemple.ca » sera livré dans la boîte
+    //  « info@exemple.com ».
+    //
+    //  ATTENTION : Les alias de domaine sont différents des alias de courriel.
+    //  Un alias de courriel redirige UNE adresse vers une ou plusieurs cibles.
+    //  Un alias de domaine redirige TOUTES les adresses du domaine alias vers
+    //  les boîtes correspondantes du domaine principal.
+    //
+    //  Token requis : Domain Admin (daToken) pour la lecture,
+    //                 Domain Admin pour l'ajout et la suppression.
+    // =========================================================================
+
+    /**
+     * Récupère la liste des alias de domaine configurés.
+     *
+     * Un alias de domaine permet aux boîtes du domaine principal de recevoir
+     * du courrier adressé au domaine alias. Par exemple, si « client.com »
+     * possède un alias « client.ca », alors « info@client.ca » sera livré
+     * dans la boîte « info@client.com ».
+     *
+     * Endpoint API : GET api/v1/settings/domain/domain-aliases
+     * Token requis : Domain Admin (User-level selon la doc SmarterMail)
+     *
+     * Structure de retour (champ 'domainAliasData') :
+     * [
+     *   [
+     *     'name'       => 'client.ca',       // Nom de l'alias
+     *     'aliasIdn'   => 'client.ca',       // Nom IDN (internationalisé)
+     *     'domainName' => 'client.com',      // Domaine principal
+     *     'img'        => '',                // Icône (inutilisée)
+     *     'url'        => '',                // URL (inutilisée)
+     *   ],
+     *   ...
+     * ]
+     *
+     * SÉCURITÉ : Le token DA limite la requête au domaine authentifié.
+     *            Aucun accès inter-domaine n'est possible.
+     *
+     * @param string $daToken Token Domain Admin
+     * @return array          Liste des alias de domaine, ou tableau vide si erreur
+     */
+    public function getDomainAliases(string $daToken): array
+    {
+        // ── Appel GET vers l'endpoint domain-aliases ─────────────────────
+        // L'API retourne la liste complète — pas de pagination nécessaire
+        // car le nombre d'alias de domaine est généralement très faible.
+        $resp = $this->get('api/v1/settings/domain/domain-aliases', $daToken);
+
+        // En cas d'échec (token invalide, domaine inexistant, erreur réseau),
+        // retourner un tableau vide — l'appelant gère l'absence de données.
+        if (!$resp['success']) {
+            return [];
+        }
+
+        // Retourner le tableau d'alias, ou un tableau vide si la clé est absente.
+        // La clé 'domainAliasData' peut être null si aucun alias n'existe.
+        return $resp['data']['domainAliasData'] ?? [];
+    }
+
+    /**
+     * Ajoute un alias de domaine au domaine principal.
+     *
+     * Après l'ajout, tout courriel envoyé à une adresse @aliasName sera
+     * automatiquement livré dans la boîte correspondante du domaine principal.
+     *
+     * IMPORTANT : L'alias de domaine doit pointer vers le même serveur
+     * SmarterMail (enregistrement MX). Le paramètre $checkMx permet de
+     * vérifier les enregistrements MX avant l'ajout — si les MX ne pointent
+     * pas vers le serveur, l'API peut rejeter la demande (selon la version
+     * de SmarterMail et sa configuration).
+     *
+     * Endpoint API : POST api/v1/settings/domain/domain-alias-put/{aliasName}/{checkMx?}
+     * Token requis : Domain Admin
+     *
+     * SÉCURITÉ :
+     *   1. Le token DA limite l'opération au domaine authentifié.
+     *   2. Le nom de l'alias est encodé via urlencode() pour prévenir
+     *      toute injection dans l'URL de l'endpoint.
+     *   3. Le paramètre checkMx est un booléen strict (true/false).
+     *
+     * @param string $aliasName Nom de domaine alias (ex: "client.ca")
+     * @param string $daToken   Token Domain Admin
+     * @param bool   $checkMx   Vérifier les MX avant l'ajout (défaut: false)
+     * @return array            Réponse API brute avec 'success', 'data', 'error'
+     */
+    public function addDomainAlias(string $aliasName, string $daToken, bool $checkMx = false): array
+    {
+        // ── Construction de l'URL avec les paramètres dans le chemin ──────
+        // L'API SmarterMail attend les paramètres dans l'URL, pas dans le corps.
+        //
+        // IMPORTANT : Le paramètre checkMx est OPTIONNEL (noté {checkMx?}
+        // dans la documentation). S'il n'est pas nécessaire, il faut l'OMETTRE
+        // complètement de l'URL — passer « /false » provoque une erreur 400
+        // sur certaines versions de SmarterMail car le routeur d'URL ne
+        // reconnaît pas « false » comme un segment valide.
+        //
+        // URL générée :
+        //   checkMx = false → api/v1/settings/domain/domain-alias-put/client.ca
+        //   checkMx = true  → api/v1/settings/domain/domain-alias-put/client.ca/true
+        $endpoint = 'api/v1/settings/domain/domain-alias-put/'
+            . urlencode($aliasName);
+
+        // N'ajouter le paramètre checkMx que s'il est explicitement demandé
+        if ($checkMx) {
+            $endpoint .= '/true';
+        }
+
+        // ── Appel POST sans corps (paramètres dans l'URL) ────────────────
+        // Le corps vide {} est envoyé car la méthode post() encode toujours
+        // un tableau en JSON. SmarterMail l'ignore pour cet endpoint.
+        $resp = $this->post($endpoint, [], $daToken);
+
+        return $resp;
+    }
+
+    /**
+     * Supprime un alias de domaine du domaine principal.
+     *
+     * Après la suppression, le courrier envoyé à des adresses @aliasName
+     * ne sera plus livré dans les boîtes du domaine principal.
+     *
+     * ATTENTION : Cette opération est irréversible. Les courriels en transit
+     * vers l'ancien alias seront rejetés (bounce) après la suppression.
+     *
+     * Endpoint API : POST api/v1/settings/domain/domain-alias-delete/{name}
+     * Token requis : Domain Admin
+     *
+     * SÉCURITÉ :
+     *   1. Le token DA limite l'opération au domaine authentifié.
+     *   2. Le nom de l'alias est encodé via urlencode() pour prévenir
+     *      toute injection dans l'URL de l'endpoint.
+     *   3. L'appelant (smartermail.php) doit valider le nom avant d'appeler
+     *      cette méthode — cette couche ne fait PAS de validation métier.
+     *
+     * @param string $aliasName Nom de domaine alias à supprimer (ex: "client.ca")
+     * @param string $daToken   Token Domain Admin
+     * @return array            Réponse API brute avec 'success', 'data', 'error'
+     */
+    public function deleteDomainAlias(string $aliasName, string $daToken): array
+    {
+        // ── Construction de l'URL avec le nom dans le chemin ──────────────
+        // urlencode() protège contre les caractères spéciaux et l'injection.
+        $endpoint = 'api/v1/settings/domain/domain-alias-delete/'
+            . urlencode($aliasName);
+
+        // ── Appel POST sans corps (identifiant dans l'URL) ───────────────
+        $resp = $this->post($endpoint, [], $daToken);
+
+        return $resp;
+    }
 }

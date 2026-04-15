@@ -641,4 +641,60 @@ $_lang = [
     // car WHMCS utilise directement la clé comme texte du bouton.
     'action_btn_add_email' => 'Ajouter une adresse courriel',
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  ALIAS DE DOMAINE
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    //  Un alias de domaine permet au domaine principal de recevoir du courrier
+    //  adressé à un autre nom de domaine. Par exemple, si « client.com » est
+    //  le domaine principal et « client.ca » est un alias, alors un courriel
+    //  envoyé à « info@client.ca » sera livré dans la boîte « info@client.com ».
+    //
+    //  Ces chaînes sont utilisées dans le panneau de l'espace client affiché
+    //  sous la section des enregistrements DNS. Le panneau montre les alias
+    //  existants sous forme de pills, permet d'en ajouter (jusqu'à la limite
+    //  configoption17) et de les supprimer après confirmation.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ── Titre de section et description ───────────────────────────────────────
+    // Le titre apparaît dans l'en-tête de la carte, l'infobulle explique la fonctionnalité.
+    'domain_alias_title'            => 'Alias de domaine',
+    'domain_alias_tooltip'          => 'Un alias de domaine permet à toutes les boîtes courriel de votre domaine principal de recevoir les courriels adressés à un autre nom de domaine. Par exemple, si votre domaine est « exemple.com » et que vous ajoutez « exemple.ca » comme alias, un courriel envoyé à « info@exemple.ca » sera livré dans « info@exemple.com ».',
+    // Compteur affiché dans l'en-tête : « 2 / 5 »
+    'domain_alias_counter'          => '%d / %d',
+
+    // ── État vide ────────────────────────────────────────────────────────────
+    // Affiché quand aucun alias de domaine n'existe.
+    'domain_alias_empty'            => 'Aucun alias de domaine configuré.',
+
+    // ── Bouton d'ajout et modale ─────────────────────────────────────────────
+    'domain_alias_add_btn'          => '+ Alias de domaine',
+    'domain_alias_add_title'        => 'Ajouter un alias de domaine',
+    'domain_alias_add_label'        => 'Nom de domaine',
+    'domain_alias_add_placeholder'  => 'exemple.ca',
+    'domain_alias_add_help'         => 'Entrez le nom de domaine que vous souhaitez utiliser comme alias. Les courriels envoyés à ce domaine seront livrés dans les boîtes de votre domaine principal.',
+    'domain_alias_add_submit'       => 'Ajouter l\'alias',
+
+    // ── Modale de confirmation de suppression ────────────────────────────────
+    'domain_alias_del_title'        => 'Retirer un alias de domaine',
+    'domain_alias_del_confirm'      => 'Voulez-vous vraiment retirer l\'alias de domaine suivant?',
+    'domain_alias_del_warning'      => 'Les courriels envoyés aux adresses de ce domaine ne seront plus livrés dans vos boîtes courriel.',
+    'domain_alias_del_submit'       => 'Retirer définitivement',
+
+    // ── Message de limite atteinte ───────────────────────────────────────────
+    // Affiché en infobulle sur le bouton désactivé quand la limite est atteinte.
+    'domain_alias_limit_reached'    => 'Nombre maximal d\'alias de domaine atteint.',
+
+    // ── Messages d'erreur (PHP côté serveur) ─────────────────────────────────
+    // Retournés par les fonctions d'action PHP et affichés sur la page
+    // d'erreur générique si quelque chose tourne mal.
+    'err_domain_alias_disabled'         => 'La fonctionnalité d\'alias de domaine n\'est pas activée pour ce service.',
+    'err_domain_alias_invalid_name'     => 'Nom d\'alias de domaine invalide. Entrez un nom de domaine valide (ex : exemple.ca).',
+    'err_domain_alias_same_as_primary'  => 'L\'alias ne peut pas être identique au domaine principal.',
+    'err_domain_alias_limit_reached'    => 'Limite atteinte (%d alias de domaine maximum).',
+    'err_domain_alias_already_exists'   => 'Cet alias de domaine existe déjà.',
+    'err_domain_alias_add_failed'       => 'Impossible d\'ajouter l\'alias de domaine. Veuillez réessayer ou contacter le soutien technique.',
+    'err_domain_alias_not_found'        => 'Alias de domaine introuvable.',
+    'err_domain_alias_delete_failed'    => 'Impossible de retirer l\'alias de domaine. Veuillez réessayer ou contacter le soutien technique.',
+
 ];

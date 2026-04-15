@@ -76,6 +76,8 @@
  *     $params['configoption13']  → Mécanisme SPF requis
  *     $params['configoption14']  → Proposer ActiveSync (EAS) aux clients (yesno)
  *     $params['configoption15']  → Proposer MAPI/Exchange aux clients (yesno)
+ *     $params['configoption16']  → Seuil de facturation EAS/MAPI (jours)
+ *     $params['configoption17']  → Nombre maximal d'alias de domaine (0 = désactivé)
  *
  * VALEURS DE RETOUR DES FONCTIONS DE CYCLE DE VIE :
  * ─────────────────────────────────────────────────
@@ -384,6 +386,35 @@ function smartermail_ConfigOptions(): array
                 'Jours cumulatifs d\'activation minimum pour qu\'EAS ou MAPI soit facturé.',
                 'Défaut : 1 jour. Exemple : 1 = si actif ≥ 24h cumulatif dans la période → facturé.',
                 'Mettre 0 pour revenir à la facturation par état en temps réel.',
+            ]),
+        ],
+
+        // ── Alias de domaine ─────────────────────────────────────────────
+        //
+        // Nombre maximal d'alias de domaine que le client peut ajouter
+        // depuis son espace client. Un alias de domaine permet aux boîtes
+        // du domaine principal de recevoir du courrier adressé à un autre
+        // nom de domaine (ex: « client.ca » → « client.com »).
+        //
+        // COMPORTEMENT :
+        //   - 0 = fonctionnalité désactivée (le bloc n'apparaît PAS
+        //     dans l'espace client)
+        //   - N > 0 = le client peut ajouter jusqu'à N alias de domaine
+        //   - Le compteur est vérifié côté PHP avant l'appel API pour
+        //     éviter les contournements JavaScript
+        //
+        // SÉCURITÉ : La valeur est castée en (int) et forcée à min 0
+        // partout où elle est lue. Aucune valeur négative n'est acceptée.
+        'configoption17' => [
+            'FriendlyName' => 'Alias de domaine max',
+            'Type'         => 'text',
+            'Size'         => '5',
+            'Default'      => '0',
+            'Description'  => implode(' ', [
+                'Nombre maximal d\'alias de domaine autorisés.',
+                '0 = fonctionnalité désactivée (le bloc n\'apparaît pas dans l\'espace client).',
+                'Un alias de domaine permet de recevoir les courriels adressés',
+                'à un autre nom de domaine dans les boîtes du domaine principal.',
             ]),
         ],
     ];
@@ -1640,6 +1671,11 @@ function smartermail_ClientArea(array $params): array
         'edituserpage', 'adduserpage',
         'createuser', 'saveuser', 'savepassword', 'deleteuser',
         'toggledkim',       // Activation / désactivation DKIM depuis l'espace client
+        // ── Alias de domaine ─────────────────────────────────────────────
+        // Gestion des alias de domaine (ex: « client.ca » → « client.com »)
+        // depuis l'espace client. Limité par configoption17.
+        'adddomainalias',   // Action POST : ajouter un alias de domaine
+        'deletedomainalias',// Action POST : supprimer un alias de domaine
         // ── Redirections autonomes (alias sans boîte courriel) ────────────
         // Ces actions gèrent les alias qui pointent vers des adresses externes
         // et n'ont aucune boîte courriel associée dans SmarterMail.
@@ -1686,6 +1722,9 @@ function smartermail_ClientArea(array $params): array
         'savepassword'   => 'smartermail_savepassword',
         'deleteuser'     => 'smartermail_deleteuser',
         'toggledkim'     => 'smartermail_toggledkim',  // Active/désactive la signature DKIM du domaine
+        // ── Alias de domaine ─────────────────────────────────────────────
+        'adddomainalias'    => 'smartermail_adddomainalias',    // Ajoute un alias de domaine
+        'deletedomainalias' => 'smartermail_deletedomainalias', // Supprime un alias de domaine
         // ── Redirections autonomes ────────────────────────────────────────
         // Les alias autonomes sont des alias SmarterMail dont TOUTES les cibles
         // sont externes au domaine (aucune boîte courriel locale impliquée).
@@ -2515,6 +2554,27 @@ function smartermail_ClientArea(array $params): array
         fn($l) => ($l['type'] ?? '') === 'eas'
     ));
 
+    // ── Alias de domaine ─────────────────────────────────────────────────
+    //
+    // Récupération de la liste des alias de domaine (ex: « client.ca »
+    // redirige tout le courrier vers « client.com »).
+    //
+    // La fonctionnalité est conditionnelle à configoption17 > 0.
+    // Si désactivée (0), on ne fait aucun appel API inutile et le bloc
+    // n'apparaîtra pas dans le template (contrôle par $domainAliasMax).
+    //
+    // SÉCURITÉ : $domainAliasMax est casté en (int) et forcé ≥ 0 pour
+    // éviter toute valeur négative qui contournerait la limite.
+    // ─────────────────────────────────────────────────────────────────────
+    $domainAliasMax  = max(0, (int) ($params['configoption17'] ?? 0));
+    $domainAliases   = [];
+
+    // Ne charger les alias que si la fonctionnalité est activée
+    // Cela évite un appel API inutile quand configoption17 = 0
+    if ($domainAliasMax > 0) {
+        $domainAliases = $api->getDomainAliases($daToken);
+    }
+
     return [
         'tabOverviewReplacementTemplate' => 'templates/clientarea',
         'vars' => [
@@ -2593,6 +2653,13 @@ function smartermail_ClientArea(array $params): array
             // utilisateur n'entre dans cette URL. Le template applique |escape
             // sur la valeur avant injection dans l'attribut href.
             'webmailUrl'     => 'https://' . ($params['serverhostname'] ?? '') . '/interface/root#/login',
+            // ── Alias de domaine ─────────────────────────────────────────
+            // $domainAliasMax  : limite configurée (configoption17), 0 = désactivé
+            // $domainAliases   : tableau d'alias retourné par l'API SmarterMail
+            // Le template utilise $domainAliasMax pour afficher ou masquer le bloc
+            // et pour empêcher l'ajout au-delà de la limite côté interface.
+            'domainAliasMax'  => $domainAliasMax,
+            'domainAliases'   => $domainAliases,
         ],
     ];
 }
@@ -2658,6 +2725,9 @@ function smartermail_ClientAreaAllowedFunctions(): array
         'Change password'            => 'savepassword',
         'Delete email address'       => 'deleteuser',
         'Toggle DKIM signing'        => 'toggledkim',
+        // ── Alias de domaine ─────────────────────────────────────────────
+        'Add domain alias'           => 'adddomainalias',
+        'Delete domain alias'        => 'deletedomainalias',
     ];
 }
 
@@ -2768,6 +2838,262 @@ function smartermail_toggledkim(array $params): string
 
         return 'success';
     }
+}
+
+
+// =============================================================================
+//  ESPACE CLIENT — ALIAS DE DOMAINE
+// =============================================================================
+//
+//  Les alias de domaine permettent à un domaine de recevoir du courrier
+//  adressé à un ou plusieurs autres noms de domaine. Par exemple, si le
+//  domaine principal est « client.com » et que « client.ca » est configuré
+//  comme alias de domaine, alors un courriel envoyé à « info@client.ca »
+//  sera automatiquement livré dans la boîte « info@client.com ».
+//
+//  LIMITES :
+//    - Le nombre maximal d'alias est contrôlé par configoption17.
+//    - Si configoption17 = 0, la fonctionnalité est désactivée et les
+//      actions POST sont rejetées même si le client forge la requête.
+//
+//  SÉCURITÉ :
+//    - Toutes les validations sont effectuées côté serveur (PHP).
+//    - Le nom de domaine alias est validé par regex contre l'injection.
+//    - La limite est vérifiée en temps réel via l'API (pas de cache).
+//    - Le token DA est limité au domaine du service WHMCS authentifié.
+// =============================================================================
+
+/**
+ * Action POST : Ajouter un alias de domaine.
+ *
+ * Appelé via formulaire POST depuis l'espace client.
+ * Valide le nom de domaine, vérifie la limite configoption17,
+ * puis appelle l'API SmarterMail pour créer l'alias.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  SÉCURITÉ
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  1. L'action POST passe par _sm_initDomainAdmin() → token DA strictement
+ *     limité au domaine du service WHMCS du client connecté.
+ *  2. Le nom du domaine alias est validé par regex stricte :
+ *     - Uniquement lettres, chiffres, points et tirets
+ *     - Au moins un point (structure domaine.tld)
+ *     - Pas de double point, pas de tiret en début/fin de label
+ *     - Longueur totale entre 4 et 253 caractères (RFC 1035)
+ *  3. La limite configoption17 est vérifiée EN TEMPS RÉEL via l'API
+ *     (pas de cache) pour empêcher le dépassement par requêtes concurrentes.
+ *  4. Si configoption17 = 0, l'action est refusée immédiatement —
+ *     la fonctionnalité est considérée désactivée.
+ *  5. strip_tags() + trim() + strtolower() nettoient l'entrée utilisateur.
+ *
+ * Variables $_POST attendues :
+ *   - domain_alias_name : nom de domaine alias (ex: « client.ca »)
+ *
+ * @param array $params Paramètres WHMCS du service
+ * @return string       'success' ou message d'erreur localisé
+ */
+function smartermail_adddomainalias(array $params): string
+{
+    $lang = _sm_lang($params);
+
+    // ── Vérifier que la fonctionnalité est activée (configoption17 > 0) ──
+    // SÉCURITÉ : même si le bloc est masqué dans le template, un client
+    // malveillant pourrait forger la requête POST. On vérifie ici.
+    $maxAliases = max(0, (int) ($params['configoption17'] ?? 0));
+    if ($maxAliases <= 0) {
+        // Fonctionnalité désactivée — journaliser la tentative suspecte
+        logActivity('SmarterMail [adddomainalias] Tentative alors que configoption17=0'
+            . ' | domaine: ' . ($params['domain'] ?? '') . ' | service: ' . $params['serviceid']);
+        return $lang['err_domain_alias_disabled'] ?? 'Cette fonctionnalité n\'est pas activée.';
+    }
+
+    // ── Validation stricte du nom de domaine alias ───────────────────────
+    // strip_tags() retire toute balise HTML injectée
+    // trim() retire les espaces en début/fin
+    // strtolower() normalise la casse (les domaines sont insensibles à la casse)
+    $aliasName = strtolower(trim(strip_tags($_POST['domain_alias_name'] ?? '')));
+
+    // Regex de validation de nom de domaine :
+    //   ^                    → début de chaîne
+    //   (?!.*\.\.)           → pas de double point (ex: « a..b.com » interdit)
+    //   [a-z0-9]             → commence par une lettre ou un chiffre
+    //   ([a-z0-9\-]*[a-z0-9])? → corps du label : lettres, chiffres, tirets (pas en fin)
+    //   (\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+ → au moins un point suivi d'un label valide
+    //   $                    → fin de chaîne
+    // Longueur : 4 min (a.bc) — 253 max (RFC 1035)
+    if (
+        $aliasName === ''
+        || strlen($aliasName) < 4
+        || strlen($aliasName) > 253
+        || !preg_match('/^(?!\.\.)(?!.*\.\.)[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/', $aliasName)
+    ) {
+        return $lang['err_domain_alias_invalid_name'] ?? 'Nom de domaine alias invalide.';
+    }
+
+    // ── Empêcher l'ajout d'un alias identique au domaine principal ───────
+    // SÉCURITÉ : SmarterMail pourrait accepter ce cas et créer une boucle.
+    // On le bloque explicitement côté PHP.
+    $primaryDomain = strtolower(trim($params['domain'] ?? ''));
+    if ($aliasName === $primaryDomain) {
+        return $lang['err_domain_alias_same_as_primary'] ?? 'L\'alias ne peut pas être identique au domaine principal.';
+    }
+
+    // ── Initialisation API — token Domain Admin ──────────────────────────
+    $init = _sm_initDomainAdmin($params);
+    if (isset($init['error'])) {
+        return $init['error'];
+    }
+
+    $api     = $init['api'];
+    $daToken = $init['token'];
+
+    // ── Vérifier la limite EN TEMPS RÉEL ─────────────────────────────────
+    // On recharge la liste depuis l'API pour éviter les dépassements
+    // par requêtes concurrentes (le client ouvre deux onglets et soumet
+    // en même temps). Le coût d'un GET supplémentaire est négligeable
+    // comparé au risque de dépassement.
+    $currentAliases = $api->getDomainAliases($daToken);
+    if (count($currentAliases) >= $maxAliases) {
+        return sprintf(
+            $lang['err_domain_alias_limit_reached'] ?? 'Limite atteinte (%d alias maximum).',
+            $maxAliases
+        );
+    }
+
+    // ── Vérifier que l'alias n'existe pas déjà ──────────────────────────
+    // Comparaison insensible à la casse (strtolower déjà appliqué sur $aliasName)
+    foreach ($currentAliases as $existing) {
+        if (strtolower($existing['name'] ?? '') === $aliasName) {
+            return $lang['err_domain_alias_already_exists'] ?? 'Cet alias de domaine existe déjà.';
+        }
+    }
+
+    // ── Appel API — Création de l'alias ──────────────────────────────────
+    // checkMx = false : on ne vérifie pas les MX avant l'ajout car le client
+    // peut configurer ses DNS après. SmarterMail livrera le courrier dès que
+    // les MX pointeront vers le serveur.
+    $resp = $api->addDomainAlias($aliasName, $daToken, false);
+
+    if (!$resp['success']) {
+        // Journaliser l'erreur API avec le maximum de détails pour le diagnostic.
+        // Le code HTTP et la réponse complète permettent de distinguer :
+        //   400 = paramètre invalide ou alias déjà existant côté SmarterMail
+        //   401 = token expiré ou permissions insuffisantes
+        //   404 = endpoint introuvable (version SmarterMail incompatible)
+        //   0   = erreur réseau (timeout, DNS, SSL)
+        logActivity('SmarterMail [adddomainalias] Échec API pour '
+            . $params['domain'] . ' | alias=' . $aliasName
+            . ' | HTTP ' . ($resp['code'] ?? '?')
+            . ' | erreur: ' . ($resp['error'] ?? 'inconnue')
+            . ' | réponse: ' . json_encode($resp['data'] ?? null));
+        return $lang['err_domain_alias_add_failed'] ?? 'Impossible d\'ajouter l\'alias de domaine.';
+    }
+
+    // Succès — journaliser l'ajout pour la traçabilité
+    logActivity('SmarterMail [adddomainalias] Alias « ' . $aliasName
+        . ' » ajouté au domaine ' . $params['domain']
+        . ' | service: ' . $params['serviceid']);
+
+    return 'success';
+}
+
+
+/**
+ * Action POST : Supprimer un alias de domaine.
+ *
+ * Appelé via formulaire POST depuis l'espace client (bouton × sur le pill).
+ * Le client doit confirmer la suppression via une modale JavaScript
+ * avant que le formulaire ne soit soumis.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  SÉCURITÉ
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  1. L'action POST passe par _sm_initDomainAdmin() → token DA strictement
+ *     limité au domaine du service WHMCS du client connecté.
+ *  2. Le nom du domaine alias est validé par la même regex que l'ajout.
+ *  3. On vérifie que l'alias EXISTE RÉELLEMENT dans le domaine avant
+ *     d'appeler l'API de suppression — cela empêche un client de forger
+ *     une requête pour supprimer un alias d'un autre domaine.
+ *  4. Si configoption17 = 0, l'action est refusée (fonctionnalité désactivée).
+ *  5. strip_tags() + trim() + strtolower() nettoient l'entrée utilisateur.
+ *
+ * Variables $_POST attendues :
+ *   - domain_alias_name : nom de domaine alias à supprimer (ex: « client.ca »)
+ *
+ * @param array $params Paramètres WHMCS du service
+ * @return string       'success' ou message d'erreur localisé
+ */
+function smartermail_deletedomainalias(array $params): string
+{
+    $lang = _sm_lang($params);
+
+    // ── Vérifier que la fonctionnalité est activée ───────────────────────
+    // Même logique que pour l'ajout : si configoption17 = 0, refuser.
+    $maxAliases = max(0, (int) ($params['configoption17'] ?? 0));
+    if ($maxAliases <= 0) {
+        logActivity('SmarterMail [deletedomainalias] Tentative alors que configoption17=0'
+            . ' | domaine: ' . ($params['domain'] ?? '') . ' | service: ' . $params['serviceid']);
+        return $lang['err_domain_alias_disabled'] ?? 'Cette fonctionnalité n\'est pas activée.';
+    }
+
+    // ── Validation stricte du nom ────────────────────────────────────────
+    $aliasName = strtolower(trim(strip_tags($_POST['domain_alias_name'] ?? '')));
+
+    // Même regex de validation que pour l'ajout — cohérence des contrôles
+    if (
+        $aliasName === ''
+        || strlen($aliasName) < 4
+        || strlen($aliasName) > 253
+        || !preg_match('/^(?!\.\.)(?!.*\.\.)[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/', $aliasName)
+    ) {
+        return $lang['err_domain_alias_invalid_name'] ?? 'Nom de domaine alias invalide.';
+    }
+
+    // ── Initialisation API — token Domain Admin ──────────────────────────
+    $init = _sm_initDomainAdmin($params);
+    if (isset($init['error'])) {
+        return $init['error'];
+    }
+
+    $api     = $init['api'];
+    $daToken = $init['token'];
+
+    // ── Vérifier que l'alias existe dans le domaine ──────────────────────
+    // SÉCURITÉ : Empêche un client de forger une requête pour supprimer
+    // un alias qui n'appartient pas à son domaine. Le token DA devrait
+    // déjà limiter l'accès, mais cette vérification ajoute une couche
+    // de défense en profondeur (defense in depth).
+    $currentAliases = $api->getDomainAliases($daToken);
+    $aliasFound     = false;
+
+    foreach ($currentAliases as $existing) {
+        if (strtolower($existing['name'] ?? '') === $aliasName) {
+            $aliasFound = true;
+            break;
+        }
+    }
+
+    if (!$aliasFound) {
+        // L'alias n'existe pas (ou n'appartient pas à ce domaine)
+        return $lang['err_domain_alias_not_found'] ?? 'Alias de domaine introuvable.';
+    }
+
+    // ── Appel API — Suppression de l'alias ───────────────────────────────
+    $resp = $api->deleteDomainAlias($aliasName, $daToken);
+
+    if (!$resp['success']) {
+        logActivity('SmarterMail [deletedomainalias] Échec API pour '
+            . $params['domain'] . ' | alias=' . $aliasName
+            . ' | erreur: ' . ($resp['error'] ?? 'inconnue'));
+        return $lang['err_domain_alias_delete_failed'] ?? 'Impossible de supprimer l\'alias de domaine.';
+    }
+
+    // Succès — journaliser la suppression pour la traçabilité
+    logActivity('SmarterMail [deletedomainalias] Alias « ' . $aliasName
+        . ' » supprimé du domaine ' . $params['domain']
+        . ' | service: ' . $params['serviceid']);
+
+    return 'success';
 }
 
 
