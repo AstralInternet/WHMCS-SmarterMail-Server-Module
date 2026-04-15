@@ -78,6 +78,7 @@
  *     $params['configoption15']  → Proposer MAPI/Exchange aux clients (yesno)
  *     $params['configoption16']  → Seuil de facturation EAS/MAPI (jours)
  *     $params['configoption17']  → Nombre maximal d'alias de domaine (0 = désactivé)
+ *     $params['configoption18']  → Mécanismes SPF secondaires (virgules, validation seulement)
  *
  * VALEURS DE RETOUR DES FONCTIONS DE CYCLE DE VIE :
  * ─────────────────────────────────────────────────
@@ -320,14 +321,16 @@ function smartermail_ConfigOptions(): array
         // ── ENREGISTREMENTS DNS ───────────────────────────────────────────────
 
         'configoption13' => [
-            'FriendlyName' => 'Mécanisme SPF requis',
+            'FriendlyName' => 'Mécanisme SPF principal',
             'Type'         => 'text',
             'Size'         => '60',
             'Default'      => 'include:mail.example.com',
             'Description'  => implode(' ', [
-                'Mécanisme SPF que le client doit avoir dans son DNS (ex: include:mail.example.com ou ip4:1.2.3.4).',
-                'Le module vérifie que le TXT v=spf1 du domaine contient ce mécanisme.',
-                'Affiché en vert dans le tableau de bord si correctement configuré.',
+                'Mécanisme SPF principal que le client doit ajouter dans son DNS',
+                '(ex: include:mail.example.com ou ip4:1.2.3.4).',
+                'C\'est ce mécanisme qui est affiché et recommandé dans le guide DNS',
+                'de l\'espace client. Voir configoption18 pour les mécanismes',
+                'secondaires acceptés en validation.',
             ]),
         ],
 
@@ -415,6 +418,38 @@ function smartermail_ConfigOptions(): array
                 '0 = fonctionnalité désactivée (le bloc n\'apparaît pas dans l\'espace client).',
                 'Un alias de domaine permet de recevoir les courriels adressés',
                 'à un autre nom de domaine dans les boîtes du domaine principal.',
+            ]),
+        ],
+
+        // ── SPF secondaire ───────────────────────────────────────────────
+        //
+        // Mécanismes SPF additionnels acceptés comme valides, en plus du
+        // mécanisme principal (configoption13). Utilisé pour :
+        //   - Migration : l'ancien et le nouveau serveur sont tous deux acceptés
+        //   - Multi-serveur : plusieurs include: ou ip4: sont valides
+        //   - Transition : le client peut avoir l'ancien SPF le temps de migrer
+        //
+        // COMPORTEMENT :
+        //   - Le SPF est VALIDE si le mécanisme principal (configoption13)
+        //     OU n'importe quel mécanisme secondaire est trouvé dans le DNS
+        //   - SEUL le mécanisme principal est affiché et recommandé dans
+        //     le guide DNS de l'espace client — les secondaires sont
+        //     uniquement utilisés pour la validation (pill verte/rouge)
+        //   - Vide = pas de mécanisme secondaire (seul le principal compte)
+        //
+        // FORMAT : Séparés par des virgules, espaces optionnels autour
+        //   ex: include:old-mail.server.com, ip4:203.0.113.5
+        'configoption18' => [
+            'FriendlyName' => 'Mécanismes SPF secondaires',
+            'Type'         => 'text',
+            'Size'         => '60',
+            'Default'      => '',
+            'Description'  => implode(' ', [
+                'Mécanismes SPF additionnels acceptés comme valides (séparés par des virgules).',
+                'Le SPF est validé si le mécanisme principal (configoption13) OU un',
+                'de ces mécanismes secondaires est présent dans le DNS du client.',
+                'Seul le mécanisme principal est affiché dans le guide DNS.',
+                'Laisser vide si aucun mécanisme secondaire n\'est nécessaire.',
             ]),
         ],
     ];
@@ -2440,12 +2475,42 @@ function smartermail_ClientArea(array $params): array
     }
 
     // ── Vérification DNS : SPF ────────────────────────────────────────────
-    // Récupère configoption13 = mécanisme SPF attendu (ex: include:mail.server.com)
-    // Cherche un TXT v=spf1 sur le domaine qui contient ce mécanisme.
+    // ── Vérification SPF ────────────────────────────────────────────────────
+    //
+    // Deux niveaux de mécanismes SPF :
+    //   - configoption13 = mécanisme PRINCIPAL (affiché dans le guide DNS)
+    //   - configoption18 = mécanismes SECONDAIRES (validation seulement,
+    //     séparés par virgules, jamais affichés au client)
+    //
+    // LOGIQUE : Le SPF est VALIDE si le mécanisme principal OU n'importe
+    // quel mécanisme secondaire est trouvé dans le TXT v=spf1 du domaine.
+    //
+    // AFFICHAGE : Seul le mécanisme principal est affiché dans le guide DNS
+    // et recommandé au client. Les secondaires sont transparents.
+    // ─────────────────────────────────────────────────────────────────────
     $spfMechanism = trim($params['configoption13'] ?? '');
     $spfValid     = false;
     $spfFound     = '';   // Le record SPF trouvé dans le DNS
+
+    // Construire la liste complète des mécanismes acceptés :
+    // [0] = principal, [1..n] = secondaires (configoption18)
+    $spfAccepted = [];
     if ($spfMechanism !== '') {
+        $spfAccepted[] = $spfMechanism;
+    }
+
+    // Parser les mécanismes secondaires (configoption18)
+    // trim chaque entrée, ignorer les vides
+    $spfSecondaryRaw = trim($params['configoption18'] ?? '');
+    if ($spfSecondaryRaw !== '') {
+        $spfSecondary = array_filter(
+            array_map('trim', explode(',', $spfSecondaryRaw)),
+            fn($m) => $m !== ''
+        );
+        $spfAccepted = array_merge($spfAccepted, $spfSecondary);
+    }
+
+    if (count($spfAccepted) > 0) {
         try {
             $spfDns = @dns_get_record($domain, DNS_TXT) ?: [];
             foreach ($spfDns as $rec) {
@@ -2457,9 +2522,12 @@ function smartermail_ClientArea(array $params): array
                 }
                 if (str_starts_with($txt, 'v=spf1')) {
                     $spfFound = $txt;
-                    if (str_contains($txt, $spfMechanism)) {
-                        $spfValid = true;
-                        break;
+                    // Vérifier chaque mécanisme accepté — un seul suffit
+                    foreach ($spfAccepted as $mech) {
+                        if (str_contains($txt, $mech)) {
+                            $spfValid = true;
+                            break 2; // Sortir des deux boucles
+                        }
                     }
                 }
             }
@@ -2467,7 +2535,9 @@ function smartermail_ClientArea(array $params): array
             logActivity('SmarterMail ClientArea [spf-dns] : ' . $e->getMessage());
         }
     }
-    // Record SPF recommandé à afficher dans le popup
+
+    // Record SPF recommandé — TOUJOURS basé sur le mécanisme principal
+    // Les secondaires ne sont jamais suggérés au client
     $spfRecommended = 'v=spf1 ' . $spfMechanism . ' ~all';
 
     // ── Détection de l'onglet DNS par défaut selon les NS du domaine ─────
