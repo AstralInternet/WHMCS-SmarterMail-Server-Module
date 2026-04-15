@@ -183,10 +183,23 @@
 .sm-page-btn[disabled]{opacity:.4;cursor:default}
 .sm-page-ellipsis{font-size:12px;color:#aaa;padding:0 3px}
 
+/* ── Boutons standardisés du module ──────────────────────────────────── */
+/* Définis ici pour être disponibles dans les modales de clientarea.tpl.  */
+/* Les mêmes classes sont utilisées dans adduser, edituser, etc.         */
+.sm-btn-add{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px dashed #3949ab;color:#3949ab;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.sm-btn-add:hover{background:#3949ab;color:#fff;border-style:solid}
+.sm-btn-cancel{background:#fff;color:#555;border:1px solid #ddd;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.sm-btn-cancel:hover{background:#f5f5f5;color:#333}
+.sm-btn-create{color:#fff;border:none;padding:8px 20px;border-radius:4px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:#aaa;transition:background .2s}
+.sm-btn-create.ready{background:#27ae60}
+.sm-btn-create.ready:hover{background:#219a52}
+.sm-btn-del{background:#fff;color:#e74c3c;border:1px solid #e74c3c;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.sm-btn-del:hover{background:#fce4e4}
+
 /* ── Overlay modale générique ───────────────────────────────────────── */
 .sm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
 .sm-overlay.open{display:flex}
-.sm-mbox{background:#fff;border-radius:8px;width:100%;max-width:680px;margin:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);animation:smFadeIn .18s ease}
+.sm-mbox{background:#fff;border-radius:8px;width:100%;max-width:680px;margin:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);animation:smFadeIn .18s ease;overflow:hidden}
 .sm-mbox.sm-mbox-sm{max-width:460px}
 @keyframes smFadeIn{from{transform:translateY(-12px);opacity:0}to{transform:translateY(0);opacity:1}}
 .sm-mhead{padding:13px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
@@ -413,73 +426,32 @@
   .sm-mbox-guide{max-height:90vh}  /* plus d'espace sur mobile */
 }
 
-/* ── Alias de domaine — Carte et pills ──────────────────────────────── */
-/* Carte pour la liste des alias de domaine, placée sous le bloc DNS.    */
-/* Les alias sont affichés sous forme de pills avec un bouton × pour     */
-/* les supprimer. Le bouton + ouvre une modale d'ajout.                  */
-/* margin-bottom:18px aligne l'espacement avec les .sm-card existantes   */
-.sm-da-card{border:1px solid #e0e0e0;border-radius:6px;margin-top:14px;margin-bottom:18px;background:#fff}
-.sm-da-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fafafa;border-bottom:1px solid #e8e8e8;border-radius:6px 6px 0 0}
-.sm-da-header-left{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#2c3e50}
-/* Icône info [i] — curseur aide et couleur discrète */
-.sm-da-info-icon{color:#90a4ae;cursor:help;font-size:12px}
-/* Compteur (2/5) dans l'en-tête */
-.sm-da-counter{font-size:11px;color:#888;font-weight:600}
-.sm-da-body{padding:12px 14px}
-/* Message état vide */
-.sm-da-empty{color:#aaa;font-size:12px;font-style:italic;margin:0}
+/* ── Alias de domaine — Styles spécifiques ───────────────────────────── */
+/* La carte utilise .sm-card / .sm-card-header / .sm-card-body existants. */
+/* Seuls les éléments propres aux alias de domaine ont des styles dédiés. */
+
 /* Conteneur des pills + bouton ajout */
 .sm-da-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-/* Pill individuel — fond bleu clair avec × cliquable */
-.sm-da-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb;transition:background .12s}
-.sm-da-pill:hover{background:#bbdefb}
-/* Bouton × dans le pill — cercle rouge discret */
+/* Pill individuel — accent indigo #3949ab cohérent avec le module */
+.sm-da-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#e8eaf6;color:#3949ab;transition:background .12s}
+.sm-da-pill:hover{background:#c5cae9}
+/* Bouton × dans le pill */
 .sm-da-pill-x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:transparent;border:none;color:#c62828;font-size:13px;font-weight:700;cursor:pointer;line-height:1;padding:0;transition:background .12s}
 .sm-da-pill-x:hover{background:rgba(198,40,40,.12)}
-/* Bouton + Alias de domaine */
-.sm-da-add-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;background:#1565c0;color:#fff;border:1px solid #1565c0;transition:background .12s,opacity .12s}
-.sm-da-add-btn:hover{background:#0d47a1}
-/* État désactivé quand la limite est atteinte */
-.sm-da-add-btn.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
-/* Champ input dans la modale d'ajout */
-.sm-da-input{width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;box-sizing:border-box}
-.sm-da-input:focus{border-color:#1565c0;outline:none;box-shadow:0 0 0 2px rgba(21,101,192,.15)}
-/* Texte d'aide sous l'input */
-.sm-da-help{font-size:11px;color:#888;margin-top:4px}
-/* Label du champ */
-.sm-da-label{font-size:12px;font-weight:600;color:#444;margin-bottom:4px;display:block}
-/* Pied de modale avec les boutons */
-.sm-da-mfoot{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px}
-/* Bouton annuler dans les modales */
-.sm-da-btn-cancel{padding:6px 14px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;background:#f5f5f5;color:#555;border:1px solid #ccc;transition:background .12s}
-.sm-da-btn-cancel:hover{background:#e0e0e0}
-/* Bouton confirmer suppression — rouge */
-.sm-da-btn-danger{padding:6px 14px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;background:#c62828;color:#fff;border:1px solid #c62828;transition:background .12s}
-.sm-da-btn-danger:hover{background:#b71c1c}
+/* Message état vide */
+.sm-da-empty{color:#aaa;font-size:12px;font-style:italic;margin:0}
 /* Nom de l'alias mis en évidence dans la modale de suppression */
 .sm-da-del-name{font-weight:700;color:#c62828;font-size:14px;margin:8px 0}
 /* Avertissement de suppression */
 .sm-da-del-warn{font-size:12px;color:#e65100;margin-top:6px;display:flex;align-items:center;gap:5px}
-/* ── Coins arrondis des modales d'alias de domaine ──────────────────── */
-/* overflow:hidden force les enfants (sm-mhead coloré, sm-da-mfoot) à    */
-/* respecter le border-radius:8px du sm-mbox parent. Sans ça, le fond    */
-/* coloré de l'en-tête et du pied déborde dans les coins.                */
-#sm-da-add-modal .sm-mbox,
-#sm-da-del-modal .sm-mbox{overflow:hidden}
-/* ── Tooltip cliquable pour l'icône [i] ─────────────────────────────── */
-/* Remplace le title natif (peu fiable, invisible sur mobile) par un     */
-/* tooltip personnalisé qui apparaît au clic et au survol.               */
-/* Le conteneur est positionné relativement pour ancrer le tooltip.      */
-.sm-da-tooltip-wrap{position:relative;display:inline-flex;align-items:center}
-/* Bulle du tooltip — masquée par défaut, apparaît via .visible          */
-.sm-da-tooltip-bubble{display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:280px;padding:10px 12px;background:#263238;color:#eceff1;font-size:11px;font-weight:400;line-height:1.5;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:100;pointer-events:auto}
-/* Flèche du tooltip pointant vers le haut */
-.sm-da-tooltip-bubble::before{content:'';position:absolute;top:-5px;left:50%;transform:translateX(-50%);border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:5px solid #263238}
-/* État visible — activé par JS au clic et au survol */
-.sm-da-tooltip-bubble.visible{display:block}
-/* Icône cliquable — curseur pointeur */
-.sm-da-info-trigger{color:#90a4ae;cursor:pointer;font-size:12px;transition:color .12s}
-.sm-da-info-trigger:hover{color:#546e7a}
+
+/* ── Tooltip cliquable [i] — réutilisable ───────────────────────────── */
+.sm-tooltip-wrap{position:relative;display:inline-flex;align-items:center}
+.sm-tooltip-bubble{display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:280px;padding:10px 12px;background:#263238;color:#eceff1;font-size:11px;font-weight:400;line-height:1.5;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:100;pointer-events:auto}
+.sm-tooltip-bubble::before{content:'';position:absolute;top:-5px;left:50%;transform:translateX(-50%);border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:5px solid #263238}
+.sm-tooltip-bubble.visible{display:block}
+.sm-tooltip-trigger{color:#90a4ae;cursor:pointer;font-size:12px;transition:color .12s}
+.sm-tooltip-trigger:hover{color:#546e7a}
 {/literal}
 </style>
 
@@ -869,64 +841,54 @@
   Affichée UNIQUEMENT si configoption17 > 0 (fonctionnalité activée).
   Positionnée sous le bloc des enregistrements DNS.
 
-  CONTENU :
-    - En-tête avec titre, icône info [i] (tooltip), et compteur (X / Max)
-    - Corps : pills des alias existants avec bouton × pour supprimer
-    - Bouton « + Alias de domaine » ouvrant une modale d'ajout
-    - Si aucun alias : message d'état vide
+  CLASSES RÉUTILISÉES DU MODULE :
+    - .sm-card / .sm-card-header / .sm-card-body  → structure carte
+    - .sm-mbox / .sm-mhead.dark / .sm-mbody / .sm-mfoot → structure modale
+    - .sm-mlabel → label de champ
+    - .sm-btn-cancel → bouton annuler
+    - .sm-btn-add → bouton d'ajout (style dashed indigo)
+    - .sm-btn-del → bouton de suppression (style outline rouge)
 
   SÉCURITÉ :
     - Les noms d'alias sont échappés via |escape pour prévenir les XSS.
     - Les formulaires utilisent POST avec le serviceid lié à la session.
     - La limite est aussi vérifiée côté PHP (pas seulement en JS/template).
     - Les modales de confirmation empêchent les clics accidentels.
-
-  MODALES ASSOCIÉES (définies juste après ce bloc) :
-    - #sm-da-add-modal  : formulaire d'ajout d'un alias
-    - #sm-da-del-modal  : confirmation de suppression (remplie dynamiquement en JS)
 *}
 {if $domainAliasMax > 0}
-<div class="sm-da-card">
+<div class="sm-card" style="margin-top:14px;">
 
   {* ── En-tête : titre + [i] tooltip + compteur ────────────────────────── *}
-  <div class="sm-da-header">
-    <div class="sm-da-header-left">
+  <div class="sm-card-header">
+    <span style="display:flex;align-items:center;gap:8px;">
       <i class="fa fa-globe"></i>
       {$lang.domain_alias_title}
       {* ── Icône [i] avec tooltip cliquable ─────────────────────────────── *}
       {*
-        Le title="" natif est peu fiable (invisible sur mobile, délai variable).
-        On utilise un tooltip personnalisé qui s'ouvre au clic (mobile + desktop)
-        et au survol (desktop). Fermeture au clic ailleurs sur la page.
-
         SÉCURITÉ : Le texte du tooltip est échappé par |escape dans le template.
         Le contenu est injecté statiquement (pas de JS innerHTML dynamique).
       *}
-      <span class="sm-da-tooltip-wrap" id="sm-da-tooltip-wrap">
-        <i class="fa fa-info-circle sm-da-info-trigger"
+      <span class="sm-tooltip-wrap" id="sm-da-tooltip-wrap">
+        <i class="fa fa-info-circle sm-tooltip-trigger"
            onclick="smDaToggleTooltip(event)"
            aria-label="{$lang.domain_alias_title|escape}"></i>
-        <span class="sm-da-tooltip-bubble" id="sm-da-tooltip-bubble">
+        <span class="sm-tooltip-bubble" id="sm-da-tooltip-bubble">
           {$lang.domain_alias_tooltip}
         </span>
       </span>
-    </div>
+    </span>
     {* Compteur : nombre actuel / limite maximale *}
-    <span class="sm-da-counter">
+    <span style="font-size:11px;color:#888;">
       {$domainAliases|@count} / {$domainAliasMax}
     </span>
   </div>
 
   {* ── Corps : pills des alias + bouton d'ajout ───────────────────────── *}
-  <div class="sm-da-body">
+  <div class="sm-card-body">
 
     {if $domainAliases|@count > 0}
       {* ── Liste des alias sous forme de pills ──────────────────────────── *}
       {*
-        Chaque pill contient le nom de l'alias et un bouton × qui ouvre
-        la modale de confirmation de suppression. Le nom est passé à la
-        fonction JS smDaConfirmDelete() qui remplit dynamiquement la modale.
-
         SÉCURITÉ : |escape appliqué sur le nom pour prévenir les XSS.
         Le onclick utilise des guillemets échappés correctement.
       *}
@@ -941,21 +903,20 @@
           </span>
         {/foreach}
 
-        {* ── Bouton + Alias de domaine ────────────────────────────────────── *}
+        {* ── Bouton + Alias de domaine — style .sm-btn-add (dashed indigo) ── *}
         {*
-          Désactivé visuellement (classe .disabled) quand la limite est atteinte.
-          Le onclick est aussi bloqué par une condition JS par sécurité.
           SÉCURITÉ : la limite est vérifiée côté PHP à la soumission du formulaire.
         *}
         {if $domainAliases|@count >= $domainAliasMax}
           <button type="button"
-                  class="sm-da-add-btn disabled"
+                  class="sm-btn-add"
+                  style="opacity:.5;cursor:not-allowed;"
                   title="{$lang.domain_alias_limit_reached|escape}"
-                  disabled>{$lang.domain_alias_add_btn}</button>
+                  disabled><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
         {else}
           <button type="button"
-                  class="sm-da-add-btn"
-                  onclick="smOpen('sm-da-add-modal')">{$lang.domain_alias_add_btn}</button>
+                  class="sm-btn-add"
+                  onclick="smOpen('sm-da-add-modal')"><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
         {/if}
       </div>
 
@@ -966,8 +927,8 @@
       {* Bouton d'ajout même quand la liste est vide *}
       <div style="margin-top:8px;">
         <button type="button"
-                class="sm-da-add-btn"
-                onclick="smOpen('sm-da-add-modal')">{$lang.domain_alias_add_btn}</button>
+                class="sm-btn-add"
+                onclick="smOpen('sm-da-add-modal')"><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
       </div>
     {/if}
 
@@ -976,21 +937,15 @@
 
 {* ── Modale : Ajouter un alias de domaine ──────────────────────────────── *}
 {*
-  Formulaire POST qui soumet le nom de domaine alias vers l'action
-  customAction=adddomainalias. Le champ est validé côté JS (format basique)
-  et côté PHP (regex stricte + limite + doublon + identique au primaire).
-
   SÉCURITÉ :
     - L'action POST est dans la whitelist $allowedActions
     - Le serviceid est celui de la session WHMCS authentifiée
-    - Le name="domain_alias_name" est le seul champ soumis
-    - La validation côté JS est un confort UX, pas une protection
-      (la vraie validation est côté PHP)
+    - La validation côté JS est un confort UX (la vraie validation est côté PHP)
 *}
 <div class="sm-overlay" id="sm-da-add-modal" onclick="smBg(event,'sm-da-add-modal')">
   <div class="sm-mbox sm-mbox-sm">
-    {* En-tête de la modale — fond bleu *}
-    <div class="sm-mhead dark" style="background:#1565c0;">
+    {* En-tête — .sm-mhead.dark cohérent avec le guide DNS et la modale SPF *}
+    <div class="sm-mhead dark">
       <h4><i class="fa fa-plus-circle"></i> {$lang.domain_alias_add_title}</h4>
       <button type="button" class="sm-mclose" onclick="smClose('sm-da-add-modal')">&times;</button>
     </div>
@@ -1001,28 +956,30 @@
           onsubmit="return smDaValidateAdd(this)"
           id="sm-da-add-form">
 
-      <div style="padding:16px;">
-        {* Label du champ *}
-        <label class="sm-da-label" for="sm-da-add-input">{$lang.domain_alias_add_label}</label>
+      <div class="sm-mbody">
+        <div class="sm-mfg">
+          {* Label du champ — réutilise .sm-mlabel *}
+          <label class="sm-mlabel" for="sm-da-add-input">{$lang.domain_alias_add_label}</label>
 
-        {* Champ de saisie du nom de domaine alias *}
-        <input type="text"
-               name="domain_alias_name"
-               id="sm-da-add-input"
-               class="sm-da-input"
-               placeholder="{$lang.domain_alias_add_placeholder|escape}"
-               maxlength="253"
-               autocomplete="off"
-               required>
+          {* Champ de saisie — style cohérent avec les inputs du module *}
+          <input type="text"
+                 name="domain_alias_name"
+                 id="sm-da-add-input"
+                 style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box;"
+                 placeholder="{$lang.domain_alias_add_placeholder|escape}"
+                 maxlength="253"
+                 autocomplete="off"
+                 required>
 
-        {* Texte d'aide sous le champ *}
-        <div class="sm-da-help">{$lang.domain_alias_add_help}</div>
+          {* Texte d'aide sous le champ *}
+          <div style="font-size:11px;color:#888;margin-top:4px;">{$lang.domain_alias_add_help}</div>
+        </div>
       </div>
 
-      {* Pied de modale avec boutons Annuler / Ajouter *}
-      <div class="sm-da-mfoot">
-        <button type="button" class="sm-da-btn-cancel" onclick="smClose('sm-da-add-modal')">{$lang.btn_cancel}</button>
-        <button type="submit" class="sm-da-add-btn">{$lang.domain_alias_add_submit}</button>
+      {* Pied de modale — réutilise .sm-mfoot et .sm-btn-cancel *}
+      <div class="sm-mfoot">
+        <button type="button" class="sm-btn-cancel" onclick="smClose('sm-da-add-modal')">{$lang.btn_cancel}</button>
+        <button type="submit" class="sm-btn-create ready">{$lang.domain_alias_add_submit}</button>
       </div>
     </form>
   </div>
@@ -1030,13 +987,6 @@
 
 {* ── Modale : Confirmation de suppression d'un alias de domaine ────────── *}
 {*
-  Modale de confirmation remplie dynamiquement par smDaConfirmDelete(name).
-  Le nom de l'alias est injecté dans :
-    - Le texte de confirmation (span #sm-da-del-name-display)
-    - Le champ hidden du formulaire (input #sm-da-del-input)
-
-  Le formulaire POST soumet vers customAction=deletedomainalias.
-
   SÉCURITÉ :
     - Le nom est échappé en JS avant injection dans le DOM (textContent)
     - Le champ hidden est défini via .value (pas innerHTML)
@@ -1044,14 +994,14 @@
 *}
 <div class="sm-overlay" id="sm-da-del-modal" onclick="smBg(event,'sm-da-del-modal')">
   <div class="sm-mbox sm-mbox-sm">
-    {* En-tête de la modale — fond rouge *}
+    {* En-tête — .sm-mhead.red cohérent avec les modales de suppression *}
     <div class="sm-mhead red">
       <h4><i class="fa fa-trash"></i> {$lang.domain_alias_del_title}</h4>
       <button type="button" class="sm-mclose" onclick="smClose('sm-da-del-modal')">&times;</button>
     </div>
 
     {* Corps de la modale *}
-    <div style="padding:16px;">
+    <div class="sm-mbody">
       <p style="margin:0 0 6px;font-size:13px;">{$lang.domain_alias_del_confirm}</p>
 
       {* Nom de l'alias mis en évidence — rempli dynamiquement par JS *}
@@ -1069,14 +1019,12 @@
           action="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=deletedomainalias"
           id="sm-da-del-form">
 
-      {* Champ hidden contenant le nom de l'alias à supprimer *}
-      {* Rempli dynamiquement par smDaConfirmDelete() *}
       <input type="hidden" name="domain_alias_name" id="sm-da-del-input" value="">
 
-      {* Pied de modale avec boutons Annuler / Supprimer *}
-      <div class="sm-da-mfoot">
-        <button type="button" class="sm-da-btn-cancel" onclick="smClose('sm-da-del-modal')">{$lang.btn_cancel}</button>
-        <button type="submit" class="sm-da-btn-danger">{$lang.domain_alias_del_submit}</button>
+      {* Pied de modale — réutilise .sm-mfoot, .sm-btn-cancel, .sm-btn-del *}
+      <div class="sm-mfoot">
+        <button type="button" class="sm-btn-cancel" onclick="smClose('sm-da-del-modal')">{$lang.btn_cancel}</button>
+        <button type="submit" class="sm-btn-del"><i class="fa fa-trash"></i> {$lang.domain_alias_del_submit}</button>
       </div>
     </form>
   </div>
