@@ -77,6 +77,12 @@ $_lang = [
     'svc_payment'          => 'Mode de paiement',
     'svc_estimated'        => 'Estimation mensuelle',
 
+    // ── Modes de paiement (libellés clients) ─────────────────────────────
+    // Mappés depuis les slugs WHMCS de tblhosting.paymentmethod par
+    // _sm_collectClientAreaData(). Ajouter/modifier ici pour personnaliser
+    // l'affichage côté client sans toucher au code PHP.
+    'pm_credit_card'       => 'Carte de crédit (Visa/Mastercard)',
+
     // Liste des comptes courriel
     'list_title'           => 'Comptes courriel',
     'list_add_btn'         => 'Ajouter',

@@ -1880,7 +1880,48 @@ function smartermail_ClientArea(array $params): array
             $nextDueDate   = !empty($svc->nextduedate) ? date('Y-m-d', strtotime($svc->nextduedate)) : '';
             $billingCycle  = $cycleMap[$svc->billingcycle ?? ''] ?? ($svc->billingcycle ?? '');
             $svcAmount     = (float) ($svc->amount ?? 0);
-            $paymentMethod = ucfirst(str_replace(['_', '-'], ' ', $svc->paymentmethod ?? ''));
+
+            // ── Libellé du mode de paiement ───────────────────────────────
+            // WHMCS stocke dans tblhosting.paymentmethod le slug technique
+            // du module de paiement (ex. "authorize", "stripe", "paypal"),
+            // ce qui n'est pas convivial à afficher au client.
+            //
+            // Stratégie d'affichage :
+            //   1) Mappage slug → clé de langue (lang/french.php /
+            //      lang/english.php, préfixe 'pm_'). Les libellés visibles
+            //      par le client sont donc traduits et faciles à modifier
+            //      sans toucher au code.
+            //   2) Sinon, on tente le "Display Name" configuré dans WHMCS
+            //      (tblpaymentgateways.value où setting='name'), qui est le
+            //      libellé que l'admin a personnalisé dans Setup → Payments.
+            //   3) Sinon, fallback ucfirst sur le slug.
+            $pmSlug = strtolower((string) ($svc->paymentmethod ?? ''));
+            // Slug WHMCS → clé de langue. Étendre au besoin (ex. 'paypal'
+            // => 'pm_paypal') et ajouter la clé correspondante dans les
+            // fichiers de langue.
+            $pmLangKeyMap = [
+                'authorize'    => 'pm_credit_card',
+                'authorizecim' => 'pm_credit_card',
+                'authorizenet' => 'pm_credit_card',
+            ];
+            if ($pmSlug === '') {
+                $paymentMethod = '';
+            } elseif (isset($pmLangKeyMap[$pmSlug]) && !empty($lang[$pmLangKeyMap[$pmSlug]])) {
+                $paymentMethod = $lang[$pmLangKeyMap[$pmSlug]];
+            } else {
+                // Fallback DB : displayname configuré dans WHMCS
+                try {
+                    $pmDisplay = Capsule::table('tblpaymentgateways')
+                        ->where('gateway', $pmSlug)
+                        ->where('setting', 'name')
+                        ->value('value');
+                } catch (\Throwable $e) {
+                    $pmDisplay = null;
+                }
+                $paymentMethod = !empty($pmDisplay)
+                    ? (string) $pmDisplay
+                    : ucfirst(str_replace(['_', '-'], ' ', $pmSlug));
+            }
 
             // Prix mensuel du produit — DANS le if ($svc) pour éviter le null access
             $pricing = Capsule::table('tblpricing')

@@ -74,6 +74,12 @@ $_lang = [
     'svc_payment'          => 'Payment Method',
     'svc_estimated'        => 'Monthly Estimate',
 
+    // ── Payment method labels (client-facing) ────────────────────────────
+    // Mapped from WHMCS slugs in tblhosting.paymentmethod by
+    // _sm_collectClientAreaData(). Add/modify here to customize the
+    // client-side display without touching PHP code.
+    'pm_credit_card'       => 'Credit Card (Visa/Mastercard)',
+
     // Email account list
     'list_title'           => 'Email Accounts',
     'list_add_btn'         => 'Add',

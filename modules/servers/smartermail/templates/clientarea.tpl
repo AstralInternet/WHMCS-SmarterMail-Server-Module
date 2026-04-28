@@ -92,9 +92,14 @@
 
 <style>
 {literal}
-.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:18px;overflow:hidden}
-.sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:10px 16px;font-weight:600;font-size:13px;color:#444;display:flex;align-items:center;gap:8px;justify-content:space-between}
-.sm-card-body{padding:14px 16px}
+.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:18px;overflow:hidden;text-align:left}
+/* text-align:left forcé sur en-tête et corps : protège contre un thème
+   WHMCS parent qui appliquerait text-align:center sur la colonne hôte
+   (ex. .col-md-7/.col-md-5 stylés par le template parent) — assure que
+   les contenus des cartes "Statistiques" et "Information du service"
+   restent toujours alignés à gauche. */
+.sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:10px 16px;font-weight:600;font-size:13px;color:#444;display:flex;align-items:center;gap:8px;justify-content:space-between;text-align:left}
+.sm-card-body{padding:14px 16px;text-align:left}
 /* ── Bouton « Ouvrir le webmail » ─────────────────────────────────────
    Lien pleine largeur placé sous le bloc Statistiques. Stylé comme un
    bouton mais sémantiquement un <a> (navigation vers le webmail).

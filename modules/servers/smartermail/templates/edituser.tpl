@@ -79,6 +79,11 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
 /* ── Barre d'actions ────────────────────────────────────────────────── */
 /* Barre d'actions : Supprimer à gauche seul, Mot de passe + Sauvegarder à droite */
 .sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:#f7f8fa;border:1px solid #e0e0e0;border-radius:6px;justify-content:space-between}
+/* Bouton "Annuler" (lien <a> stylé en bouton) — renvoie au tableau de
+   bord sans soumettre le formulaire d'édition. text-decoration:none
+   neutralise le soulignement par défaut des liens. */
+.sm-btn-cancel{background:#fff;color:#555;border:1px solid #ddd;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.sm-btn-cancel:hover{background:#f5f5f5;color:#333;text-decoration:none}
 .sm-btn-pwd{background:#f39c12;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
 .sm-btn-pwd:hover{background:#e67e22}
 .sm-btn-save{color:#fff;border:none;padding:8px 18px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;background:#aaa;transition:background .2s,box-shadow .2s,transform .15s}
@@ -299,8 +304,16 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
     <i class="fa fa-trash"></i> {$lang.eu_btn_delete}
   </button>
 
-  {* ── Droite : Mot de passe + Sauvegarder ────────────────────── *}
+  {* ── Droite : Annuler + Mot de passe + Sauvegarder ──────────── *}
+  {* Le bouton "Annuler" renvoie au tableau de bord du service sans   *}
+  {* soumettre le formulaire — duplique l'action du lien "Retour"     *}
+  {* en haut de page mais le rend accessible depuis la barre d'action *}
+  {* en bas (ergonomie : éviter au client de remonter en haut).       *}
   <div style="display:flex;gap:10px;align-items:center;">
+    <a href="clientarea.php?action=productdetails&id={$serviceid}"
+       class="sm-btn-cancel">
+      <i class="fa fa-times"></i> {$lang.btn_cancel}
+    </a>
     <button type="button" class="sm-btn-pwd" onclick="smOpen('sm-pwd-modal')">
       <i class="fa fa-key"></i> {$lang.eu_btn_pwd}
     </button>
