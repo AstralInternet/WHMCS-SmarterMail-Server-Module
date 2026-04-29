@@ -101,6 +101,8 @@
   <input type="hidden" name="action"       value="productdetails">
   <input type="hidden" name="id"           value="{$serviceid}">
   <input type="hidden" name="customAction" value="saveredirect">
+  {* Jeton CSRF — validé par _sm_checkCsrf() avant saveredirect. *}
+  <input type="hidden" name="token"        value="{$csrfToken|escape}">
   {*
    * aliasname est en hidden non modifiable — le client ne peut pas
    * renommer la redirection depuis l'espace client (voir docblock).
@@ -182,6 +184,8 @@
   <input type="hidden" name="action"       value="productdetails">
   <input type="hidden" name="id"           value="{$serviceid}">
   <input type="hidden" name="customAction" value="deleteredirect">
+  {* Jeton CSRF — la suppression est irréversible. *}
+  <input type="hidden" name="token"        value="{$csrfToken|escape}">
   <input type="hidden" name="aliasname"    value="{$aliasName|escape}">
 </form>
 

@@ -92,14 +92,27 @@
 
 <style>
 {literal}
-.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:18px;overflow:hidden;text-align:left}
-/* text-align:left forcé sur en-tête et corps : protège contre un thème
-   WHMCS parent qui appliquerait text-align:center sur la colonne hôte
-   (ex. .col-md-7/.col-md-5 stylés par le template parent) — assure que
-   les contenus des cartes "Statistiques" et "Information du service"
-   restent toujours alignés à gauche. */
-.sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:10px 16px;font-weight:600;font-size:13px;color:#444;display:flex;align-items:center;gap:8px;justify-content:space-between;text-align:left}
+.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:18px;overflow:hidden;text-align:left;align-self:stretch;width:100%}
+/* Force l'alignement à gauche dans toutes les cartes ".sm-card" du
+   tableau de bord (Statistiques + Information du service).
+   Le thème WHMCS parent enveloppe nos cartes dans un conteneur
+   flex (col-md-* en flex-column) qui, par défaut, peut pousser les
+   éléments vers la fin (flex-end) selon le thème actif. text-align ne
+   suffit pas pour réaligner des éléments flex enfants : il faut
+   explicitement leur donner justify-content:flex-start ET align-items:
+   flex-start pour neutraliser tout flex-end hérité.
+   Scope limité aux deux cartes de la première rangée (Stats/Info) en
+   passant par les sélecteurs internes — les autres cartes du tableau
+   de bord (DNS, comptes courriel) ne sont pas affectées. */
+.sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:10px 16px;font-weight:600;font-size:13px;color:#444;display:flex;align-items:center;gap:8px;justify-content:flex-start;text-align:left}
 .sm-card-body{padding:14px 16px;text-align:left}
+/* Rangées Stats : flex avec label à gauche + valeur qui remplit le reste */
+.sm-stat-row{justify-content:flex-start}
+.sm-stat-value{justify-content:flex-start}
+/* Rangées Info : même contrainte, mais .sm-info-value n'est pas flex
+   à l'origine — on le force pour pouvoir y appliquer flex-start. */
+.sm-info-row{justify-content:flex-start}
+.sm-info-value{display:flex;justify-content:flex-start;align-items:flex-start;flex-wrap:wrap}
 /* ── Bouton « Ouvrir le webmail » ─────────────────────────────────────
    Lien pleine largeur placé sous le bloc Statistiques. Stylé comme un
    bouton mais sémantiquement un <a> (navigation vers le webmail).
@@ -800,6 +813,10 @@
                   style="display:inline-flex;align-items:center;gap:8px;"
                   onsubmit="return smConfirmDkim(this)">
 
+              {* Jeton CSRF — empêche un site tiers de désactiver DKIM *}
+              {* via la session du client connecté.                    *}
+              <input type="hidden" name="token"
+                     value="{$csrfToken|escape}">
               <input type="hidden" name="dkim_action"
                      value="{if $dkim && $dkim.enabled}disable{else}enable{/if}">
 
@@ -961,6 +978,9 @@
           onsubmit="return smDaValidateAdd(this)"
           id="sm-da-add-form">
 
+      {* Jeton CSRF — validé par _sm_checkCsrf() avant adddomainalias. *}
+      <input type="hidden" name="token" value="{$csrfToken|escape}">
+
       <div class="sm-mbody">
         <div class="sm-mfg">
           {* Label du champ — réutilise .sm-mlabel *}
@@ -1024,6 +1044,8 @@
           action="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=deletedomainalias"
           id="sm-da-del-form">
 
+      {* Jeton CSRF — validé par _sm_checkCsrf() avant deletedomainalias. *}
+      <input type="hidden" name="token" value="{$csrfToken|escape}">
       <input type="hidden" name="domain_alias_name" id="sm-da-del-input" value="">
 
       {* Pied de modale — réutilise .sm-mfoot, .sm-btn-cancel, .sm-btn-del *}

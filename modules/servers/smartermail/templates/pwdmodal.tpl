@@ -14,6 +14,8 @@
       <input type="hidden" name="action"       value="productdetails">
       <input type="hidden" name="id"           value="{$serviceid}">
       <input type="hidden" name="customAction" value="savepassword">
+      {* Jeton CSRF — validé par _sm_checkCsrf() avant savepassword. *}
+      <input type="hidden" name="token"        value="{$csrfToken|escape}">
       <input type="hidden" name="selectuser"   value="{$username|escape}">
       <div class="sm-mbody">
         {include file="pwdwidget.tpl"}

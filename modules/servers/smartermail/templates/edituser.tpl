@@ -329,6 +329,8 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
   <input type="hidden" name="action"       value="productdetails">
   <input type="hidden" name="id"           value="{$serviceid}">
   <input type="hidden" name="customAction" value="saveuser">
+  {* Jeton CSRF — bloque les requêtes inter-sites (voir _sm_checkCsrf). *}
+  <input type="hidden" name="token"        value="{$csrfToken|escape}">
   <input type="hidden" name="selectuser"   value="{$username|escape}">
   <input type="hidden" name="mailboxsize_mb" id="hid-size">
   {if $canEAS}<input type="hidden" name="enable_eas"  id="hid-eas">{/if}
@@ -473,6 +475,9 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
       <input type="hidden" name="action"       value="productdetails">
       <input type="hidden" name="id"           value="{$serviceid}">
       <input type="hidden" name="customAction" value="savepassword">
+      {* Jeton CSRF — empêche un changement de mot de passe déclenché *}
+      {* depuis un site tiers via la session WHMCS du client.         *}
+      <input type="hidden" name="token"        value="{$csrfToken|escape}">
       <input type="hidden" name="selectuser"   value="{$username|escape}">
       <div class="sm-mbody">
 <div style="margin-bottom:14px;">
@@ -623,6 +628,9 @@ function smCheckPwd() {
         <input type="hidden" name="action"       value="productdetails">
         <input type="hidden" name="id"           value="{$serviceid}">
         <input type="hidden" name="customAction" value="deleteuser">
+        {* Jeton CSRF — la suppression d'une boîte est irréversible : *}
+        {* protection critique contre une requête forgée.             *}
+        <input type="hidden" name="token"        value="{$csrfToken|escape}">
         <input type="hidden" name="selectuser"   value="{$username|escape}">
         <button type="submit" class="btn btn-danger btn-sm">
           <i class="fa fa-trash"></i> {$lang.del_confirm_btn}

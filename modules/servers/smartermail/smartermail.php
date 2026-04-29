@@ -611,6 +611,99 @@ function _sm_lang(array $params): array
     return $cache[$language] = $_lang;
 }
 
+/**
+ * Retourne le jeton CSRF courant pour injection dans les formulaires.
+ *
+ * STRATÉGIE (par ordre de préférence) :
+ *   1) generate_token('plain') de WHMCS — disponible WHMCS 8.x+, retourne
+ *      directement la chaîne du jeton et garantit son initialisation.
+ *   2) generate_token('link') puis lecture de $_SESSION['CSRF'] —
+ *      fallback compatible WHMCS 6.x/7.x.
+ *   3) Initialisation locale via random_bytes() si aucune des deux
+ *      premières voies ne fonctionne (cas de tests hors-WHMCS).
+ *
+ * Le jeton est toujours injecté dans les formulaires sous la forme :
+ *   <input type="hidden" name="token" value="...">
+ * et validé côté serveur par _sm_checkCsrf().
+ *
+ * @return string Jeton CSRF brut (jamais vide en fonctionnement normal).
+ */
+function _sm_csrfToken(): string
+{
+    // Voie 1 — API moderne WHMCS (retourne directement la chaîne)
+    if (function_exists('generate_token')) {
+        try {
+            $t = generate_token('plain');
+            if (is_string($t) && $t !== '') {
+                return $t;
+            }
+        } catch (\Throwable $e) { /* fallback voie 2 */ }
+
+        // Voie 2 — Mode 'link' qui force l'initialisation de $_SESSION['CSRF']
+        try { generate_token('link'); } catch (\Throwable $e) { /* ignore */ }
+    }
+    if (!empty($_SESSION['CSRF'])) {
+        return (string) $_SESSION['CSRF'];
+    }
+    // Voie 3 — Initialisation locale (cas dégradé)
+    if (empty($_SESSION['CSRF'])) {
+        $_SESSION['CSRF'] = bin2hex(random_bytes(32));
+    }
+    return (string) $_SESSION['CSRF'];
+}
+
+/**
+ * Valide le jeton CSRF posté avec une action mutative de l'espace client.
+ *
+ * STRATÉGIE :
+ *   1) Si check_token() existe (WHMCS), on lui délègue : c'est la même
+ *      logique que le reste du portail client, donc cohérente avec la
+ *      rotation/initialisation interne de la session WHMCS.
+ *   2) Fallback manuel : comparaison à temps constant (hash_equals)
+ *      entre $_POST['token'] (ou $_GET) et $_SESSION['CSRF'].
+ *
+ * NOTE : check_token() de WHMCS lance une exception ou termine la
+ * requête en cas d'échec. On capture \Throwable pour transformer cela
+ * en un simple `false` que le dispatcher convertit en page d'erreur
+ * localisée (plutôt que la page 403 brute de WHMCS).
+ *
+ * @return bool true si le jeton est valide, false sinon
+ */
+function _sm_checkCsrf(): bool
+{
+    // Voie 1 — délégation à WHMCS (préférée pour rester aligné avec les
+    // évolutions internes du framework)
+    if (function_exists('check_token')) {
+        try {
+            check_token();
+            return true;
+        } catch (\Throwable $e) {
+            // Logging diagnostic — utile en cas de mismatch persistant.
+            // Ne contient PAS le jeton lui-même, seulement sa signature
+            // tronquée pour distinguer les cas (token absent vs non-match).
+            if (function_exists('logActivity')) {
+                $got = (string) ($_POST['token'] ?? $_GET['token'] ?? '');
+                logActivity('SmarterMail CSRF refusé (check_token) : '
+                    . 'reçu=' . ($got === '' ? 'VIDE' : substr($got, 0, 8) . '...')
+                    . ' err=' . $e->getMessage());
+            }
+            return false;
+        }
+    }
+
+    // Voie 2 — comparaison manuelle (cas hors-WHMCS / fallback)
+    $expected = (string) ($_SESSION['CSRF'] ?? '');
+    $got = (string) ($_POST['token'] ?? $_GET['token'] ?? '');
+    if ($expected === '' || $got === '') return false;
+    $ok = hash_equals($expected, $got);
+    if (!$ok && function_exists('logActivity')) {
+        logActivity('SmarterMail CSRF refusé (manuel) : '
+            . 'reçu=' . substr($got, 0, 8) . '...'
+            . ' attendu=' . substr($expected, 0, 8) . '...');
+    }
+    return $ok;
+}
+
 function _sm_randomUsername(int $length = 10): string
 {
     $chars  = 'abcdefghijklmnopqrstuvwxyz';
@@ -1777,6 +1870,26 @@ function smartermail_ClientArea(array $params): array
     ];
 
     if (isset($actions[$customAction])) {
+        // ── Vérification CSRF ────────────────────────────────────────────
+        // Toutes les actions de $actions sont mutatives (création,
+        // modification, suppression). On exige donc un jeton CSRF valide
+        // posté avec la requête. Sans cette protection, un site tiers
+        // pourrait soumettre un formulaire auto-exécuté contre la session
+        // WHMCS d'un client connecté pour, p. ex., supprimer une boîte
+        // courriel, changer un mot de passe ou ajouter une redirection.
+        //
+        // Le jeton est placé dans le formulaire par les templates via
+        // <input type="hidden" name="token" value="{$csrfToken}">.
+        if (!_sm_checkCsrf()) {
+            $l = _sm_lang($params);
+            return [
+                'tabOverviewReplacementTemplate' => 'templates/error',
+                'vars' => [
+                    'error' => $l['err_csrf'] ?? 'Jeton de sécurité invalide ou expiré. Veuillez recharger la page et réessayer.',
+                ],
+            ];
+        }
+
         $result = ($actions[$customAction])($params);
 
         if ($result !== 'success') {
@@ -2772,6 +2885,10 @@ function smartermail_ClientArea(array $params): array
             // utilisateur n'entre dans cette URL. Le template applique |escape
             // sur la valeur avant injection dans l'attribut href.
             'webmailUrl'     => 'https://' . ($params['serverhostname'] ?? '') . '/interface/root#/login',
+            // Jeton CSRF — injecté par clientarea.tpl dans les formulaires
+            // toggledkim / adddomainalias / deletedomainalias pour bloquer
+            // les requêtes inter-sites contre la session du client connecté.
+            'csrfToken'      => _sm_csrfToken(),
             // ── Alias de domaine ─────────────────────────────────────────
             // $domainAliasMax  : limite configurée (configoption17), 0 = désactivé
             // $domainAliases   : tableau d'alias retourné par l'API SmarterMail
@@ -2869,8 +2986,11 @@ function smartermail_ClientAreaAllowedFunctions(): array
  *  2. La valeur dkim_action est validée contre une whitelist ('enable'/'disable').
  *     Toute autre valeur est rejetée avec un message d'erreur — aucune
  *     exécution de code arbitraire n'est possible.
- *  3. Le paramètre est récupéré depuis $_POST (pas $_GET) pour éviter
- *     le CSRF trivial via lien cliquable.
+ *  3. Protection CSRF : le dispatcher smartermail_ClientArea() valide un
+ *     jeton CSRF (champ hidden 'token' du formulaire, comparé à
+ *     $_SESSION['CSRF']) AVANT d'invoquer cette fonction. Sans jeton
+ *     valide, l'action est refusée avec err_csrf — un site tiers ne peut
+ *     donc pas déclencher la bascule DKIM via la session du client.
  *  4. Le serviceid est celui du service WHMCS authentifié — le client ne
  *     peut pas agir sur le domaine d'un autre client.
  *
@@ -3295,6 +3415,9 @@ function smartermail_adduserpage(array $params): array
             'pwdRequireUpper'  => ($params['configoption10'] ?? 'on') === 'on',
             'pwdRequireNumber' => ($params['configoption11'] ?? 'on') === 'on',
             'pwdRequireSpecial'=> ($params['configoption12'] ?? 'on') === 'on',
+            // Jeton CSRF — injecté dans le <form> par adduser.tpl pour
+            // que createuser puisse valider l'origine de la requête.
+            'csrfToken'        => _sm_csrfToken(),
         ],
     ];
 }
@@ -3600,6 +3723,9 @@ function smartermail_edituserpage(array $params): array
             'pwdRequireUpper'  => $pwdRequireUpper,
             'pwdRequireNumber' => $pwdRequireNumber,
             'pwdRequireSpecial'=> $pwdRequireSpecial,
+            // Jeton CSRF — injecté dans les <form> par edituser.tpl
+            // (saveuser, savepassword, deleteuser).
+            'csrfToken'        => _sm_csrfToken(),
         ],
     ];
 }
@@ -4352,6 +4478,9 @@ function smartermail_addredirectpage(array $params): array
             'domain'    => $params['domain'],
             'serviceid' => $params['serviceid'],
             'lang'      => $lang,
+            // Jeton CSRF — injecté dans le <form> par addredirect.tpl
+            // pour que createredirect puisse valider l'origine.
+            'csrfToken' => _sm_csrfToken(),
         ],
     ];
 }
@@ -4531,6 +4660,9 @@ function smartermail_editredirectpage(array $params): array
             // du template. Les adresses sont validées par FILTER_VALIDATE_EMAIL,
             // mais cette protection défensive est préférable selon les standards OWASP.
             'targets'   => json_encode($targets, JSON_HEX_TAG | JSON_UNESCAPED_UNICODE),
+            // Jeton CSRF — injecté dans les <form> par editredirect.tpl
+            // (saveredirect, deleteredirect).
+            'csrfToken' => _sm_csrfToken(),
         ],
     ];
 }

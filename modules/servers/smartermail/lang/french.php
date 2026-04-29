@@ -223,6 +223,9 @@ $_lang = [
     'err_title'            => 'Erreur',
     'err_default'          => 'Une erreur inattendue est survenue.',
     'err_connection'       => 'Le service courriel est temporairement indisponible. Veuillez réessayer plus tard ou contacter le soutien technique.',
+    // Affiché lorsqu'une action mutative est reçue sans jeton CSRF valide
+    // (formulaire posté depuis un site tiers ou session expirée).
+    'err_csrf'             => 'Jeton de sécurité invalide ou expiré. Veuillez recharger la page et réessayer.',
 
     // ── Critères mot de passe (ajouts) ───────────────────────────────────
     'pwd_crit_no_user'     => 'Ne doit pas contenir le nom d\'utilisateur',

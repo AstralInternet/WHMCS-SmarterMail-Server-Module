@@ -220,6 +220,9 @@ $_lang = [
     'err_title'            => 'Error',
     'err_default'          => 'An unexpected error occurred.',
     'err_connection'       => 'The email service is temporarily unavailable. Please try again later or contact support.',
+    // Shown when a mutating action is received without a valid CSRF token
+    // (form posted from a third-party site, or expired session).
+    'err_csrf'             => 'Invalid or expired security token. Please reload the page and try again.',
 
     // ── Password criteria (additions) ────────────────────────────────────
     'pwd_crit_no_user'     => 'Must not contain the username',

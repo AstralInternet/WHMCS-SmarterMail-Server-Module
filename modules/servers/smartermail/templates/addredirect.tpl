@@ -101,6 +101,9 @@
   <input type="hidden" name="action"       value="productdetails">
   <input type="hidden" name="id"           value="{$serviceid}">
   <input type="hidden" name="customAction" value="createredirect">
+  {* Jeton CSRF — validé par _sm_checkCsrf() dans le dispatcher avant *}
+  {* exécution de createredirect.                                     *}
+  <input type="hidden" name="token"        value="{$csrfToken|escape}">
   <input type="hidden" name="aliasname"    id="hid-aliasname" value="">
 
   {* ── Section : Adresse source ────────────────────────────────────────── *}

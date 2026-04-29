@@ -132,6 +132,10 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
   <input type="hidden" name="action"       value="productdetails">
   <input type="hidden" name="id"           value="{$serviceid}">
   <input type="hidden" name="customAction" value="createuser">
+  {* Jeton CSRF — validé côté PHP par _sm_checkCsrf() avant exécution *}
+  {* de l'action mutative. Sans ce jeton, un site tiers pourrait soumettre *}
+  {* un formulaire createuser depuis l'extérieur en exploitant la session. *}
+  <input type="hidden" name="token"        value="{$csrfToken|escape}">
   <input type="hidden" name="password"     id="hid-password" value="">
 
   {* ── Adresse + Mot de passe ──────────────────────────────────────── *}
