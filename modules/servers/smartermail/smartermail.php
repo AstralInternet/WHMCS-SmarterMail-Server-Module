@@ -79,6 +79,11 @@
  *     $params['configoption16']  → Seuil de facturation EAS/MAPI (jours)
  *     $params['configoption17']  → Nombre maximal d'alias de domaine (0 = désactivé)
  *     $params['configoption18']  → Mécanismes SPF secondaires (virgules, validation seulement)
+ *     $params['configoption19']  → Hôte Autodiscover attendu (vide = serverhostname)
+ *     $params['configoption20']  → Cible SRV Autodiscover (vide = serverhostname)
+ *     $params['configoption21']  → Vérifier DMARC (yesno)
+ *     $params['configoption22']  → RUA DMARC suggéré par défaut (générateur)
+ *     $params['configoption23']  → Politique DMARC suggérée (none/quarantine/reject)
  *
  * VALEURS DE RETOUR DES FONCTIONS DE CYCLE DE VIE :
  * ─────────────────────────────────────────────────
@@ -97,6 +102,8 @@ if (!defined('WHMCS')) {
 require_once __DIR__ . '/lib/SmarterMailApi.php';
 // Bibliothèque partagée de suivi d'utilisation EAS/MAPI (partagée avec hooks.php)
 require_once __DIR__ . '/lib/SmarterMailProtoUsage.php';
+// Vérification DNS unifiée (SPF/DKIM/Autodiscover/DMARC) avec cache 5 min
+require_once __DIR__ . '/lib/SmarterMailDnsCheck.php';
 
 use WHMCS\Database\Capsule;
 
@@ -126,7 +133,8 @@ function smartermail_MetaData(): array
 
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
-        'MODVersion' => '1.0.0',
+        // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
+        'MODVersion' => '1.1.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -450,6 +458,84 @@ function smartermail_ConfigOptions(): array
                 'de ces mécanismes secondaires est présent dans le DNS du client.',
                 'Seul le mécanisme principal est affiché dans le guide DNS.',
                 'Laisser vide si aucun mécanisme secondaire n\'est nécessaire.',
+            ]),
+        ],
+
+        // ── Autodiscover (configoption19, 20) ────────────────────────────
+        //
+        // Le tableau de bord client vérifie deux enregistrements DNS pour
+        // l'auto-configuration des clients courriel (Outlook, Apple Mail) :
+        //   - CNAME/A : autodiscover.{domaine}        → doit pointer sur l'hôte
+        //   - SRV     : _autodiscover._tcp.{domaine}  → doit cibler l'hôte sur :443
+        //
+        // Si l'admin laisse les deux options vide, le module utilise par
+        // défaut $params['serverhostname'] (hostname configuré dans le
+        // serveur WHMCS). Override possible si le hostname différait pour
+        // l'autodiscover (ex: cname dédié comme mail.astralinternet.com).
+        'configoption19' => [
+            'FriendlyName' => 'Hôte Autodiscover attendu',
+            'Type'         => 'text',
+            'Size'         => '40',
+            'Default'      => '',
+            'Description'  => implode(' ', [
+                'Cible attendue pour l\'enregistrement CNAME ou A',
+                '"autodiscover.{domaine}". Vide = utilise le hostname',
+                'du serveur WHMCS (champ "Hostname" de tblservers).',
+                'Ex: mail.astralinternet.com',
+            ]),
+        ],
+        'configoption20' => [
+            'FriendlyName' => 'Cible SRV Autodiscover',
+            'Type'         => 'text',
+            'Size'         => '40',
+            'Default'      => '',
+            'Description'  => implode(' ', [
+                'Cible attendue pour l\'enregistrement SRV',
+                '"_autodiscover._tcp.{domaine}" (port 443 forcé).',
+                'Vide = utilise le hostname du serveur WHMCS.',
+                'Ex: mail.astralinternet.com',
+            ]),
+        ],
+
+        // ── DMARC (configoption21, 22, 23) ───────────────────────────────
+        //
+        // configoption21 : interrupteur global. Si "off", la mini-carte
+        //                  DMARC n'est PAS vérifiée ni affichée comme
+        //                  problématique — utile pour les produits où
+        //                  le client n'a pas à se soucier du DMARC.
+        // configoption22 : RUA (adresse de rapports agrégés) suggérée
+        //                  par défaut dans la modale "Générateur DMARC".
+        // configoption23 : politique DMARC suggérée par défaut.
+        'configoption21' => [
+            'FriendlyName' => 'Vérifier DMARC',
+            'Type'         => 'yesno',
+            'Description'  => implode(' ', [
+                'Affiche la mini-carte DMARC et vérifie l\'enregistrement',
+                'TXT _dmarc.{domaine}. Désactiver pour les produits où',
+                'la conformité DMARC n\'est pas dans le périmètre.',
+            ]),
+        ],
+        'configoption22' => [
+            'FriendlyName' => 'RUA DMARC suggéré',
+            'Type'         => 'text',
+            'Size'         => '60',
+            'Default'      => '',
+            'Description'  => implode(' ', [
+                'Adresse pré-remplie dans le champ "Send Aggregate Reports To"',
+                'du Générateur DMARC. Le client peut la modifier avant copie.',
+                'Ex: dmarc-reports@astralinternet.com',
+            ]),
+        ],
+        'configoption23' => [
+            'FriendlyName' => 'Politique DMARC suggérée',
+            'Type'         => 'dropdown',
+            'Options'      => 'none,quarantine,reject',
+            'Default'      => 'none',
+            'Description'  => implode(' ', [
+                'Politique pré-sélectionnée dans le Générateur DMARC.',
+                '"none" est le plus sûr pour démarrer (mode observation),',
+                '"quarantine" envoie en spam les courriels suspects,',
+                '"reject" les bloque complètement.',
             ]),
         ],
     ];
@@ -1765,6 +1851,92 @@ function smartermail_UsageUpdate(array $params): array
 
 
 // =============================================================================
+//  ENDPOINT AJAX — VÉRIFICATION DNS
+// =============================================================================
+
+/**
+ * Handler des appels AJAX checkdns / refreshdns depuis le tableau de bord.
+ *
+ * Retourne du JSON et termine la requête (exit) — ne passe PAS par le
+ * rendu de template Smarty.
+ *
+ * RÉPONSE JSON (succès) :
+ *   {
+ *     "ok": true,
+ *     "data": {
+ *       "spf":          { "status": "ok|err|na", ... },
+ *       "dkim_dns":     { "dnsValid": true, ... },
+ *       "autodiscover": { "status": "ok|warn|err|na", ... },
+ *       "dmarc":        { "status": "ok|err|na", ... },
+ *       "checked_at":   1234567890
+ *     },
+ *     "checked_at_iso": "2026-04-29 12:34:56"
+ *   }
+ *
+ * RÉPONSE JSON (échec) :
+ *   { "ok": false, "error": "<message>" }
+ *
+ * @param array $params         Paramètres WHMCS du service
+ * @param bool  $forceRefresh   true (refreshdns) = bypass cache 5 min
+ * @return array                Toujours exit() — ne retourne rien à WHMCS
+ */
+function _sm_handleDnsAjax(array $params, bool $forceRefresh): array
+{
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+
+    // Initialiser la connexion DA pour récupérer les données DKIM côté SM.
+    // Si le domaine n'est pas prêt, on retourne quand même un statut DNS
+    // partiel — DKIM sera marqué comme N/A mais SPF/Autodiscover/DMARC
+    // restent vérifiables.
+    $domain = strtolower(trim((string) ($params['domain'] ?? '')));
+    if ($domain === '') {
+        echo json_encode(['ok' => false, 'error' => 'no_domain']);
+        exit;
+    }
+
+    // Récupération du selector + publicKey DKIM côté SmarterMail.
+    // _sm_checkDkimDns n'a besoin QUE de ces 2 champs pour faire la
+    // requête DNS — on évite donc le full state machine du dashboard.
+    $smDkim = [];
+    try {
+        $init = _sm_initDomainAdmin($params);
+        if (!isset($init['error'])) {
+            $domSettings = $init['api']->getDomainSettings($init['token']);
+            $dkimRaw     = $domSettings['domainKeysSettings'] ?? [];
+            // Clé active prioritaire, fallback sur clé pending (rollover)
+            $smDkim['selector']  = trim((string) (
+                $dkimRaw['selector']
+                    ?? $dkimRaw['pending']['selector']
+                    ?? ''
+            ));
+            $smDkim['publicKey'] = trim((string) (
+                $dkimRaw['publicKey']
+                    ?? $dkimRaw['pending']['publicKey']
+                    ?? ''
+            ));
+        }
+    } catch (\Throwable $e) {
+        // Non bloquant : DKIM sera marqué non vérifié, mais SPF/Auto/DMARC OK
+        logActivity('SmarterMail [dns-ajax] init DA : ' . $e->getMessage());
+    }
+
+    try {
+        $data = _sm_collectDnsStatus($domain, $params, $smDkim, $forceRefresh);
+        echo json_encode([
+            'ok'             => true,
+            'data'           => $data,
+            'checked_at_iso' => date('Y-m-d H:i:s', $data['checked_at'] ?? time()),
+        ]);
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [dns-ajax] : ' . $e->getMessage());
+        echo json_encode(['ok' => false, 'error' => 'dns_check_failed']);
+    }
+    exit;
+}
+
+
+// =============================================================================
 //  ESPACE CLIENT — PAGE D'ACCUEIL
 // =============================================================================
 
@@ -1820,6 +1992,12 @@ function smartermail_ClientArea(array $params): array
         'editredirectpage', // Page : formulaire de modification d'une redirection autonome
         'saveredirect',     // Action POST : sauvegarder les modifications
         'deleteredirect',   // Action POST : supprimer l'alias de redirection
+        // ── Vérifications DNS (AJAX) ─────────────────────────────────────
+        // checkdns  : lit l'état courant (utilise le cache 5 min) — GET sans CSRF
+        // refreshdns: force une nouvelle lecture DNS (bypass cache) — POST CSRF
+        // Toutes deux retournent du JSON et terminent la requête (exit).
+        'checkdns',
+        'refreshdns',
     ];
     $rawAction    = trim($_GET['customAction'] ?? $_POST['customAction'] ?? '');
     $customAction = in_array($rawAction, $allowedActions, true) ? $rawAction : '';
@@ -1834,6 +2012,27 @@ function smartermail_ClientArea(array $params): array
         }
         return $r;
     };
+
+    // ── Endpoints AJAX (JSON) ─────────────────────────────────────────────
+    // checkdns / refreshdns retournent une réponse JSON et terminent la
+    // requête (exit). Ne passent PAS par tabOverviewReplacementTemplate.
+    //
+    // SÉCURITÉ :
+    //   - checkdns   : lecture cache, pas de CSRF requis (équivalent GET)
+    //   - refreshdns : force la requête DNS live, CSRF requis (sinon un
+    //                  attaquant pourrait amplifier les requêtes DNS de
+    //                  notre serveur via une session client compromise).
+    //   - Le domaine est celui du service WHMCS authentifié — aucune
+    //     possibilité d'interroger le DNS d'un domaine arbitraire.
+    if ($customAction === 'checkdns' || $customAction === 'refreshdns') {
+        if ($customAction === 'refreshdns' && !_sm_checkCsrf()) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(403);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+        return _sm_handleDnsAjax($params, $customAction === 'refreshdns');
+    }
 
     // Pages d'affichage — dispatch vers la fonction existante
     $displayPages = [
@@ -2609,98 +2808,28 @@ function smartermail_ClientArea(array $params): array
     }
 
     // ── Vérification DNS : DKIM ───────────────────────────────────────────
-    // Lookup DNS indépendant de SmarterMail — vérifie côté serveur DNS public
-    // que l'enregistrement TXT {selector}._domainkey.{domain} est propagé.
-    // Ce résultat est affiché dans l'interface (vert/rouge) mais n'affecte pas
-    // le status DKIM calculé ci-dessus (qui vient de l'API SM).
-    $dkimDnsValid = false;
-    if (!empty($dkim['selector']) && !empty($dkim['publicKey'])) {
-        try {
-            $dkimHost = $dkim['selector'] . '._domainkey.' . $domain;
-            $dkimDns  = @dns_get_record($dkimHost, DNS_TXT) ?: [];
-            foreach ($dkimDns as $rec) {
-                $txt = '';
-                if (isset($rec['txt'])) {
-                    $txt = $rec['txt'];
-                } elseif (isset($rec['entries']) && is_array($rec['entries'])) {
-                    $txt = implode('', $rec['entries']);
-                }
-                // Valide si le record contient v=DKIM1 et une clé publique (p=)
-                if (str_contains($txt, 'v=DKIM1') && str_contains($txt, 'p=')) {
-                    $dkimDnsValid = true;
-                    break;
-                }
-            }
-        } catch (\Throwable $e) {
-            logActivity('SmarterMail ClientArea [dkim-dns] : ' . $e->getMessage());
-        }
-    }
-
-    // ── Vérification DNS : SPF ────────────────────────────────────────────
-    // ── Vérification SPF ────────────────────────────────────────────────────
+    // ── Vérifications DNS unifiées (SPF / DKIM / Autodiscover / DMARC) ────
     //
-    // Deux niveaux de mécanismes SPF :
-    //   - configoption13 = mécanisme PRINCIPAL (affiché dans le guide DNS)
-    //   - configoption18 = mécanismes SECONDAIRES (validation seulement,
-    //     séparés par virgules, jamais affichés au client)
+    // Toute la logique DNS est désormais dans lib/SmarterMailDnsCheck.php
+    // qui passe par un cache de 4 h (table mod_sm_dns_cache).
     //
-    // LOGIQUE : Le SPF est VALIDE si le mécanisme principal OU n'importe
-    // quel mécanisme secondaire est trouvé dans le TXT v=spf1 du domaine.
+    // STRATÉGIE LAZY :
+    //   On utilise $cacheOnly=true au render initial — la page n'attend JAMAIS
+    //   une requête DNS live, même au premier chargement.
+    //   Si le cache est vide pour une vérif, son status est 'loading'.
+    //   Le template détecte $dnsNeedsLoad et déclenche un appel AJAX
+    //   checkdns au DOMContentLoaded pour remplir le cache et mettre à jour
+    //   les pills + mini-cartes en place.
     //
-    // AFFICHAGE : Seul le mécanisme principal est affiché dans le guide DNS
-    // et recommandé au client. Les secondaires sont transparents.
-    // ─────────────────────────────────────────────────────────────────────
-    $spfMechanism = trim($params['configoption13'] ?? '');
-    $spfValid     = false;
-    $spfFound     = '';   // Le record SPF trouvé dans le DNS
-
-    // Construire la liste complète des mécanismes acceptés :
-    // [0] = principal, [1..n] = secondaires (configoption18)
-    $spfAccepted = [];
-    if ($spfMechanism !== '') {
-        $spfAccepted[] = $spfMechanism;
-    }
-
-    // Parser les mécanismes secondaires (configoption18)
-    // trim chaque entrée, ignorer les vides
-    $spfSecondaryRaw = trim($params['configoption18'] ?? '');
-    if ($spfSecondaryRaw !== '') {
-        $spfSecondary = array_filter(
-            array_map('trim', explode(',', $spfSecondaryRaw)),
-            fn($m) => $m !== ''
-        );
-        $spfAccepted = array_merge($spfAccepted, $spfSecondary);
-    }
-
-    if (count($spfAccepted) > 0) {
-        try {
-            $spfDns = @dns_get_record($domain, DNS_TXT) ?: [];
-            foreach ($spfDns as $rec) {
-                $txt = '';
-                if (isset($rec['txt'])) {
-                    $txt = $rec['txt'];
-                } elseif (isset($rec['entries']) && is_array($rec['entries'])) {
-                    $txt = implode('', $rec['entries']);
-                }
-                if (str_starts_with($txt, 'v=spf1')) {
-                    $spfFound = $txt;
-                    // Vérifier chaque mécanisme accepté — un seul suffit
-                    foreach ($spfAccepted as $mech) {
-                        if (str_contains($txt, $mech)) {
-                            $spfValid = true;
-                            break 2; // Sortir des deux boucles
-                        }
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            logActivity('SmarterMail ClientArea [spf-dns] : ' . $e->getMessage());
-        }
-    }
-
-    // Record SPF recommandé — TOUJOURS basé sur le mécanisme principal
-    // Les secondaires ne sont jamais suggérés au client
-    $spfRecommended = 'v=spf1 ' . $spfMechanism . ' ~all';
+    // Le client peut aussi forcer un rafraîchissement à tout moment via le
+    // bouton "Actualiser" → POST customAction=refreshdns + CSRF.
+    $dnsStatus      = _sm_collectDnsStatus($domain, $params, $dkim, false, true);
+    $dnsNeedsLoad   = !empty($dnsStatus['loading']);
+    $dkimDnsValid   = (bool) ($dnsStatus['dkim_dns']['dnsValid'] ?? false);
+    $spfMechanism   = (string) ($dnsStatus['spf']['expected'] ?? '');
+    $spfValid       = ($dnsStatus['spf']['status'] ?? 'na') === 'ok';
+    $spfFound       = (string) ($dnsStatus['spf']['found'] ?? '');
+    $spfRecommended = (string) ($dnsStatus['spf']['recommended'] ?? '');
 
     // ── Détection de l'onglet DNS par défaut selon les NS du domaine ─────
     //
@@ -2859,6 +2988,22 @@ function smartermail_ClientArea(array $params): array
             'spfValid'       => $spfValid,
             'spfFound'       => $spfFound,
             'spfRecommended' => $spfRecommended,
+            // Statut complet des 4 vérifications DNS (SPF/DKIM/Autodiscover/DMARC)
+            // Utilisé par la grille 2×2 et les modales de détail.
+            // Voir _sm_collectDnsStatus() dans lib/SmarterMailDnsCheck.php.
+            'dnsStatus'      => $dnsStatus,
+            // Drapeau "le cache est vide pour au moins une vérif" — le
+            // template active alors un état 'loading' visuel et déclenche
+            // un appel AJAX checkdns pour remplir le cache sans bloquer
+            // la page. Voir clientarea.tpl (smCheckDnsLazy) pour le câblage.
+            'dnsNeedsLoad'   => $dnsNeedsLoad,
+            // Pré-calculs pour la modale Générateur DMARC :
+            // - configoption22 : RUA suggéré par défaut
+            // - configoption23 : politique suggérée
+            'dmarcDefaults'  => [
+                'rua'    => trim((string) ($params['configoption22'] ?? '')),
+                'policy' => trim((string) ($params['configoption23'] ?? 'none')),
+            ],
             'domainNsDefault'=> $domainNsDefault, // Onglet DNS actif par défaut: cpanel|plesk|clientspace|generic
             // ── Détail de facturation EAS/MAPI pour le popup (i) ──────────
             // On fait passer les lignes grace → active AVANT de lire le détail,

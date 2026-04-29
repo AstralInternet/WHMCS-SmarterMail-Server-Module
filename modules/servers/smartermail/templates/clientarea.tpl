@@ -370,15 +370,121 @@
 .sm-dns-card-left{display:flex;align-items:center;gap:8px}
 .sm-dns-card-pills{display:flex;gap:5px}
 .sm-dns-card-right{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#444}
-.sm-dns-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+.sm-dns-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;transition:opacity .2s}
 .sm-dns-pill.ok{background:#e8f5e9;color:#2e7d32}
 .sm-dns-pill.warn{background:#fff8e1;color:#f57f17}
 .sm-dns-pill.err{background:#fce4e4;color:#c62828}
 .sm-dns-pill.na{background:#f5f5f5;color:#9e9e9e}
+.sm-dns-pill.loading{background:#e3f2fd;color:#1565c0;animation:smPulse 1.2s ease-in-out infinite}
+@keyframes smPulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* Bouton "Actualiser" — placé dans la barre de titre de la carte DNS */
+.sm-dns-refresh-btn{
+  background:#fff;border:1px solid #ddd;color:#555;
+  padding:3px 10px 3px 8px;border-radius:4px;font-size:11px;font-weight:600;
+  cursor:pointer;display:inline-flex;align-items:center;gap:4px;
+  transition:all .15s;
+}
+.sm-dns-refresh-btn:hover{background:#f5f5f5;color:#333;border-color:#ccc}
+.sm-dns-refresh-btn[disabled]{opacity:.6;cursor:wait}
+.sm-dns-refresh-btn.spinning .fa-refresh{animation:smSpin 1s linear infinite}
+@keyframes smSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .sm-dns-card-toggle{color:#aaa;font-size:14px;transition:transform .2s;flex-shrink:0}
 .sm-dns-card-toggle.open{transform:rotate(180deg)}
 .sm-dns-card-body{overflow:hidden;transition:max-height .3s ease}
 .sm-dns-card-body.collapsed{max-height:0 !important}
+/* Texte explicatif global au-dessus de la grille */
+.sm-dns-explain{
+  padding:10px 16px;background:#f9fafb;border-bottom:1px solid #f0f0f0;
+  font-size:12px;color:#666;line-height:1.5;
+}
+.sm-dns-explain i{color:#3949ab;margin-right:4px}
+.sm-dns-checked-at{display:block;margin-top:4px;font-size:11px;color:#aaa}
+/* Grille 2×2 des mini-cartes — responsive : passe en 1 colonne sous 600px */
+.sm-dns-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:0;
+  padding:12px;
+}
+@media(max-width:600px){.sm-dns-grid{grid-template-columns:1fr}}
+/* Mini-carte d'enregistrement DNS individuelle */
+.sm-dns-mini{
+  border:1px solid #e8e8e8;border-radius:5px;padding:10px 12px;
+  background:#fff;display:flex;flex-direction:column;gap:6px;
+  margin:4px;border-left-width:3px;transition:border-color .2s;
+}
+.sm-dns-mini.sm-dns-mini-ok      {border-left-color:#2e7d32}
+.sm-dns-mini.sm-dns-mini-warn    {border-left-color:#f57f17}
+.sm-dns-mini.sm-dns-mini-err     {border-left-color:#c62828}
+.sm-dns-mini.sm-dns-mini-na      {border-left-color:#bdbdbd}
+/* Etat "loading" : bordure bleue + pulse léger pendant la vérification AJAX.
+   Active sur le composant (mini-carte, pill) au render initial s'il a fallu
+   se contenter du cache vide. Désactivé par JS dès que la réponse arrive. */
+.sm-dns-mini.sm-dns-mini-loading {border-left-color:#1565c0;animation:smPulse 1.4s ease-in-out infinite}
+.sm-dns-mini-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.sm-dns-mini-title{font-size:12px;font-weight:700;color:#333;display:inline-flex;align-items:center;gap:6px}
+.sm-dns-mini-title i{color:#888}
+.sm-dns-mini-status{font-size:11px;font-weight:600;color:#666}
+.sm-dns-mini-ok      .sm-dns-mini-status{color:#2e7d32}
+.sm-dns-mini-warn    .sm-dns-mini-status{color:#f57f17}
+.sm-dns-mini-err     .sm-dns-mini-status{color:#c62828}
+.sm-dns-mini-na      .sm-dns-mini-status{color:#9e9e9e}
+.sm-dns-mini-loading .sm-dns-mini-status{color:#1565c0;font-style:italic}
+.sm-dns-mini-body{font-size:12px;color:#555;line-height:1.6;flex:1}
+.sm-dns-mini-line{display:flex;align-items:center;gap:6px}
+.sm-dns-mini-line code{font-size:11px;background:#f7f8fa;padding:1px 6px;border-radius:3px}
+.sm-dns-mini-note{font-size:11px;color:#888;font-style:italic;margin-top:2px}
+.sm-dns-mini-actions{display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap}
+/* Petites icônes de sous-statut (Autodiscover : CNAME présent / SRV présent) */
+.sm-dns-sub-icon{display:inline-flex;align-items:center;font-size:11px}
+.sm-dns-sub-icon.ok i{color:#2e7d32}
+.sm-dns-sub-icon.err i{color:#c62828}
+/* Bulle d'aide (i) — placée à droite d'un label pour expliquer un champ
+   sans prendre de hauteur sous le champ. Le texte d'aide est servi via
+   l'attribut title (tooltip natif du navigateur — accessible et sans JS). */
+.sm-help-i{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;border-radius:50%;
+  background:#e8eaf6;color:#3949ab;
+  font-size:10px;font-weight:700;font-style:normal;
+  margin-left:5px;cursor:help;flex-shrink:0;
+  vertical-align:middle;
+}
+.sm-help-i:hover{background:#3949ab;color:#fff}
+/* Variante "dark" pour les en-têtes de modale en .sm-mhead.dark
+   (texte blanc sur fond bleu foncé) */
+.sm-help-i.dark{background:rgba(255,255,255,.2);color:#fff}
+.sm-help-i.dark:hover{background:rgba(255,255,255,.4);color:#fff}
+
+/* Carte d'enregistrement DNS dans une modale — sépare visuellement les
+   blocs (CNAME, SRV, etc.) avec une bordure et un en-tête coloré subtil. */
+.sm-record-card{
+  border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;
+  margin-bottom:14px;background:#fff;
+}
+.sm-record-card:last-child{margin-bottom:0}
+.sm-record-card-head{
+  background:#f7f8fa;border-bottom:1px solid #e8e8e8;
+  padding:8px 12px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:700;color:#444;
+}
+.sm-record-card-head .sm-rc-state{
+  font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;
+}
+.sm-record-card-head .sm-rc-state.ok{color:#2e7d32}
+.sm-record-card-head .sm-rc-state.err{color:#c62828}
+.sm-record-card-body{padding:10px 12px}
+
+/* Grille SRV : Priorité 20% — Poids 20% — Port 20% — Cible 40%
+   La cible étant la valeur la plus longue, elle reçoit la plus large
+   colonne (2fr = 40%). Les 3 valeurs numériques courtes (1fr chacune
+   = 20%) tiennent confortablement à gauche. */
+.sm-srv-grid{
+  display:grid;grid-template-columns:1fr 1fr 1fr 2fr;gap:8px;
+}
+/* Sur écran étroit, repli en 2x2 pour garder les inputs lisibles
+   (les valeurs SRV peuvent dépasser dans des colonnes très étroites). */
+@media(max-width:560px){
+  .sm-srv-grid{grid-template-columns:1fr 1fr}
+}
 .sm-billing-detail-btn{
   background:none;border:none;padding:0 4px;cursor:pointer;
   color:#3949ab;font-size:14px;vertical-align:middle;line-height:1;
@@ -670,180 +776,244 @@
   Les pills SPF / DKIM dans la barre de titre donnent l'état au premier coup
   d'œil même quand la carte est repliée.
 *}
-{* Calcul de l'état global pour décider si la carte doit être ouverte ─── *}
-{assign var="spfOk"   value=$spfValid}
-{assign var="dkimOk"  value=($dkim.status eq 'active')}
-{assign var="dnsAllOk" value=($spfOk && $dkimOk)}
-<div class="sm-card">
-  <div class="sm-dns-card-header" onclick="smToggleDnsCard()" id="sm-dns-card-hdr">
+{*
+  ── Carte DNS rétractable (refonte 2×2) ────────────────────────────────────
+  Affiche 4 mini-cartes : SPF / DKIM / Autodiscover / DMARC.
+  Les statuts sont fournis par $dnsStatus (cf. _sm_collectDnsStatus en PHP)
+  et peuvent être rafraîchis dynamiquement via un appel AJAX au bouton
+  "Actualiser" — voir smRefreshDns() plus bas.
 
-    {* ── Gauche : fa-globe + pills SPF/DKIM ───────────── *}
-    <div class="sm-dns-card-left">
+  Statuts possibles par carte :
+    'ok'   → vert     (configuration correcte)
+    'warn' → jaune    (Autodiscover : un seul des deux records)
+    'err'  → rouge    (manquant ou invalide)
+    'na'   → gris     (vérification désactivée par configoption)
+
+  Le DKIM combine deux notions :
+    - statut côté SmarterMail ($dkim.status) — active/standby/disabled
+    - statut côté DNS public ($dnsStatus.dkim_dns.dnsValid)
+  La pill DKIM reflète l'état SM (comme avant), mais la mini-carte montre
+  les deux niveaux pour éviter la confusion.
+*}
+{* Pré-calcul des classes de pill — Smarty 3 ne fait pas de fonction inline.
+   Les statuts possibles sont : ok, warn, err, na, loading.
+   Quand le cache DNS est vide pour une vérification, son status est 'loading'
+   et la pill prend la classe .sm-dns-pill.loading (animation pulse bleue).
+   La page reste affichée immédiatement, et le JS déclenche un checkdns AJAX
+   au DOMContentLoaded pour remplir le cache et mettre à jour les pills. *}
+{assign var="pillSpf"  value=$dnsStatus.spf.status|default:'na'}
+{assign var="pillDkim" value=
+  ($dnsStatus.dkim_dns.loading) ? 'loading' :
+  (($dkim.status eq 'active') ? 'ok' :
+  (($dkim.status eq 'standby') ? 'warn' :
+  (($dkim) ? 'err' : 'na')))}
+{assign var="pillAuto" value=$dnsStatus.autodiscover.status|default:'na'}
+{assign var="pillDmarc" value=$dnsStatus.dmarc.status|default:'na'}
+{* La carte est ouverte par défaut si l'une des 4 cartes est en err/warn *}
+{assign var="dnsAllOk" value=
+  ($pillSpf eq 'ok' || $pillSpf eq 'na')
+  && ($pillDkim eq 'ok' || $pillDkim eq 'na')
+  && ($pillAuto eq 'ok' || $pillAuto eq 'na')
+  && ($pillDmarc eq 'ok' || $pillDmarc eq 'na')}
+
+<div class="sm-card">
+  <div class="sm-dns-card-header" id="sm-dns-card-hdr">
+
+    {* ── Gauche : icône + 4 pills (cliquable pour replier) ─────────────── *}
+    <div class="sm-dns-card-left" onclick="smToggleDnsCard()" style="cursor:pointer;">
       <i class="fa fa-globe" style="color:#666;"></i>
-      <div class="sm-dns-card-pills">
-        {* Pill SPF *}
-        {if $spfMechanism}
-          {if $spfValid}
-            <span class="sm-dns-pill ok"><i class="fa fa-check"></i> SPF</span>
-          {else}
-            <span class="sm-dns-pill err"><i class="fa fa-times"></i> SPF</span>
-          {/if}
-        {/if}
-        {* Pill DKIM *}
-        {if $dkim.status eq 'active'}
-          <span class="sm-dns-pill ok"><i class="fa fa-check"></i> DKIM</span>
-        {elseif $dkim.status eq 'standby'}
-          <span class="sm-dns-pill warn"><i class="fa fa-clock-o"></i> DKIM</span>
-        {elseif $dkim}
-          <span class="sm-dns-pill err"><i class="fa fa-times"></i> DKIM</span>
-        {else}
-          <span class="sm-dns-pill na"><i class="fa fa-minus"></i> DKIM</span>
-        {/if}
+      <div class="sm-dns-card-pills" id="sm-dns-pills">
+        {*
+          Pour chaque pill : icône fa adaptée au statut.
+          - ok       : check
+          - warn     : exclamation
+          - err      : times
+          - loading  : circle-o-notch en animation (vérification en cours)
+          - na       : minus (par défaut, vérification désactivée)
+        *}
+        <span class="sm-dns-pill {$pillSpf|escape}" data-key="spf">
+          <i class="fa fa-{if $pillSpf eq 'ok'}check{elseif $pillSpf eq 'warn'}exclamation{elseif $pillSpf eq 'err'}times{elseif $pillSpf eq 'loading'}circle-o-notch fa-spin{else}minus{/if}"></i> SPF
+        </span>
+        <span class="sm-dns-pill {$pillDkim|escape}" data-key="dkim">
+          <i class="fa fa-{if $pillDkim eq 'ok'}check{elseif $pillDkim eq 'warn'}clock-o{elseif $pillDkim eq 'err'}times{elseif $pillDkim eq 'loading'}circle-o-notch fa-spin{else}minus{/if}"></i> DKIM
+        </span>
+        <span class="sm-dns-pill {$pillAuto|escape}" data-key="autodiscover">
+          <i class="fa fa-{if $pillAuto eq 'ok'}check{elseif $pillAuto eq 'warn'}exclamation{elseif $pillAuto eq 'err'}times{elseif $pillAuto eq 'loading'}circle-o-notch fa-spin{else}minus{/if}"></i> Autodiscover
+        </span>
+        <span class="sm-dns-pill {$pillDmarc|escape}" data-key="dmarc">
+          <i class="fa fa-{if $pillDmarc eq 'ok'}check{elseif $pillDmarc eq 'err'}times{elseif $pillDmarc eq 'loading'}circle-o-notch fa-spin{else}minus{/if}"></i> DMARC
+        </span>
       </div>
     </div>
 
-    {* ── Droite : titre + icône toggle ─────────────────── *}
+    {* ── Droite : titre + bouton Refresh + chevron toggle ──────────────── *}
     <div class="sm-dns-card-right">
-      {$lang.dash_dns_title}
-      <i class="fa fa-chevron-down sm-dns-card-toggle{if !$dnsAllOk} open{/if}" id="sm-dns-toggle-icon"></i>
+      <span style="margin-right:6px;">{$lang.dash_dns_title}</span>
+      {*
+        Bouton Refresh — déclenche un appel POST AJAX vers customAction=refreshdns
+        avec jeton CSRF. Le bouton se met en état "spinner" pendant la requête,
+        puis met à jour les pills + mini-cartes en place sans recharger la page.
+      *}
+      <button type="button"
+              id="sm-dns-refresh-btn"
+              class="sm-dns-refresh-btn"
+              onclick="event.stopPropagation(); smRefreshDns();"
+              title="{$lang.dns_refresh_title|escape}">
+        <i class="fa fa-refresh" id="sm-dns-refresh-icon"></i>
+        <span id="sm-dns-refresh-label">{$lang.dns_refresh_btn}</span>
+      </button>
+      <i class="fa fa-chevron-down sm-dns-card-toggle{if !$dnsAllOk} open{/if}"
+         id="sm-dns-toggle-icon"
+         onclick="smToggleDnsCard()"
+         style="cursor:pointer;"></i>
     </div>
 
   </div>
-  <div class="sm-dns-card-body{if $dnsAllOk} collapsed{/if}" id="sm-dns-card-body" style="max-height:{if $dnsAllOk}0{else}9999px{/if};">
 
-    {* ── Rangée SPF + DKIM ─────────────────────────────────────────────── *}
-    <div style="display:flex;flex-wrap:wrap;">
+  <div class="sm-dns-card-body{if $dnsAllOk} collapsed{/if}"
+       id="sm-dns-card-body"
+       style="max-height:{if $dnsAllOk}0{else}9999px{/if};">
 
-      {* ── SPF (gauche) — conditionnel : affiché seulement si configuré ── *}
-      {if $spfMechanism}
-      <div style="flex:1;min-width:220px;padding:14px 16px;border-right:1px solid #f0f0f0;">
-        <div style="font-size:11px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">
-          <i class="fa fa-shield"></i> SPF
+    {* ── Texte explicatif global (court, rassurant) ─────────────────────── *}
+    <div class="sm-dns-explain">
+      <i class="fa fa-info-circle"></i> {$lang.dns_explain}
+      <span class="sm-dns-checked-at" id="sm-dns-checked-at"></span>
+    </div>
+
+    {* ── Grille 2×2 des mini-cartes ────────────────────────────────────── *}
+    <div class="sm-dns-grid" id="sm-dns-grid">
+
+      {* ── Mini-carte SPF ──────────────────────────────────────────────── *}
+      <div class="sm-dns-mini sm-dns-mini-{$pillSpf|escape}" data-key="spf">
+        <div class="sm-dns-mini-head">
+          <span class="sm-dns-mini-title"><i class="fa fa-shield"></i> SPF</span>
+          <span class="sm-dns-mini-status" data-status-text="spf">
+            {if $pillSpf eq 'ok'}{$lang.dns_card_status_ok}
+            {elseif $pillSpf eq 'err'}{$lang.dns_card_status_err}
+            {elseif $pillSpf eq 'loading'}{$lang.dns_loading}
+            {else}{$lang.dns_card_status_na}{/if}
+          </span>
         </div>
-        {* Badge coloré selon le statut DNS — bouton en couleur neutre *}
-        {if $spfValid}
-          <span class="sm-dns-ok"><i class="fa fa-check-circle"></i> {$lang.dash_spf_ok}</span>
-          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-spf-modal')" style="margin-left:8px;">
-            <i class="fa fa-eye"></i> {$lang.dash_spf_view}
-          </button>
-        {else}
-          <span class="sm-dns-err"><i class="fa fa-times-circle"></i> {$lang.dash_spf_err}</span>
-          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-spf-modal')" style="margin-left:8px;">
-            <i class="fa fa-plus-circle"></i> {$lang.dash_spf_add}
-          </button>
+        {if $spfMechanism}
+        <div class="sm-dns-mini-body">
+          <div class="sm-dns-mini-line">
+            {$lang.spf_mechanism_label} : <code>{$spfMechanism|escape}</code>
+          </div>
+        </div>
         {/if}
-        <div style="font-size:11px;color:#bbb;margin-top:6px;">
-          {$lang.spf_mechanism_label} : <code style="font-size:11px;">{$spfMechanism|escape}</code>
+        <div class="sm-dns-mini-actions">
+          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-spf-modal')">
+            <i class="fa fa-eye"></i> {$lang.dns_card_view}
+          </button>
         </div>
       </div>
-      {/if}
 
-      {* ── DKIM (droite) — TOUJOURS présent ──────────────────────────────── *}
-              {*
-          Quatre états du DKIM, déterminés côté PHP via enableDkimSigningDomainAdmin
-          et domainKeysSettings.isActive :
-            A) $dkim vide         → aucune clé générée     → toggle "Activer"
-            B) status='disabled'  → clé présente, signage éteint → toggle "Activer"
-            C) status='standby'   → signage activé, DNS en attente → badge orange + records
-            D) status='active'    → DNS validé, pleinement actif → badge vert
-        *}
-        <div style="flex:1;min-width:220px;padding:14px 16px;">
-
-          {* Titre de la section *}
-          <div style="font-size:11px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">
-            <i class="fa fa-key"></i> DKIM
+      {* ── Mini-carte DKIM ─────────────────────────────────────────────── *}
+      <div class="sm-dns-mini sm-dns-mini-{$pillDkim|escape}" data-key="dkim">
+        <div class="sm-dns-mini-head">
+          <span class="sm-dns-mini-title"><i class="fa fa-key"></i> DKIM</span>
+          <span class="sm-dns-mini-status" data-status-text="dkim">
+            {if $pillDkim eq 'ok'}{$lang.dkim_status_active}
+            {elseif $pillDkim eq 'warn'}{$lang.dkim_status_standby}
+            {elseif $pillDkim eq 'err'}{$lang.dkim_status_disabled}
+            {elseif $pillDkim eq 'loading'}{$lang.dns_loading}
+            {else}{$lang.dkim_toggle_disabled_badge}{/if}
+          </span>
+        </div>
+        {if $dkim}
+        <div class="sm-dns-mini-body">
+          <div class="sm-dns-mini-line">
+            {$lang.dkim_selector_label} : <code>{$dkim.selector|escape}</code>
           </div>
-
-          {if $dkim}
-
-            {* ── État D : actif + DNS validé par SmarterMail ────────────── *}
-            {* Badge coloré seulement — bouton "Voir DNS" en couleur neutre  *}
-            {if $dkim.status eq 'active'}
-              <span class="sm-dns-ok"><i class="fa fa-check-circle"></i> {$lang.dkim_status_active}</span>
-              <button type="button" class="sm-dns-btn" onclick="smOpen('sm-dkim-modal')" style="margin-left:8px;">
-                <i class="fa fa-eye"></i> {$lang.dash_dkim_view}
-              </button>
-
-            {* ── État C : standby — signage activé, DNS pas encore validé par SM *}
-            {* Badge orange seulement — description et bouton en couleur normale  *}
-            {elseif $dkim.status eq 'standby'}
-              <span class="sm-dns-standby"><i class="fa fa-clock-o"></i> {$lang.dkim_status_standby}</span>
-              <button type="button" class="sm-dns-btn" onclick="smOpen('sm-dkim-modal')" style="margin-left:8px;">
-                <i class="fa fa-eye"></i> {$lang.dash_dkim_view}
-              </button>
-              {* Texte d'explication en couleur régulière — seul le badge est orange *}
-              <div style="font-size:11px;color:#555;margin-top:6px;line-height:1.5;">
-                {$lang.dkim_status_standby_desc}
-              </div>
-
-            {* ── État B : désactivé — clé présente mais signature éteinte ── *}
-            {* Bouton "Voir DNS" reste visible pour que le client voie sa clé *}
-            {else}
-              <span class="sm-dns-err"><i class="fa fa-ban"></i> {$lang.dkim_status_disabled}</span>
-              <button type="button" class="sm-dns-btn" onclick="smOpen('sm-dkim-modal')" style="margin-left:8px;">
-                <i class="fa fa-eye"></i> {$lang.dash_dkim_view}
-              </button>
-            {/if}
-
-            {* Sélecteur — info complémentaire, couleur subtile *}
-            <div style="font-size:11px;color:#bbb;margin-top:6px;">
-              {$lang.dkim_selector_label} : <code style="font-size:11px;">{$dkim.selector|escape}</code>
-            </div>
-
-          {else}
-            {* ── État A : aucune clé générée ─────────────────────────────── *}
-            <span class="sm-dns-na" style="font-size:12px;">
-              <i class="fa fa-minus-circle"></i> {$lang.dkim_toggle_disabled_badge}
-            </span>
+          {if $pillDkim eq 'warn'}
+          <div class="sm-dns-mini-note">
+            {$lang.dkim_status_standby_desc}
+          </div>
           {/if}
+        </div>
+        {/if}
+        <div class="sm-dns-mini-actions">
+          {* Toggle DKIM — conserve la fonctionnalité existante avec CSRF *}
+          <form method="post"
+                action="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=toggledkim"
+                style="display:inline-flex;align-items:center;gap:6px;margin-right:8px;"
+                onsubmit="return smConfirmDkim(this)">
+            <input type="hidden" name="token" value="{$csrfToken|escape}">
+            <input type="hidden" name="dkim_action"
+                   value="{if $dkim && $dkim.enabled}disable{else}enable{/if}">
+            <button type="submit"
+                    class="sm-toggle-btn{if $dkim && $dkim.enabled} active{/if}"
+                    data-confirm="{if $dkim && $dkim.enabled}{$lang.dkim_toggle_confirm_disable|escape}{else}{$lang.dkim_toggle_confirm_enable|escape}{/if}"
+                    title="{if $dkim && $dkim.enabled}{$lang.dkim_toggle_disable|escape}{else}{$lang.dkim_toggle_enable|escape}{/if}">
+              <span class="sm-toggle-knob"></span>
+            </button>
+          </form>
+          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-dkim-modal')">
+            <i class="fa fa-eye"></i> {$lang.dns_card_view}
+          </button>
+        </div>
+      </div>
 
-          {* ── Toggle DKIM enable / disable — présent dans tous les états ─── *}
-          {*
-            SÉCURITÉ :
-              - Formulaire POST — non déclenchable par simple lien cliquable
-              - dkim_action validé en PHP ('enable'/'disable' uniquement)
-              - serviceid lié à la session WHMCS du client authentifié
-              - Confirmation JS avant soumission (évite les clics accidentels)
-            Le toggle est VERT si $dkim.enabled = true (états C et D).
-            Il est GRIS dans les états A et B.
-          *}
-          <div style="margin-top:12px;display:flex;align-items:center;gap:8px;">
-            <form method="post"
-                  action="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=toggledkim"
-                  style="display:inline-flex;align-items:center;gap:8px;"
-                  onsubmit="return smConfirmDkim(this)">
-
-              {* Jeton CSRF — empêche un site tiers de désactiver DKIM *}
-              {* via la session du client connecté.                    *}
-              <input type="hidden" name="token"
-                     value="{$csrfToken|escape}">
-              <input type="hidden" name="dkim_action"
-                     value="{if $dkim && $dkim.enabled}disable{else}enable{/if}">
-
-              <button type="submit"
-                      class="sm-toggle-btn{if $dkim && $dkim.enabled} active{/if}"
-                      data-confirm="{if $dkim && $dkim.enabled}{$lang.dkim_toggle_confirm_disable|escape}{else}{$lang.dkim_toggle_confirm_enable|escape}{/if}"
-                      title="{if $dkim && $dkim.enabled}{$lang.dkim_toggle_disable|escape}{else}{$lang.dkim_toggle_enable|escape}{/if}">
-                <span class="sm-toggle-knob"></span>
-              </button>
-
-              <span style="font-size:12px;color:#666;">
-                {if $dkim && $dkim.enabled}{$lang.dkim_toggle_disable}{else}{$lang.dkim_toggle_enable}{/if}
-              </span>
-
-            </form>
+      {* ── Mini-carte Autodiscover ─────────────────────────────────────── *}
+      <div class="sm-dns-mini sm-dns-mini-{$pillAuto|escape}" data-key="autodiscover">
+        <div class="sm-dns-mini-head">
+          <span class="sm-dns-mini-title"><i class="fa fa-magic"></i> {$lang.autodiscover_title}</span>
+          <span class="sm-dns-mini-status" data-status-text="autodiscover">
+            {if $pillAuto eq 'ok'}{$lang.autodiscover_status_ok}
+            {elseif $pillAuto eq 'warn'}{$lang.autodiscover_status_warn}
+            {elseif $pillAuto eq 'loading'}{$lang.dns_loading}
+            {else}{$lang.autodiscover_status_err}{/if}
+          </span>
+        </div>
+        <div class="sm-dns-mini-body">
+          <div class="sm-dns-mini-line">
+            <span class="sm-dns-sub-icon{if $dnsStatus.autodiscover.has_a_or_cname} ok{else} err{/if}"
+                  data-sub-icon="autodiscover-cname">
+              <i class="fa fa-{if $dnsStatus.autodiscover.has_a_or_cname}check-circle{else}times-circle{/if}"></i>
+            </span>
+            {$lang.autodiscover_cname_label}
           </div>
+          <div class="sm-dns-mini-line">
+            <span class="sm-dns-sub-icon{if $dnsStatus.autodiscover.has_srv} ok{else} err{/if}"
+                  data-sub-icon="autodiscover-srv">
+              <i class="fa fa-{if $dnsStatus.autodiscover.has_srv}check-circle{else}times-circle{/if}"></i>
+            </span>
+            {$lang.autodiscover_srv_label}
+          </div>
+        </div>
+        <div class="sm-dns-mini-actions">
+          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-autodiscover-modal')">
+            <i class="fa fa-eye"></i> {$lang.dns_card_view}
+          </button>
+        </div>
+      </div>
 
-        </div>{* /DKIM *}
+      {* ── Mini-carte DMARC ────────────────────────────────────────────── *}
+      <div class="sm-dns-mini sm-dns-mini-{$pillDmarc|escape}" data-key="dmarc">
+        <div class="sm-dns-mini-head">
+          <span class="sm-dns-mini-title"><i class="fa fa-envelope-o"></i> {$lang.dmarc_title}</span>
+          <span class="sm-dns-mini-status" data-status-text="dmarc">
+            {if $pillDmarc eq 'ok'}{$lang.dmarc_status_ok}
+            {elseif $pillDmarc eq 'err'}{$lang.dmarc_status_err}
+            {elseif $pillDmarc eq 'loading'}{$lang.dns_loading}
+            {else}{$lang.dns_card_status_na}{/if}
+          </span>
+        </div>
+        <div class="sm-dns-mini-body">
+          <div class="sm-dns-mini-line" style="font-size:11px;color:#888;">
+            {$lang.dmarc_subtitle}
+          </div>
+        </div>
+        <div class="sm-dns-mini-actions">
+          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-dmarc-modal')">
+            <i class="fa fa-eye"></i> {$lang.dns_card_view}
+          </button>
+        </div>
+      </div>
 
-    </div>{* /rangée SPF+DKIM *}
+    </div>{* /grille 2x2 *}
 
-    {* ── Lien vers le guide de configuration DNS ────────────────────────── *}
-    {*
-      Un lien discret en pied de la carte, qui ouvre le guide à onglets
-      dans une modale (popup) avec hauteur maximale 80% de l'écran.
-      Pas de carte séparée — l'interface reste compacte.
-    *}
+    {* ── Lien vers le guide de configuration DNS (par registrar) ───────── *}
     <div style="padding:8px 16px 10px;border-top:1px solid #f5f5f5;">
       <button type="button"
               class="sm-dns-guide-link"
@@ -858,104 +1028,20 @@
 </div>
 {/if}
 
-{* ══ Section : Alias de domaine ═════════════════════════════════════════════ *}
-{*
-  Affichée UNIQUEMENT si configoption17 > 0 (fonctionnalité activée).
-  Positionnée sous le bloc des enregistrements DNS.
+{* La carte "Alias de domaine" a été déplacée plus bas, sous "Comptes courriel".
+   Voir la section marquée "══ Section : Alias de domaine" après le bloc
+   <div class="sm-card"> de la table des comptes courriel.
+   Les modales associées (ajout/suppression) restent ici car elles sont
+   injectées en fin de body via overlay — leur position dans le DOM n'a
+   pas d'incidence visuelle. *}
 
-  CLASSES RÉUTILISÉES DU MODULE :
-    - .sm-card / .sm-card-header / .sm-card-body  → structure carte
-    - .sm-mbox / .sm-mhead.dark / .sm-mbody / .sm-mfoot → structure modale
-    - .sm-mlabel → label de champ
-    - .sm-btn-cancel → bouton annuler
-    - .sm-btn-add → bouton d'ajout (style dashed indigo)
-    - .sm-btn-del → bouton de suppression (style outline rouge)
-
-  SÉCURITÉ :
-    - Les noms d'alias sont échappés via |escape pour prévenir les XSS.
-    - Les formulaires utilisent POST avec le serviceid lié à la session.
-    - La limite est aussi vérifiée côté PHP (pas seulement en JS/template).
-    - Les modales de confirmation empêchent les clics accidentels.
-*}
+{* ── Modales d'alias de domaine ─────────────────────────────────────────
+   Ces modales (ajout + suppression) sont rendues conditionnellement avec
+   le même garde {if $domainAliasMax > 0} que la carte plus bas, pour ne
+   pas alourdir le DOM quand la fonctionnalité est désactivée. Elles sont
+   ici (et non collées à la carte) car elles forment des overlays
+   plein-écran indépendants de la position de leur déclencheur. *}
 {if $domainAliasMax > 0}
-<div class="sm-card" style="margin-top:14px;">
-
-  {* ── En-tête : titre + [i] tooltip + compteur ────────────────────────── *}
-  <div class="sm-card-header">
-    <span style="display:flex;align-items:center;gap:8px;">
-      <i class="fa fa-globe"></i>
-      {$lang.domain_alias_title}
-      {* ── Icône [i] avec tooltip cliquable ─────────────────────────────── *}
-      {*
-        SÉCURITÉ : Le texte du tooltip est échappé par |escape dans le template.
-        Le contenu est injecté statiquement (pas de JS innerHTML dynamique).
-      *}
-      <span class="sm-tooltip-wrap" id="sm-da-tooltip-wrap">
-        <i class="fa fa-info-circle sm-tooltip-trigger"
-           onclick="smDaToggleTooltip(event)"
-           aria-label="{$lang.domain_alias_title|escape}"></i>
-        <span class="sm-tooltip-bubble" id="sm-da-tooltip-bubble">
-          {$lang.domain_alias_tooltip}
-        </span>
-      </span>
-    </span>
-    {* Compteur : nombre actuel / limite maximale *}
-    <span style="font-size:11px;color:#888;">
-      {$domainAliases|@count} / {$domainAliasMax}
-    </span>
-  </div>
-
-  {* ── Corps : pills des alias + bouton d'ajout ───────────────────────── *}
-  <div class="sm-card-body">
-
-    {if $domainAliases|@count > 0}
-      {* ── Liste des alias sous forme de pills ──────────────────────────── *}
-      {*
-        SÉCURITÉ : |escape appliqué sur le nom pour prévenir les XSS.
-        Le onclick utilise des guillemets échappés correctement.
-      *}
-      <div class="sm-da-pills">
-        {foreach from=$domainAliases item=da}
-          <span class="sm-da-pill">
-            {$da.name|escape}
-            <button type="button"
-                    class="sm-da-pill-x"
-                    title="{$lang.btn_delete|escape}"
-                    onclick="smDaConfirmDelete('{$da.name|escape:'javascript'}')">&times;</button>
-          </span>
-        {/foreach}
-
-        {* ── Bouton + Alias de domaine — style .sm-btn-add (dashed indigo) ── *}
-        {*
-          SÉCURITÉ : la limite est vérifiée côté PHP à la soumission du formulaire.
-        *}
-        {if $domainAliases|@count >= $domainAliasMax}
-          <button type="button"
-                  class="sm-btn-add"
-                  style="opacity:.5;cursor:not-allowed;"
-                  title="{$lang.domain_alias_limit_reached|escape}"
-                  disabled><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
-        {else}
-          <button type="button"
-                  class="sm-btn-add"
-                  onclick="smOpen('sm-da-add-modal')"><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
-        {/if}
-      </div>
-
-    {else}
-      {* ── État vide : aucun alias configuré ─────────────────────────────── *}
-      <p class="sm-da-empty">{$lang.domain_alias_empty}</p>
-
-      {* Bouton d'ajout même quand la liste est vide *}
-      <div style="margin-top:8px;">
-        <button type="button"
-                class="sm-btn-add"
-                onclick="smOpen('sm-da-add-modal')"><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
-      </div>
-    {/if}
-
-  </div>
-</div>
 
 {* ── Modale : Ajouter un alias de domaine ──────────────────────────────── *}
 {*
@@ -1593,6 +1679,107 @@
 </div>
 
 
+{* ══ Section : Alias de domaine ═════════════════════════════════════════════ *}
+{*
+  Affichée UNIQUEMENT si configoption17 > 0 (fonctionnalité activée).
+  Positionnée sous le bloc "Comptes courriel" (anciennement sous DNS) — l'idée
+  étant que les alias de domaine sont une extension de la gestion des comptes
+  plutôt qu'une vérification DNS, donc plus naturellement à proximité.
+
+  CLASSES RÉUTILISÉES DU MODULE :
+    - .sm-card / .sm-card-header / .sm-card-body  → structure carte
+    - .sm-mbox / .sm-mhead.dark / .sm-mbody / .sm-mfoot → structure modale
+    - .sm-mlabel → label de champ
+    - .sm-btn-cancel → bouton annuler
+    - .sm-btn-add → bouton d'ajout (style dashed indigo)
+    - .sm-btn-del → bouton de suppression (style outline rouge)
+
+  SÉCURITÉ :
+    - Les noms d'alias sont échappés via |escape pour prévenir les XSS.
+    - Les formulaires utilisent POST avec le serviceid lié à la session.
+    - La limite est aussi vérifiée côté PHP (pas seulement en JS/template).
+    - Les modales de confirmation empêchent les clics accidentels.
+*}
+{if $domainAliasMax > 0}
+<div class="sm-card" style="margin-top:14px;">
+
+  {* ── En-tête : titre + [i] tooltip + compteur ────────────────────────── *}
+  <div class="sm-card-header">
+    <span style="display:flex;align-items:center;gap:8px;">
+      <i class="fa fa-globe"></i>
+      {$lang.domain_alias_title}
+      {* ── Icône [i] avec tooltip cliquable ─────────────────────────────── *}
+      {*
+        SÉCURITÉ : Le texte du tooltip est échappé par |escape dans le template.
+        Le contenu est injecté statiquement (pas de JS innerHTML dynamique).
+      *}
+      <span class="sm-tooltip-wrap" id="sm-da-tooltip-wrap">
+        <i class="fa fa-info-circle sm-tooltip-trigger"
+           onclick="smDaToggleTooltip(event)"
+           aria-label="{$lang.domain_alias_title|escape}"></i>
+        <span class="sm-tooltip-bubble" id="sm-da-tooltip-bubble">
+          {$lang.domain_alias_tooltip}
+        </span>
+      </span>
+    </span>
+    {* Compteur : nombre actuel / limite maximale *}
+    <span style="font-size:11px;color:#888;">
+      {$domainAliases|@count} / {$domainAliasMax}
+    </span>
+  </div>
+
+  {* ── Corps : pills des alias + bouton d'ajout ───────────────────────── *}
+  <div class="sm-card-body">
+
+    {if $domainAliases|@count > 0}
+      {* ── Liste des alias sous forme de pills ──────────────────────────── *}
+      {*
+        SÉCURITÉ : |escape appliqué sur le nom pour prévenir les XSS.
+        Le onclick utilise des guillemets échappés correctement.
+      *}
+      <div class="sm-da-pills">
+        {foreach from=$domainAliases item=da}
+          <span class="sm-da-pill">
+            {$da.name|escape}
+            <button type="button"
+                    class="sm-da-pill-x"
+                    title="{$lang.btn_delete|escape}"
+                    onclick="smDaConfirmDelete('{$da.name|escape:'javascript'}')">&times;</button>
+          </span>
+        {/foreach}
+
+        {* ── Bouton + Alias de domaine — style .sm-btn-add (dashed indigo) ── *}
+        {*
+          SÉCURITÉ : la limite est vérifiée côté PHP à la soumission du formulaire.
+        *}
+        {if $domainAliases|@count >= $domainAliasMax}
+          <button type="button"
+                  class="sm-btn-add"
+                  style="opacity:.5;cursor:not-allowed;"
+                  title="{$lang.domain_alias_limit_reached|escape}"
+                  disabled><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
+        {else}
+          <button type="button"
+                  class="sm-btn-add"
+                  onclick="smOpen('sm-da-add-modal')"><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
+        {/if}
+      </div>
+
+    {else}
+      {* ── État vide : aucun alias configuré ─────────────────────────────── *}
+      <p class="sm-da-empty">{$lang.domain_alias_empty}</p>
+
+      {* Bouton d'ajout même quand la liste est vide *}
+      <div style="margin-top:8px;">
+        <button type="button"
+                class="sm-btn-add"
+                onclick="smOpen('sm-da-add-modal')"><i class="fa fa-plus"></i> {$lang.domain_alias_add_btn}</button>
+      </div>
+    {/if}
+
+  </div>
+</div>
+{/if}
 
 
 {* ════════ MODALE DÉTAIL DE FACTURATION ══════════════════════════════ *}
@@ -1902,6 +2089,369 @@
 </div>
 {/if}
 
+{* ══ Modale : Détail Autodiscover ═══════════════════════════════════════════ *}
+{*
+  Affiche les enregistrements CNAME et SRV attendus + leur état actuel.
+  Le client peut copier la valeur recommandée et la coller chez son registrar.
+  Les valeurs attendues viennent de configoption19/20 ou par défaut du
+  serverhostname WHMCS.
+*}
+<div class="sm-overlay" id="sm-autodiscover-modal" onclick="smBg(event,'sm-autodiscover-modal')">
+  <div class="sm-mbox">
+    <div class="sm-mhead dark">
+      <h4>
+        <i class="fa fa-magic"></i>
+        {$lang.autodiscover_title} — {$domain}
+        {* Bulle (i) en lieu et place du paragraphe explicatif — gain de hauteur *}
+        <i class="sm-help-i dark" title="{$lang.autodiscover_explain|escape}">i</i>
+      </h4>
+      <button type="button" class="sm-mclose" onclick="smClose('sm-autodiscover-modal')">&times;</button>
+    </div>
+    <div class="sm-mbody" style="padding:14px 18px;">
+
+      {*
+        ── Carte 1 : CNAME / A ─────────────────────────────────────────────
+        Encadrée pour séparation visuelle nette du second bloc SRV.
+        Le statut (Présent / Manquant) est affiché à droite de l'en-tête.
+      *}
+      <div class="sm-record-card">
+        <div class="sm-record-card-head">
+          <span><i class="fa fa-link" style="color:#888;margin-right:4px;"></i>{$lang.autodiscover_record_cname}</span>
+          <span id="sm-ad-cname-state" class="sm-rc-state {if $dnsStatus.autodiscover.has_a_or_cname}ok{else}err{/if}">
+            <i class="fa fa-{if $dnsStatus.autodiscover.has_a_or_cname}check-circle{else}times-circle{/if}"></i>
+            <span>{if $dnsStatus.autodiscover.has_a_or_cname}{$lang.autodiscover_present}{else}{$lang.autodiscover_missing}{/if}</span>
+          </span>
+        </div>
+        <div class="sm-record-card-body">
+          {* Hôte + Cible sur deux lignes compactes (la cible est copiable) *}
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:12px;">
+            <div style="color:#888;">{$lang.autodiscover_host_label}</div>
+            <code id="sm-ad-cname-host" style="background:#f7f8fa;padding:4px 8px;border-radius:3px;">autodiscover.{$domain|escape}</code>
+            <div style="color:#888;">{$lang.autodiscover_target_label}</div>
+            <div class="sm-record-wrap" style="margin:0;">
+              <input type="text"
+                     id="sm-ad-cname-target"
+                     readonly
+                     value="{$dnsStatus.autodiscover.recommended_cname|escape}">
+              <button type="button" class="sm-copy-btn"
+                      onclick="smCopy('sm-ad-cname-target', this)"
+                      title="{$lang.btn_copy}">
+                <i class="fa fa-copy"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {*
+        ── Carte 2 : SRV ───────────────────────────────────────────────────
+        Les 4 champs (Priorité, Poids, Port, Cible) sont sur une seule ligne
+        en proportions 20%-20%-20%-40% pour faire tenir tout sur une rangée.
+        Sur écran étroit (<560px) le layout retombe en grille 2x2 via media-query.
+      *}
+      <div class="sm-record-card">
+        <div class="sm-record-card-head">
+          <span><i class="fa fa-server" style="color:#888;margin-right:4px;"></i>{$lang.autodiscover_record_srv}</span>
+          <span id="sm-ad-srv-state" class="sm-rc-state {if $dnsStatus.autodiscover.has_srv}ok{else}err{/if}">
+            <i class="fa fa-{if $dnsStatus.autodiscover.has_srv}check-circle{else}times-circle{/if}"></i>
+            <span>{if $dnsStatus.autodiscover.has_srv}{$lang.autodiscover_present}{else}{$lang.autodiscover_missing}{/if}</span>
+          </span>
+        </div>
+        <div class="sm-record-card-body">
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:12px;margin-bottom:10px;">
+            <div style="color:#888;">{$lang.autodiscover_host_label}</div>
+            <code style="background:#f7f8fa;padding:4px 8px;border-radius:3px;">_autodiscover._tcp.{$domain|escape}</code>
+          </div>
+          {*
+            Grille 4 colonnes : 20% - 20% - 20% - 40%
+            grid-template-columns: 1fr 1fr 1fr 2fr  (équivalent à 20-20-20-40)
+            En mobile (<560px), retombe en 2 colonnes pour rester lisible.
+          *}
+          <div class="sm-srv-grid">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:2px;">{$lang.autodiscover_priority_label}</div>
+              <input type="text" readonly value="{$dnsStatus.autodiscover.recommended_srv_priority}"
+                     style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:3px;font-family:monospace;font-size:12px;background:#f7f8fa;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:2px;">{$lang.autodiscover_weight_label}</div>
+              <input type="text" readonly value="{$dnsStatus.autodiscover.recommended_srv_weight}"
+                     style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:3px;font-family:monospace;font-size:12px;background:#f7f8fa;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:2px;">{$lang.autodiscover_port_label}</div>
+              <input type="text" readonly value="{$dnsStatus.autodiscover.recommended_srv_port}"
+                     style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:3px;font-family:monospace;font-size:12px;background:#f7f8fa;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:2px;">{$lang.autodiscover_target_label}</div>
+              <div class="sm-record-wrap" style="margin:0;">
+                <input type="text" id="sm-ad-srv-target" readonly
+                       value="{$dnsStatus.autodiscover.recommended_srv_target|escape}"
+                       style="font-family:monospace;font-size:12px;">
+                <button type="button" class="sm-copy-btn"
+                        onclick="smCopy('sm-ad-srv-target', this)"
+                        title="{$lang.btn_copy}">
+                  <i class="fa fa-copy"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sm-info-alert" style="margin-top:10px;font-size:11px;padding:6px 10px;">
+        <i class="fa fa-info-circle"></i>
+        {$lang.spf_propagation}
+      </div>
+
+    </div>
+    <div class="sm-mfoot">
+      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-autodiscover-modal')">{$lang.btn_close}</button>
+    </div>
+  </div>
+</div>
+
+{* ══ Modale : Détail DMARC ══════════════════════════════════════════════════ *}
+{*
+  Vue détaillée de l'état DMARC : record actuel (si présent), record recommandé
+  par défaut, et bouton vers le Générateur DMARC pour personnaliser la politique.
+*}
+<div class="sm-overlay" id="sm-dmarc-modal" onclick="smBg(event,'sm-dmarc-modal')">
+  <div class="sm-mbox">
+    <div class="sm-mhead dark">
+      <h4>
+        <i class="fa fa-envelope-o"></i>
+        {$lang.dmarc_title} — {$domain}
+        {* (i) — texte explicatif disponible via tooltip natif *}
+        <i class="sm-help-i dark" title="{$lang.dmarc_explain|escape}">i</i>
+      </h4>
+      <button type="button" class="sm-mclose" onclick="smClose('sm-dmarc-modal')">&times;</button>
+    </div>
+    <div class="sm-mbody" style="padding:14px 18px;">
+
+      {* ── Record actuel — Hôte + valeur en 2 colonnes ─────────────────── *}
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:12px;">
+        <div style="color:#888;">{$lang.autodiscover_host_label}</div>
+        <code style="background:#f7f8fa;padding:4px 8px;border-radius:3px;">_dmarc.{$domain|escape}</code>
+        <div style="color:#888;">{$lang.dmarc_current_record}</div>
+        <div>
+        {if $dnsStatus.dmarc.found}
+          <div class="sm-record-wrap" style="margin:0;">
+            <input type="text" id="sm-dmarc-found" readonly
+                   value="{$dnsStatus.dmarc.found|escape}">
+            <button type="button" class="sm-copy-btn"
+                    onclick="smCopy('sm-dmarc-found', this)"
+                    title="{$lang.btn_copy}">
+              <i class="fa fa-copy"></i>
+            </button>
+          </div>
+        {else}
+          <div class="sm-warn-alert" style="margin:0;font-size:11px;padding:6px 10px;">
+            <i class="fa fa-info-circle"></i>
+            {$lang.dmarc_no_record_yet}
+          </div>
+        {/if}
+        </div>
+      </div>
+
+      <div class="sm-info-alert" style="margin-top:10px;font-size:11px;padding:6px 10px;">
+        <i class="fa fa-info-circle"></i>
+        {$lang.spf_propagation}
+      </div>
+
+    </div>
+    <div class="sm-mfoot">
+      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-dmarc-modal')">{$lang.btn_close}</button>
+      <button type="button" class="sm-btn-create ready"
+              onclick="smClose('sm-dmarc-modal'); smOpen('sm-dmarc-builder-modal'); smDmarcUpdatePreview();">
+        <i class="fa fa-magic"></i> {$lang.dmarc_open_builder}
+      </button>
+    </div>
+  </div>
+</div>
+
+{* ══ Modale : Générateur DMARC ═════════════════════════════════════════════ *}
+{*
+  Formulaire de construction d'un record TXT DMARC. L'aperçu se met à jour
+  en direct à chaque changement (smDmarcUpdatePreview). Le record final est
+  construit côté JS pour réactivité ; la même logique est dispo côté PHP
+  via _sm_buildDmarcRecord() pour cohérence si besoin de validation back-end.
+
+  Pré-remplissage :
+    - Politique  : configoption23 (passé par $dmarcDefaults.policy)
+    - RUA        : configoption22 (passé par $dmarcDefaults.rua)
+    - Autres     : valeurs par défaut RFC 7489
+*}
+<div class="sm-overlay" id="sm-dmarc-builder-modal" onclick="smBg(event,'sm-dmarc-builder-modal')">
+  <div class="sm-mbox" style="max-width:760px;">
+    <div class="sm-mhead dark">
+      <h4>
+        <i class="fa fa-magic"></i>
+        {$lang.dmarc_builder_title}
+      </h4>
+      <button type="button" class="sm-mclose" onclick="smClose('sm-dmarc-builder-modal')">&times;</button>
+    </div>
+    <div class="sm-mbody" style="padding:14px 18px;">
+      <p style="font-size:12px;color:#666;margin:0 0 12px;">
+        {$lang.dmarc_builder_intro}
+      </p>
+
+      {*
+        Le formulaire ne soumet rien — tout se passe en JS.
+
+        COMPACITÉ :
+          - Les textes d'aide (autrefois sous chaque champ) sont déplacés
+            dans une bulle (i) à droite du label — tooltip natif via title.
+          - Le bloc "Aperçu" est affiché en 2 colonnes (Hôte | Enregistrement)
+            avec un input de hauteur normale au lieu d'un textarea multi-lignes.
+      *}
+      <form onsubmit="event.preventDefault();return false;" id="sm-dmarc-form">
+
+        {* ── Rangée 1 : Politique + Politique sous-domaines ───────────── *}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label class="sm-mlabel">
+              {$lang.dmarc_builder_policy}
+              <i class="sm-help-i" title="{$lang.dmarc_builder_policy_help|escape}">i</i>
+            </label>
+            <select id="dmarc-policy" onchange="smDmarcUpdatePreview()"
+                    style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+              <option value="none"      {if $dmarcDefaults.policy eq 'none'}selected{/if}>{$lang.dmarc_builder_policy_none}</option>
+              <option value="quarantine"{if $dmarcDefaults.policy eq 'quarantine'}selected{/if}>{$lang.dmarc_builder_policy_quarantine}</option>
+              <option value="reject"    {if $dmarcDefaults.policy eq 'reject'}selected{/if}>{$lang.dmarc_builder_policy_reject}</option>
+            </select>
+          </div>
+          <div>
+            <label class="sm-mlabel">
+              {$lang.dmarc_builder_subpolicy}
+              <i class="sm-help-i" title="{$lang.dmarc_builder_subpolicy_help|escape}">i</i>
+            </label>
+            <select id="dmarc-subpolicy" onchange="smDmarcUpdatePreview()"
+                    style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+              <option value="">{$lang.dmarc_builder_subpolicy_inherit}</option>
+              <option value="none">{$lang.dmarc_builder_policy_none}</option>
+              <option value="quarantine">{$lang.dmarc_builder_policy_quarantine}</option>
+              <option value="reject">{$lang.dmarc_builder_policy_reject}</option>
+            </select>
+          </div>
+        </div>
+
+        {* ── Rangée 2 : Alignement DKIM + Alignement SPF ──────────────── *}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+          <div>
+            <label class="sm-mlabel">{$lang.dmarc_builder_adkim}</label>
+            <select id="dmarc-adkim" onchange="smDmarcUpdatePreview()"
+                    style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+              <option value="r" selected>{$lang.dmarc_builder_align_relaxed}</option>
+              <option value="s">{$lang.dmarc_builder_align_strict}</option>
+            </select>
+          </div>
+          <div>
+            <label class="sm-mlabel">{$lang.dmarc_builder_aspf}</label>
+            <select id="dmarc-aspf" onchange="smDmarcUpdatePreview()"
+                    style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+              <option value="r" selected>{$lang.dmarc_builder_align_relaxed}</option>
+              <option value="s">{$lang.dmarc_builder_align_strict}</option>
+            </select>
+          </div>
+        </div>
+
+        {* ── Rangée 3 : Pourcentage + Format + Intervalle ─────────────── *}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px;">
+          <div>
+            <label class="sm-mlabel">
+              {$lang.dmarc_builder_pct}
+              <i class="sm-help-i" title="{$lang.dmarc_builder_pct_help|escape}">i</i>
+            </label>
+            <input type="number" id="dmarc-pct" min="0" max="100" value="100"
+                   oninput="smDmarcUpdatePreview()"
+                   style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+          </div>
+          <div>
+            <label class="sm-mlabel">{$lang.dmarc_builder_rf}</label>
+            <select id="dmarc-rf" onchange="smDmarcUpdatePreview()"
+                    style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+              <option value="afrf" selected>AFRF</option>
+              <option value="iodef">IODEF</option>
+            </select>
+          </div>
+          <div>
+            <label class="sm-mlabel">
+              {$lang.dmarc_builder_ri}
+              <i class="sm-help-i" title="{$lang.dmarc_builder_ri_help|escape}">i</i>
+            </label>
+            <input type="number" id="dmarc-ri" min="60" max="604800" value="86400"
+                   oninput="smDmarcUpdatePreview()"
+                   style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+          </div>
+        </div>
+
+        {* ── Rangée 4 : RUA + RUF ─────────────────────────────────────── *}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+          <div>
+            <label class="sm-mlabel">
+              {$lang.dmarc_builder_rua}
+              <i class="sm-help-i" title="{$lang.dmarc_builder_rua_help|escape}">i</i>
+            </label>
+            <input type="text" id="dmarc-rua"
+                   value="{$dmarcDefaults.rua|escape}"
+                   oninput="smDmarcUpdatePreview()"
+                   placeholder="dmarc@example.com"
+                   style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+          </div>
+          <div>
+            <label class="sm-mlabel">
+              {$lang.dmarc_builder_ruf}
+              <i class="sm-help-i" title="{$lang.dmarc_builder_ruf_help|escape}">i</i>
+            </label>
+            <input type="text" id="dmarc-ruf" value=""
+                   oninput="smDmarcUpdatePreview()"
+                   placeholder="dmarc-failures@example.com"
+                   style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+          </div>
+        </div>
+
+        {* ── Aperçu : 2 colonnes (Hôte | Enregistrement) ──────────────── *}
+        {*
+          Layout 2 colonnes pour économiser de la verticalité :
+            - Colonne 1 (étroite, auto) : libellé "Hôte" + valeur _dmarc.{domaine}
+            - Colonne 2 (1fr)            : libellé "Enregistrement" + input + bouton copier
+          Le textarea est remplacé par un input single-line (overflow-x scroll
+          si le record dépasse la largeur — généralement court de toute façon).
+        *}
+        <div style="margin-top:14px;border-top:1px solid #eee;padding-top:10px;">
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;">
+            <div>
+              <label class="sm-mlabel" style="margin-bottom:2px;">{$lang.autodiscover_host_label}</label>
+              <code style="display:inline-block;font-size:12px;background:#f7f8fa;padding:6px 8px;border:1px solid #eee;border-radius:4px;white-space:nowrap;">_dmarc.{$domain|escape}</code>
+            </div>
+            <div>
+              <label class="sm-mlabel" style="margin-bottom:2px;">{$lang.dmarc_builder_preview}</label>
+              <div class="sm-record-wrap">
+                <input type="text" id="dmarc-preview" readonly
+                       style="font-family:monospace;font-size:12px;">
+                <button type="button" class="sm-copy-btn"
+                        onclick="smCopy('dmarc-preview', this)"
+                        title="{$lang.btn_copy}">
+                  <i class="fa fa-copy"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+
+    </div>
+    <div class="sm-mfoot">
+      <button type="button" class="btn btn-default btn-sm"
+              onclick="smClose('sm-dmarc-builder-modal')">
+        {$lang.dmarc_builder_close}
+      </button>
+    </div>
+  </div>
+</div>
+
 
 <script>
 {literal}
@@ -2179,6 +2729,320 @@ document.addEventListener('click', function(e){
     bubble.classList.remove('visible');
   }
 });
+{/literal}
+</script>
+
+{*
+  ── Pont PHP → JS ─────────────────────────────────────────────────────────
+  On expose quelques valeurs serveur au JS via un objet SM_DNS_CTX :
+    - serviceid    : pour construire l'URL des endpoints AJAX
+    - csrfToken    : pour valider le POST refreshdns côté serveur
+    - checkedAtIso : timestamp ISO de la dernière vérification (rendu PHP)
+    - labels       : libellés localisés réutilisés par le JS de refresh
+
+  Tout est échappé via |escape:'javascript' pour éviter toute injection si
+  une valeur serveur contiendrait un caractère spécial.
+*}
+<script>
+window.SM_DNS_CTX = {
+  serviceid:    {$serviceid|intval},
+  csrfToken:    "{$csrfToken|escape:'javascript'}",
+  // true = au moins une vérification DNS n'a pas pu lire le cache au render :
+  //        le JS déclenche automatiquement un appel checkdns au DOMContentLoaded
+  //        pour remplir le cache et mettre à jour les pills + mini-cartes.
+  needsLoad:    {if $dnsNeedsLoad}true{else}false{/if},
+  checkedAtIso: "{$dnsStatus.checked_at|date_format:'%Y-%m-%d %H:%M:%S'|escape:'javascript'}",
+  labels: {
+    refresh:    "{$lang.dns_refresh_btn|escape:'javascript'}",
+    busy:       "{$lang.dns_refresh_busy|escape:'javascript'}",
+    checkedAt:  "{$lang.dns_checked_at|escape:'javascript'}",
+    statusOk:   "{$lang.dns_card_status_ok|escape:'javascript'}",
+    statusWarn: "{$lang.dns_card_status_warn|escape:'javascript'}",
+    statusErr:  "{$lang.dns_card_status_err|escape:'javascript'}",
+    statusNa:   "{$lang.dns_card_status_na|escape:'javascript'}",
+    spfOk:      "{$lang.dash_spf_ok|escape:'javascript'}",
+    spfErr:     "{$lang.dash_spf_err|escape:'javascript'}",
+    dkimActive: "{$lang.dkim_status_active|escape:'javascript'}",
+    dkimStandby:"{$lang.dkim_status_standby|escape:'javascript'}",
+    dkimDisabled:"{$lang.dkim_status_disabled|escape:'javascript'}",
+    autoOk:     "{$lang.autodiscover_status_ok|escape:'javascript'}",
+    autoWarn:   "{$lang.autodiscover_status_warn|escape:'javascript'}",
+    autoErr:    "{$lang.autodiscover_status_err|escape:'javascript'}",
+    dmarcOk:    "{$lang.dmarc_status_ok|escape:'javascript'}",
+    dmarcErr:   "{$lang.dmarc_status_err|escape:'javascript'}",
+    copied:     "{$lang.dmarc_builder_copied|escape:'javascript'}"
+  }
+};
+{literal}
+
+// ── Rafraîchissement DNS via AJAX ─────────────────────────────────────────
+//
+// Déclenché par le bouton "Actualiser" dans l'en-tête de la carte DNS.
+// POST customAction=refreshdns + token CSRF → réponse JSON contenant l'état
+// frais des 4 vérifications. Met à jour les pills, mini-cartes et indicateurs.
+//
+// Pendant la requête :
+//   - Le bouton est désactivé et passe en mode spinner
+//   - Les pills passent en classe "loading" (animation pulse bleue)
+//
+// En cas d'erreur réseau ou CSRF, on remet le bouton dans son état initial
+// sans modifier les pills (l'utilisateur garde l'état affiché précédemment).
+function smRefreshDns(){
+  var ctx = window.SM_DNS_CTX;
+  if(!ctx) return;
+
+  var btn   = document.getElementById('sm-dns-refresh-btn');
+  var label = document.getElementById('sm-dns-refresh-label');
+  var pills = document.querySelectorAll('#sm-dns-pills .sm-dns-pill');
+
+  // UI : passer en mode "vérification"
+  if(btn){
+    btn.disabled = true;
+    btn.classList.add('spinning');
+  }
+  if(label){ label.textContent = ctx.labels.busy; }
+  pills.forEach(function(p){
+    p.classList.remove('ok','warn','err','na');
+    p.classList.add('loading');
+  });
+
+  var url = 'clientarea.php?action=productdetails&id=' + ctx.serviceid;
+  var body = 'customAction=refreshdns&token=' + encodeURIComponent(ctx.csrfToken);
+
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: body,
+    credentials: 'same-origin'
+  })
+  .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'parse'}; }); })
+  .then(function(json){
+    if(json && json.ok && json.data){
+      smApplyDnsStatus(json.data);
+      if(json.checked_at_iso){
+        smUpdateCheckedAt(json.checked_at_iso);
+      }
+    } else {
+      // Erreur serveur (CSRF, exception) : on ne change pas les pills.
+      // Restaurer leur état précédent serait idéal, mais on s'en remet à
+      // un rechargement complet de la page si le souci persiste.
+      console.warn('[SM] refresh DNS échoué:', json && json.error);
+    }
+  })
+  .catch(function(err){
+    console.warn('[SM] refresh DNS erreur réseau:', err);
+  })
+  .finally(function(){
+    if(btn){
+      btn.disabled = false;
+      btn.classList.remove('spinning');
+    }
+    if(label){ label.textContent = ctx.labels.refresh; }
+  });
+}
+
+// ── Application du résultat AJAX dans le DOM ─────────────────────────────
+//
+// Reçoit l'objet data complet retourné par l'endpoint et met à jour :
+//   - les 4 pills (couleur + icône)
+//   - les 4 mini-cartes (bordure gauche + texte de statut)
+//   - les sous-icônes Autodiscover (CNAME / SRV)
+function smApplyDnsStatus(data){
+  var ctx = window.SM_DNS_CTX;
+
+  // ─── SPF ───
+  var spfStatus = (data.spf && data.spf.status) || 'na';
+  smSetPill('spf', spfStatus);
+  smSetMini('spf', spfStatus,
+    spfStatus === 'ok'  ? ctx.labels.spfOk :
+    spfStatus === 'err' ? ctx.labels.spfErr : ctx.labels.statusNa);
+
+  // ─── DKIM ───
+  // Le statut DKIM côté DNS public est dans data.dkim_dns.dnsValid.
+  // Le statut SM (active/standby/disabled) n'est pas refait par le refresh
+  // pour rester rapide — donc on combine simplement avec dnsValid.
+  // Si DNS OK ET status SM était 'active' → 'ok'
+  // Si DNS KO mais clé existe → on garde l'état précédent (info manquante)
+  // Pour simplifier : on traite uniquement le cas dnsValid → vert,
+  // sinon on laisse le statut courant (sera réactualisé au prochain rendu).
+  if(data.dkim_dns){
+    var dkimStatus = data.dkim_dns.dnsValid ? 'ok' : 'err';
+    smSetPill('dkim', dkimStatus);
+    smSetMini('dkim', dkimStatus,
+      dkimStatus === 'ok' ? ctx.labels.dkimActive : ctx.labels.dkimDisabled);
+  }
+
+  // ─── Autodiscover ───
+  var autoStatus = (data.autodiscover && data.autodiscover.status) || 'na';
+  smSetPill('autodiscover', autoStatus);
+  smSetMini('autodiscover', autoStatus,
+    autoStatus === 'ok'   ? ctx.labels.autoOk  :
+    autoStatus === 'warn' ? ctx.labels.autoWarn:
+    autoStatus === 'err'  ? ctx.labels.autoErr : ctx.labels.statusNa);
+  // Sous-icônes CNAME / SRV
+  if(data.autodiscover){
+    smSetSubIcon('autodiscover-cname', !!data.autodiscover.has_a_or_cname);
+    smSetSubIcon('autodiscover-srv',   !!data.autodiscover.has_srv);
+  }
+
+  // ─── DMARC ───
+  var dmarcStatus = (data.dmarc && data.dmarc.status) || 'na';
+  smSetPill('dmarc', dmarcStatus);
+  smSetMini('dmarc', dmarcStatus,
+    dmarcStatus === 'ok'  ? ctx.labels.dmarcOk  :
+    dmarcStatus === 'err' ? ctx.labels.dmarcErr : ctx.labels.statusNa);
+}
+
+// Met à jour une pill (classe + icône) en fonction du statut
+function smSetPill(key, status){
+  var pill = document.querySelector('#sm-dns-pills .sm-dns-pill[data-key="'+key+'"]');
+  if(!pill) return;
+  pill.classList.remove('ok','warn','err','na','loading');
+  pill.classList.add(status);
+  // Choix icône selon statut
+  var icon = pill.querySelector('i');
+  if(icon){
+    icon.className = 'fa fa-' + (
+      status === 'ok'   ? 'check' :
+      status === 'warn' ? 'exclamation' :
+      status === 'err'  ? 'times' : 'minus');
+  }
+}
+
+// Met à jour une mini-carte (classe de bordure + texte de statut)
+function smSetMini(key, status, statusText){
+  var mini = document.querySelector('.sm-dns-mini[data-key="'+key+'"]');
+  if(!mini) return;
+  mini.classList.remove('sm-dns-mini-ok','sm-dns-mini-warn','sm-dns-mini-err','sm-dns-mini-na');
+  mini.classList.add('sm-dns-mini-' + status);
+  var span = mini.querySelector('[data-status-text="'+key+'"]');
+  if(span){ span.textContent = statusText; }
+}
+
+// Met à jour une sous-icône (CNAME / SRV dans la mini-carte Autodiscover)
+function smSetSubIcon(key, ok){
+  var el = document.querySelector('[data-sub-icon="'+key+'"]');
+  if(!el) return;
+  el.classList.remove('ok','err');
+  el.classList.add(ok ? 'ok' : 'err');
+  var icon = el.querySelector('i');
+  if(icon){ icon.className = 'fa fa-' + (ok ? 'check-circle' : 'times-circle'); }
+}
+
+// Met à jour l'horodatage "Dernière vérification" sous le texte explicatif
+function smUpdateCheckedAt(iso){
+  var el = document.getElementById('sm-dns-checked-at');
+  if(!el) return;
+  var ctx = window.SM_DNS_CTX;
+  el.textContent = (ctx ? ctx.labels.checkedAt : 'Last check:') + ' ' + iso;
+}
+
+// ── Vérification DNS automatique (lazy-load au premier chargement) ───────
+//
+// Si le cache était vide au moment du render PHP, certaines pills sont en
+// statut 'loading' (animation spinner). On déclenche ici un appel checkdns
+// AJAX pour remplir le cache et mettre à jour l'UI sans bloquer la page.
+//
+// Différence avec smRefreshDns :
+//   - utilise customAction=checkdns (GET, pas de CSRF requis)
+//   - ne touche PAS l'icône du bouton "Actualiser" (l'utilisateur n'a pas
+//     cliqué — la page se met à jour silencieusement)
+//   - n'affiche pas le label "Vérification…" sur le bouton
+function smCheckDnsLazy(){
+  var ctx = window.SM_DNS_CTX;
+  if(!ctx) return;
+
+  var url = 'clientarea.php?action=productdetails&id=' + ctx.serviceid
+          + '&customAction=checkdns';
+
+  fetch(url, {
+    method: 'GET',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    credentials: 'same-origin'
+  })
+  .then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
+  .then(function(json){
+    if(json && json.ok && json.data){
+      smApplyDnsStatus(json.data);
+      if(json.checked_at_iso){ smUpdateCheckedAt(json.checked_at_iso); }
+    }
+    // En cas d'erreur, on laisse les pills en 'loading' — un clic sur
+    // "Actualiser" donnera au client une autre tentative explicite.
+  })
+  .catch(function(err){
+    console.warn('[SM] checkdns lazy erreur:', err);
+  });
+}
+
+// Initialisation au chargement
+document.addEventListener('DOMContentLoaded', function(){
+  if(!window.SM_DNS_CTX) return;
+  // Toujours mettre à jour l'horodatage initial s'il est connu
+  if(window.SM_DNS_CTX.checkedAtIso){
+    smUpdateCheckedAt(window.SM_DNS_CTX.checkedAtIso);
+  }
+  // Si le render PHP a indiqué un cache miss, déclencher la vérif live
+  if(window.SM_DNS_CTX.needsLoad){
+    smCheckDnsLazy();
+  }
+});
+
+// ── Générateur DMARC : aperçu en direct ──────────────────────────────────
+//
+// Reproduit la logique de _sm_buildDmarcRecord() côté JS pour que le client
+// voie le résultat instantanément sans aller-retour serveur. Les valeurs
+// invalides sont silencieusement omises (jamais d'enregistrement cassé).
+function smDmarcUpdatePreview(){
+  var get = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
+  var policy   = (get('dmarc-policy')    || 'none').toLowerCase();
+  var subPol   = (get('dmarc-subpolicy') || '').toLowerCase();
+  var adkim    = (get('dmarc-adkim')     || 'r').toLowerCase();
+  var aspf     = (get('dmarc-aspf')      || 'r').toLowerCase();
+  var pct      = parseInt(get('dmarc-pct') || '100', 10);
+  var rf       = (get('dmarc-rf')        || 'afrf').toLowerCase();
+  var ri       = parseInt(get('dmarc-ri') || '86400', 10);
+  var ruaRaw   = get('dmarc-rua') || '';
+  var rufRaw   = get('dmarc-ruf') || '';
+
+  // Whitelists et bornes — identique au PHP
+  var allowed = ['none','quarantine','reject'];
+  if(allowed.indexOf(policy) < 0) policy = 'none';
+  if(subPol !== '' && allowed.indexOf(subPol) < 0) subPol = '';
+  if(['r','s'].indexOf(adkim) < 0) adkim = 'r';
+  if(['r','s'].indexOf(aspf)  < 0) aspf  = 'r';
+  if(isNaN(pct) || pct < 0)   pct = 0;   if(pct > 100) pct = 100;
+  if(['afrf','iodef'].indexOf(rf) < 0) rf = 'afrf';
+  if(isNaN(ri) || ri < 60) ri = 60;       if(ri > 604800) ri = 604800;
+
+  var tags = ['v=DMARC1', 'p=' + policy];
+  if(subPol !== '' && subPol !== policy) tags.push('sp=' + subPol);
+  if(adkim !== 'r') tags.push('adkim=' + adkim);
+  if(aspf  !== 'r') tags.push('aspf='  + aspf);
+  if(pct  !== 100)  tags.push('pct='   + pct);
+  if(rf   !== 'afrf') tags.push('rf='  + rf);
+  if(ri   !== 86400) tags.push('ri='   + ri);
+
+  // Validation simple des emails RUA/RUF (regex permissive — la vraie
+  // validation se fait côté serveur via _sm_buildDmarcRecord si besoin).
+  var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  ['rua', 'ruf'].forEach(function(tag){
+    var raw = (tag === 'rua' ? ruaRaw : rufRaw);
+    if(!raw) return;
+    var uris = raw.split(',').map(function(s){
+      return s.trim().replace(/^mailto:/i, '');
+    }).filter(function(s){ return emailRe.test(s); }).map(function(s){ return 'mailto:' + s; });
+    if(uris.length){ tags.push(tag + '=' + uris.join(',')); }
+  });
+
+  var preview = document.getElementById('dmarc-preview');
+  if(preview){ preview.value = tags.join('; '); }
+}
+
+// Init du preview à l'ouverture pour que le record soit visible immédiatement
+document.addEventListener('DOMContentLoaded', smDmarcUpdatePreview);
 {/literal}
 </script>
 
