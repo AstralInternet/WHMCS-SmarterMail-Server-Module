@@ -43,6 +43,20 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
   jamais le render PHP — le tableau de bord s'affiche en moins de 100 ms
   même sur cache froid. Le mode `$cacheOnly=true` du helper
   `_sm_dnsLookup` retourne `null` au lieu de faire un live lookup.
+- **Purge automatique du cache DNS** :
+  - **Immédiate** : `smartermail_TerminateAccount()` appelle
+    `_sm_purgeDnsCacheForDomain($domain)` après suppression du domaine
+    dans SmarterMail. Cible explicitement les hôtes interrogés par le
+    module (SPF, DKIM via LIKE sécurisé, DMARC, Autodiscover CNAME/A,
+    Autodiscover SRV).
+  - **Hebdomadaire** : `DailyCronJob` (le dimanche, en plus du
+    `_sm_cleanProtoUsage` existant) parcourt `tblhosting` pour les
+    services avec `domainstatus IN ('Cancelled','Fraud','Terminated')`
+    et purge leurs entrées DNS — filet de sécurité si la purge immédiate
+    a été manquée. Puis `_sm_cleanDnsCacheStale(7 jours)` retire les
+    entrées dont `cached_at` est antérieur à 7 jours, indépendamment
+    du statut du service (TTL = 4 h donc 7 j = 42× TTL → aucun risque
+    de supprimer une entrée encore valide).
 - **Bouton "Actualiser"** dans la barre de titre de la carte DNS — déclenche
   un appel POST AJAX (`customAction=refreshdns`) avec jeton CSRF, qui force une
   nouvelle lecture DNS (bypass cache) et met à jour les pills + mini-cartes

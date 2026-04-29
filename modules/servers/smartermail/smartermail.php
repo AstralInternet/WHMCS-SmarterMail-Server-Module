@@ -1692,6 +1692,25 @@ function smartermail_TerminateAccount(array $params): string
     // On purge immédiatement plutôt qu'attendre le nettoyage hebdomadaire.
     _sm_cleanProtoUsage((int) $params['serviceid']);
 
+    // ── Nettoyage du cache DNS pour ce domaine ───────────────────────────
+    // Évite de garder des entrées orphelines qui ne seront plus jamais
+    // utilisées (TTL = 4 h, donc invalidation naturelle après ~4 h, mais
+    // plus propre de purger immédiatement). Couvre SPF, DKIM, DMARC,
+    // Autodiscover (CNAME + SRV) et toute clé DKIM avec sélecteur variable.
+    try {
+        $purged = _sm_purgeDnsCacheForDomain((string) ($params['domain'] ?? ''));
+        if ($purged > 0) {
+            logActivity(sprintf(
+                'SmarterMail TerminateAccount [dns-cache] %d entrée(s) DNS purgée(s) pour le domaine %s.',
+                $purged,
+                $params['domain'] ?? '?'
+            ));
+        }
+    } catch (\Throwable $e) {
+        // Non bloquant — l'échec de purge n'empêche pas la résiliation
+        logActivity('SmarterMail TerminateAccount [dns-cache] EXCEPTION: ' . $e->getMessage());
+    }
+
     return 'success';
 }
 

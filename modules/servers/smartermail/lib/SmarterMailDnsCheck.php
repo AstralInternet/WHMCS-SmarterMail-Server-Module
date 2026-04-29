@@ -581,6 +581,101 @@ function _sm_collectDnsStatus(
 }
 
 // =============================================================================
+//  PURGE DU CACHE DNS
+// =============================================================================
+//
+//  Deux mécanismes complémentaires sont fournis :
+//
+//  1. _sm_purgeDnsCacheForDomain($domain) — purge IMMÉDIATE quand un domaine
+//     n'a plus de service actif (appelé depuis smartermail_TerminateAccount).
+//     Évite que les entrées d'un client résilié polluent le cache.
+//
+//  2. _sm_cleanDnsCacheStale($maxAgeSeconds) — purge HEBDOMADAIRE des entrées
+//     trop vieilles (par défaut > 7 jours). Sert de filet de sécurité au
+//     cas où la purge immédiate aurait été manquée (cron qui n'a pas tourné,
+//     domaine modifié à la main dans la DB, etc.).
+//
+//  Les deux fonctions sont appelées depuis hooks.php :
+//   - DailyCronJob → _sm_cleanDnsCacheStale (chaque dimanche)
+//   - TerminateAccount → _sm_purgeDnsCacheForDomain (immédiat)
+// =============================================================================
+
+/**
+ * Purge toutes les entrées de cache DNS associées à un domaine donné.
+ *
+ * Cible explicitement les hôtes interrogés par le module pour ce domaine :
+ *   - {domain}                          → SPF (TXT racine)
+ *   - _dmarc.{domain}                   → DMARC (TXT)
+ *   - autodiscover.{domain}             → Autodiscover CNAME/A
+ *   - _autodiscover._tcp.{domain}       → Autodiscover SRV
+ *   - *._domainkey.{domain}             → DKIM (sélecteur variable, LIKE)
+ *
+ * SÉCURITÉ : le pattern LIKE est ancré sur `._domainkey.{domain}` exactement
+ * — le `%` ne peut donc PAS matcher d'autres domaines (ex: une entrée pour
+ * `mail._domainkey.autre-client.com` ne sera pas effacée si on purge
+ * `autre.com`). Le suffixe pleinement qualifié garantit l'isolation.
+ *
+ * @param string $domain Le domaine du service (ex: 'client.com')
+ * @return int Nombre d'entrées supprimées
+ */
+function _sm_purgeDnsCacheForDomain(string $domain): int
+{
+    _sm_ensureDnsCacheTable();
+    $domain = strtolower(trim($domain));
+    if ($domain === '') return 0;
+
+    try {
+        return Capsule::table('mod_sm_dns_cache')
+            ->where(function ($q) use ($domain) {
+                $q->where('host', '=', $domain)
+                  ->orWhere('host', '=', '_dmarc.' . $domain)
+                  ->orWhere('host', '=', 'autodiscover.' . $domain)
+                  ->orWhere('host', '=', '_autodiscover._tcp.' . $domain)
+                  // DKIM : sélecteur variable. On échappe les caractères
+                  // spéciaux LIKE ('_', '%', '\') pour ne matcher QUE
+                  // littéralement, puis on ajoute le wildcard initial.
+                  ->orWhere('host', 'like', '%._domainkey.' . str_replace(
+                      ['\\', '%', '_'],
+                      ['\\\\', '\\%', '\\_'],
+                      $domain
+                  ));
+            })
+            ->delete();
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [dns-cache] Erreur purge domaine ' . $domain . ' : ' . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Purge les entrées de cache DNS plus anciennes qu'un seuil donné.
+ *
+ * Roulé par le DailyCronJob chaque dimanche (voir hooks.php).
+ * Sert de filet de sécurité : même si la purge ciblée par domaine a été
+ * manquée, les entrées vieillissantes sont retirées après 7 jours par défaut
+ * (largement plus long que le TTL de 4 h utilisé par le module — donc on
+ * n'efface JAMAIS une entrée encore valide).
+ *
+ * @param int $maxAgeSeconds Seuil d'âge en secondes (défaut 604800 = 7 jours)
+ * @return int Nombre d'entrées supprimées
+ */
+function _sm_cleanDnsCacheStale(int $maxAgeSeconds = 604800): int
+{
+    _sm_ensureDnsCacheTable();
+    $cutoff = time() - max(3600, $maxAgeSeconds); // garde-fou : au moins 1 h
+
+    try {
+        return Capsule::table('mod_sm_dns_cache')
+            ->where('cached_at', '<', $cutoff)
+            ->delete();
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [dns-cache] Erreur nettoyage entrées périmées : ' . $e->getMessage());
+        return 0;
+    }
+}
+
+
+// =============================================================================
 //  GÉNÉRATEUR DE RECORD DMARC
 // =============================================================================
 

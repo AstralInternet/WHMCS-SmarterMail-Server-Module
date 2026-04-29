@@ -99,6 +99,8 @@ if (!defined('SM_MODULE_LIB')) {
 if (defined('SM_MODULE_LIB')) {
     require_once SM_MODULE_LIB . '/SmarterMailApi.php';
     require_once SM_MODULE_LIB . '/SmarterMailProtoUsage.php';
+    // Helpers de cache DNS (utilisés par le DailyCronJob pour la purge hebdo)
+    require_once SM_MODULE_LIB . '/SmarterMailDnsCheck.php';
 }
 
 use WHMCS\Database\Capsule;
@@ -769,6 +771,66 @@ add_hook('DailyCronJob', 1, function (array $params) {
             }
         } catch (\Throwable $e) {
             logActivity('SmarterMail DailyCronJob [cleanProtoUsage] EXCEPTION: ' . $e->getMessage());
+        }
+
+        // ── Nettoyage du cache DNS — Phase 1 : par service inactif ────────
+        //
+        // Pour chaque service avec domainstatus IN ('Cancelled','Fraud',
+        // 'Terminated'), purge les entrées DNS qui pourraient avoir été
+        // créées avant ou après la résiliation. La purge à TerminateAccount
+        // gère déjà ce cas en immédiat ; cette boucle est un filet de
+        // sécurité pour les services Cancelled (jamais activement résiliés
+        // par le module) ou si TerminateAccount a échoué partiellement.
+        try {
+            // On lit aussi tblhosting.server pour ne purger QUE les domaines
+            // de services pilotés par le module SmarterMail (sinon on
+            // pourrait effacer du cache DNS d'autres modules — improbable,
+            // car la table mod_sm_dns_cache est dédiée, mais bonne pratique).
+            $inactiveServices = Capsule::table('tblhosting')
+                ->whereIn('domainstatus', ['Cancelled', 'Fraud', 'Terminated'])
+                ->whereNotNull('domain')
+                ->where('domain', '!=', '')
+                ->select('id', 'domain')
+                ->get();
+
+            $totalPurged = 0;
+            $domainsTouched = 0;
+            foreach ($inactiveServices as $svc) {
+                $purged = _sm_purgeDnsCacheForDomain((string) $svc->domain);
+                if ($purged > 0) {
+                    $totalPurged += $purged;
+                    $domainsTouched++;
+                }
+            }
+            if ($totalPurged > 0) {
+                logActivity(sprintf(
+                    'SmarterMail DailyCronJob [cleanDnsCache:inactive] %d entrée(s) purgée(s) pour %d domaine(s) inactif(s).',
+                    $totalPurged,
+                    $domainsTouched
+                ));
+            }
+        } catch (\Throwable $e) {
+            logActivity('SmarterMail DailyCronJob [cleanDnsCache:inactive] EXCEPTION: ' . $e->getMessage());
+        }
+
+        // ── Nettoyage du cache DNS — Phase 2 : entrées trop vieilles ──────
+        //
+        // Filet de sécurité ultime : supprime les entrées dont le
+        // cached_at est plus vieux que 7 jours, peu importe le statut du
+        // service. Le TTL utilisé par le module est de 4 h donc 7 jours =
+        // 42× le TTL → aucune entrée encore valide n'est jamais effacée.
+        // Empêche la table de gonfler indéfiniment si un domaine a été
+        // supprimé hors module (intervention DB manuelle, par exemple).
+        try {
+            $purged = _sm_cleanDnsCacheStale(7 * 86400); // 7 jours
+            if ($purged > 0) {
+                logActivity(sprintf(
+                    'SmarterMail DailyCronJob [cleanDnsCache:stale] %d entrée(s) DNS périmée(s) supprimée(s).',
+                    $purged
+                ));
+            }
+        } catch (\Throwable $e) {
+            logActivity('SmarterMail DailyCronJob [cleanDnsCache:stale] EXCEPTION: ' . $e->getMessage());
         }
     }
 
