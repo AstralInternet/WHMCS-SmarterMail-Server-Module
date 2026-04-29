@@ -29,6 +29,12 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **Vérification Autodiscover** : enregistrement CNAME/A
   `autodiscover.{domaine}` + enregistrement SRV `_autodiscover._tcp.{domaine}`.
   Statut tri-état : ✗ rouge (aucun), ⚠ jaune (un seul), ✓ vert (les deux).
+  Gestion intelligente du record A : la cible attendue
+  (`configoption19` ou `serverhostname`) est résolue dynamiquement en IP(s)
+  via le cache DNS, et le record A du client est validé si SON IP est
+  présente dans le set des IPs résolues (gère les configs multi-A et le
+  round-robin DNS). Aucune configoption d'IP à maintenir — si l'IP du
+  serveur change, la vérification suit automatiquement.
 - **Vérification DMARC** : enregistrement TXT `_dmarc.{domaine}`. Statut
   bi-état : ✗ rouge (absent), ✓ vert (présent).
 - **Cache DNS partagé** : nouvelle table `mod_sm_dns_cache` avec TTL 4 heures

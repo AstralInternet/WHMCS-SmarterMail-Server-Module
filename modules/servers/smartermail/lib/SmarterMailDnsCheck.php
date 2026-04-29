@@ -399,36 +399,71 @@ function _sm_checkAutodiscover(string $domain, array $params, bool $forceRefresh
             break;
         }
     }
-    // Si pas de CNAME, on tente A — match implicite si l'IP de l'expected
-    // résout aussi vers la même cible. Comme on n'a pas l'IP en config, on
-    // considère qu'un A présent (peu importe la valeur) compte si l'expected
-    // n'est pas vide. Pratique : une majorité de configs utilisent CNAME.
-    if ($foundHost === '') {
+    // ── Détermination du match CNAME ──────────────────────────────────────
+    // Si la cible CNAME correspond exactement à l'hôte attendu, c'est OK.
+    $hasHost = ($foundHost !== '' && $foundHost === strtolower($expectedHost));
+
+    // ── Cas A : pas de CNAME, on tente le record A ────────────────────────
+    //
+    // Beaucoup de clients préfèrent un record A pointant directement vers
+    // l'IP du serveur de courriel plutôt qu'un CNAME (par habitude, ou
+    // parce que leur registrar ne supporte pas les CNAME à la racine d'un
+    // sous-domaine, ou parce qu'ils ont copié-collé une config existante).
+    //
+    // Pour considérer un A comme valide, on doit vérifier qu'il pointe vers
+    // une IP qui correspond effectivement à $expectedHost. La méthode :
+    //   1. Lire le(s) record(s) A de autodiscover.{domain}    (1 requête)
+    //   2. Résoudre $expectedHost en IP(s)                    (1 requête, cachée)
+    //   3. Match si une IP du A client est dans le set de l'expected
+    //
+    // Avantage par rapport à une configoption "IP attendue" : pas de
+    // configuration à maintenir si l'IP de mail2.astralinternet.com change.
+    if (!$hasHost) {
         $a = _sm_dnsLookup($autoHost, DNS_A, 14400, $forceRefresh, $cacheOnly);
         if ($a === null) {
             return array_merge([
                 'status'         => 'loading',
                 'has_a_or_cname' => false,
                 'has_srv'        => false,
-                'found_host'     => '',
+                'found_host'     => $foundHost, // peut être un CNAME non-matchant
                 'found_srv'      => '',
             ], $recommended);
         }
+
         if (!empty($a)) {
-            // On note "présent" sans pouvoir vérifier qu'il pointe au bon
-            // endroit (impossible sans résoudre $expectedHost en IP). Pour
-            // l'utilisateur, c'est un signal positif. Le bouton "Voir DNS"
-            // affichera l'IP réelle pour vérification manuelle.
-            $foundHost = $a[0]['ip'] ?? '(A présent)';
+            // IPs trouvées dans le record A du client autodiscover.{domain}
+            $foundIps = array_values(array_filter(array_column($a, 'ip')));
+
+            // Si pas de CNAME du tout, on remplit found_host avec la 1re IP
+            // pour affichage dans la modale (sinon le client voit "vide").
+            if ($foundHost === '' && !empty($foundIps)) {
+                $foundHost = $foundIps[0];
+            }
+
+            // On résout $expectedHost pour comparer les IPs. Cette requête
+            // passe par le même cache (4 h) — appel quasi-gratuit en régime
+            // établi. Ne se déclenche que si le CNAME n'a pas déjà matché.
+            if (!empty($foundIps) && $expectedHost !== '') {
+                $expectedA = _sm_dnsLookup($expectedHost, DNS_A, 14400, $forceRefresh, $cacheOnly);
+                if ($expectedA === null) {
+                    return array_merge([
+                        'status'         => 'loading',
+                        'has_a_or_cname' => false,
+                        'has_srv'        => false,
+                        'found_host'     => $foundHost,
+                        'found_srv'      => '',
+                    ], $recommended);
+                }
+
+                $expectedIps = array_values(array_filter(array_column($expectedA, 'ip')));
+                // Match si AU MOINS UNE IP du client est dans le set de
+                // l'expected (gère les multi-A / round-robin DNS).
+                if (!empty($expectedIps) && !empty(array_intersect($foundIps, $expectedIps))) {
+                    $hasHost = true;
+                }
+            }
         }
     }
-
-    // Match : on accepte si la cible CNAME = expectedHost OU si A est présent
-    // (cas où le client utilise une IP au lieu d'un CNAME).
-    $hasHost = ($foundHost !== '')
-        && ($expectedHost === '' || $foundHost === $expectedHost
-            || $foundHost === '(A présent)'
-            || $foundHost === strtolower($expectedHost));
 
     // SRV _autodiscover._tcp.{domain}
     $srvHost = '_autodiscover._tcp.' . $domain;

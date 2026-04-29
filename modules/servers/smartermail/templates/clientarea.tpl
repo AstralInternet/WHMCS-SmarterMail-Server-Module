@@ -415,10 +415,12 @@
 .sm-dns-mini.sm-dns-mini-warn    {border-left-color:#f57f17}
 .sm-dns-mini.sm-dns-mini-err     {border-left-color:#c62828}
 .sm-dns-mini.sm-dns-mini-na      {border-left-color:#bdbdbd}
-/* Etat "loading" : bordure bleue + pulse léger pendant la vérification AJAX.
-   Active sur le composant (mini-carte, pill) au render initial s'il a fallu
-   se contenter du cache vide. Désactivé par JS dès que la réponse arrive. */
-.sm-dns-mini.sm-dns-mini-loading {border-left-color:#1565c0;animation:smPulse 1.4s ease-in-out infinite}
+/* Note : pas de classe .sm-dns-mini-loading. Pendant la vérification AJAX,
+   seule la pill du haut affiche l'animation pulse — les 4 mini-cartes
+   restent en état neutre (border-left grise via .sm-dns-mini-na) avec un
+   simple texte "Vérification…" en bleu italique pour indiquer l'attente.
+   Évite la cacophonie visuelle de 4 tuiles + 4 pills qui pulsent en même
+   temps au premier chargement. */
 .sm-dns-mini-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .sm-dns-mini-title{font-size:12px;font-weight:700;color:#333;display:inline-flex;align-items:center;gap:6px}
 .sm-dns-mini-title i{color:#888}
@@ -427,7 +429,6 @@
 .sm-dns-mini-warn    .sm-dns-mini-status{color:#f57f17}
 .sm-dns-mini-err     .sm-dns-mini-status{color:#c62828}
 .sm-dns-mini-na      .sm-dns-mini-status{color:#9e9e9e}
-.sm-dns-mini-loading .sm-dns-mini-status{color:#1565c0;font-style:italic}
 .sm-dns-mini-body{font-size:12px;color:#555;line-height:1.6;flex:1}
 .sm-dns-mini-line{display:flex;align-items:center;gap:6px}
 .sm-dns-mini-line code{font-size:11px;background:#f7f8fa;padding:1px 6px;border-radius:3px}
@@ -809,6 +810,16 @@
   (($dkim) ? 'err' : 'na')))}
 {assign var="pillAuto" value=$dnsStatus.autodiscover.status|default:'na'}
 {assign var="pillDmarc" value=$dnsStatus.dmarc.status|default:'na'}
+
+{* Variantes "mini" pour les tuiles de la grille DNS : on ne propage PAS
+   l'état 'loading' aux mini-cartes pour éviter une animation trop voyante
+   sur les 4 tuiles simultanément (seul le pill du haut suffit à signaler
+   la vérification en cours). 'loading' est rétrogradé en 'na' (bordure
+   grise neutre) — le texte de statut interne reste "Vérification…". *}
+{assign var="miniSpf"   value=($pillSpf  eq 'loading') ? 'na' : $pillSpf}
+{assign var="miniDkim"  value=($pillDkim eq 'loading') ? 'na' : $pillDkim}
+{assign var="miniAuto"  value=($pillAuto eq 'loading') ? 'na' : $pillAuto}
+{assign var="miniDmarc" value=($pillDmarc eq 'loading') ? 'na' : $pillDmarc}
 {* La carte est ouverte par défaut si l'une des 4 cartes est en err/warn *}
 {assign var="dnsAllOk" value=
   ($pillSpf eq 'ok' || $pillSpf eq 'na')
@@ -884,7 +895,7 @@
     <div class="sm-dns-grid" id="sm-dns-grid">
 
       {* ── Mini-carte SPF ──────────────────────────────────────────────── *}
-      <div class="sm-dns-mini sm-dns-mini-{$pillSpf|escape}" data-key="spf">
+      <div class="sm-dns-mini sm-dns-mini-{$miniSpf|escape}" data-key="spf">
         <div class="sm-dns-mini-head">
           <span class="sm-dns-mini-title"><i class="fa fa-shield"></i> SPF</span>
           <span class="sm-dns-mini-status" data-status-text="spf">
@@ -909,7 +920,7 @@
       </div>
 
       {* ── Mini-carte DKIM ─────────────────────────────────────────────── *}
-      <div class="sm-dns-mini sm-dns-mini-{$pillDkim|escape}" data-key="dkim">
+      <div class="sm-dns-mini sm-dns-mini-{$miniDkim|escape}" data-key="dkim">
         <div class="sm-dns-mini-head">
           <span class="sm-dns-mini-title"><i class="fa fa-key"></i> DKIM</span>
           <span class="sm-dns-mini-status" data-status-text="dkim">
@@ -955,7 +966,7 @@
       </div>
 
       {* ── Mini-carte Autodiscover ─────────────────────────────────────── *}
-      <div class="sm-dns-mini sm-dns-mini-{$pillAuto|escape}" data-key="autodiscover">
+      <div class="sm-dns-mini sm-dns-mini-{$miniAuto|escape}" data-key="autodiscover">
         <div class="sm-dns-mini-head">
           <span class="sm-dns-mini-title"><i class="fa fa-magic"></i> {$lang.autodiscover_title}</span>
           <span class="sm-dns-mini-status" data-status-text="autodiscover">
@@ -989,7 +1000,7 @@
       </div>
 
       {* ── Mini-carte DMARC ────────────────────────────────────────────── *}
-      <div class="sm-dns-mini sm-dns-mini-{$pillDmarc|escape}" data-key="dmarc">
+      <div class="sm-dns-mini sm-dns-mini-{$miniDmarc|escape}" data-key="dmarc">
         <div class="sm-dns-mini-head">
           <span class="sm-dns-mini-title"><i class="fa fa-envelope-o"></i> {$lang.dmarc_title}</span>
           <span class="sm-dns-mini-status" data-status-text="dmarc">
@@ -2916,8 +2927,13 @@ function smSetPill(key, status){
 function smSetMini(key, status, statusText){
   var mini = document.querySelector('.sm-dns-mini[data-key="'+key+'"]');
   if(!mini) return;
+  // Les mini-cartes n'ont pas d'état 'loading' (par choix UX — voir le
+  // commentaire CSS du même fichier). Si le caller passe 'loading', on
+  // rétrograde en 'na' pour la classe de bordure ; le texte interne reste
+  // celui passé par le caller (typiquement "Vérification…").
+  var miniStatus = (status === 'loading') ? 'na' : status;
   mini.classList.remove('sm-dns-mini-ok','sm-dns-mini-warn','sm-dns-mini-err','sm-dns-mini-na');
-  mini.classList.add('sm-dns-mini-' + status);
+  mini.classList.add('sm-dns-mini-' + miniStatus);
   var span = mini.querySelector('[data-status-text="'+key+'"]');
   if(span){ span.textContent = statusText; }
 }
