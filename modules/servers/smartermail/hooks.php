@@ -915,3 +915,86 @@ add_hook('ClientAreaPrimarySidebar', 1, function ($primarySidebar): void {
     ->removeChild('Change Password');
     }
 });
+
+
+// =============================================================================
+//  INJECTION CSS — Mode sombre Lagom + fix <code>
+// =============================================================================
+//
+//  CONTEXTE :
+//  Les overrides CSS (dark mode + fix de la couleur rouge du tag <code>
+//  appliquée par certains thèmes) sont stockés dans un fichier unique :
+//      templates/_sm_dark_mode.css
+//
+//  Le hook ClientAreaHeadOutput injecte ce CSS dans le <head> de toutes
+//  les pages clientarea concernant un service SmarterMail. Avantages :
+//    - Source UNIQUE pour les 5 templates du module (clientarea, adduser,
+//      edituser, addredirect, editredirect) → maintenance simplifiée.
+//    - Aucun chemin Smarty fragile : on lit le fichier directement en PHP.
+//    - Le CSS est injecté AVANT le rendu des <style> inline des templates,
+//      donc le mode sombre s'applique correctement (le browser cascade
+//      naturellement le dernier sélecteur applicable).
+//
+//  CONDITIONS D'INJECTION :
+//    - On est sur clientarea.php?action=productdetails
+//    - Le service ciblé (id) utilise le module 'smartermail' (vérifié via
+//      tblhosting JOIN tblservers)
+//  → Aucune CSS n'est ajoutée sur les pages d'autres modules.
+//
+//  CACHE :
+//    Le contenu CSS est lu une seule fois par requête PHP via cache statique.
+//    Pas de cache disque/mémoire persistant — file_get_contents est rapide
+//    et OPcache prend déjà le fichier en charge implicitement sur la
+//    plupart des installs.
+// =============================================================================
+
+/**
+ * Retourne le contenu du fichier CSS dark mode partagé.
+ * Cache statique par exécution PHP — évite plusieurs file_get_contents
+ * si le hook est appelé plusieurs fois (rare mais théoriquement possible).
+ */
+function _sm_loadDarkModeCss(): string
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $path = realpath(__DIR__ . '/templates/_sm_dark_mode.css');
+    if ($path && is_readable($path)) {
+        $cache = (string) file_get_contents($path);
+    } else {
+        $cache = '';
+        logActivity('SmarterMail [dark-mode] Fichier introuvable : ' . __DIR__ . '/templates/_sm_dark_mode.css');
+    }
+    return $cache;
+}
+
+add_hook('ClientAreaHeadOutput', 1, function ($vars) {
+    // Filtre : on n'agit que sur la page productdetails d'un service.
+    // $_GET est utilisé directement car $vars ne contient pas systématiquement
+    // l'action/id selon la version WHMCS — plus fiable.
+    if (($_GET['action'] ?? '') !== 'productdetails') return '';
+
+    $sid = (int) ($_GET['id'] ?? 0);
+    if ($sid <= 0) return '';
+
+    // Vérification que le service utilise notre module — évite d'injecter
+    // notre CSS sur les services d'autres modules (cPanel, Plesk, etc.).
+    try {
+        $serverType = Capsule::table('tblhosting')
+            ->join('tblservers', 'tblhosting.server', '=', 'tblservers.id')
+            ->where('tblhosting.id', $sid)
+            ->value('tblservers.type');
+        if ($serverType !== 'smartermail') return '';
+    } catch (\Throwable $e) {
+        // Erreur DB non bloquante → on n'injecte rien (sûr par défaut)
+        return '';
+    }
+
+    $css = _sm_loadDarkModeCss();
+    if ($css === '') return '';
+
+    // L'ID sm-dark-mode-shared permet d'identifier le bloc dans les
+    // devtools et empêche d'éventuelles doubles injections (les hooks
+    // WHMCS sont normalement appelés une seule fois par page).
+    return '<style id="sm-dark-mode-shared">' . $css . '</style>';
+});

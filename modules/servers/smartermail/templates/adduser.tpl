@@ -116,6 +116,7 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
 .sm-pwd-crit li{padding:3px 0;display:flex;align-items:center;gap:6px;color:#aaa}
 .sm-pwd-crit li.ok{color:#27ae60}
 {/literal}
+{* Dark mode + fix <code> : injectés via hook (voir hooks.php). *}
 </style>
 
 <a href="clientarea.php?action=productdetails&id={$serviceid}" class="sm-back">

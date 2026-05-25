@@ -1,0 +1,277 @@
+/* ══════════════════════════════════════════════════════════════════════
+   OVERRIDE DU TAG <code>
+   ══════════════════════════════════════════════════════════════════════
+   Plusieurs thèmes WHMCS (dont Lagom) stylent <code> en rouge sang
+   (rgb(199, 37, 78)) sur fond beige — ressemble à une erreur.
+   On le remplace par un bleu indigo cohérent avec l'accent du module. */
+.sm-card code,
+.sm-mbox code{
+  color:#3949ab;
+  background:#f7f8fa;
+  padding:1px 6px;
+  border-radius:3px;
+  font-family:Menlo,Consolas,"Courier New",monospace;
+  font-size:11px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MODE SOMBRE — compatibilité Lagom
+   ══════════════════════════════════════════════════════════════════════
+   Activé via la classe `lagom-dark-mode` posée par Lagom sur <html>.
+   Toutes les règles sont scopées via `html.lagom-dark-mode` pour ne
+   pas affecter le mode clair.
+
+   PALETTE :
+     bg primaire   #2a2d34  cartes, modales
+     bg secondaire #1f2228  en-têtes
+     bg tertiaire  #1c1f24  inputs, code, surbrillances
+     bordure       #3a3d44
+     texte         #d0d0d0 (primaire), #999 (secondaire), #777 (muet)
+     accent        #5c6bc0 (indigo plus clair pour contraste)
+     code          #80cbc4 (teal — distinct du rouge erreur)
+     status        ok #66bb6a, warn #ffa726, err #ef5350, load #42a5f5
+*/
+
+/* ── Cartes (sm-card et ses headers/body) ─────────────────────────── */
+html.lagom-dark-mode .sm-card{background:#2a2d34;border-color:#3a3d44;color:#d0d0d0}
+html.lagom-dark-mode .sm-card-header{background:#1f2228;border-bottom-color:#3a3d44;color:#e0e0e0}
+html.lagom-dark-mode .sm-card-header:hover{background:#252830}
+/* Variante "dns-card-header" — utilisée dans la carte DNS de la dashboard */
+html.lagom-dark-mode .sm-dns-card-header{background:#1f2228;border-bottom-color:#3a3d44;color:#e0e0e0}
+html.lagom-dark-mode .sm-dns-card-header:hover{background:#252830}
+html.lagom-dark-mode .sm-dns-card-right{color:#e0e0e0}
+html.lagom-dark-mode .sm-dns-card-left i.fa-globe{color:#999 !important}
+
+/* ── En-tête domaine (gradient déjà sombre, ajustement mineur) ────── */
+html.lagom-dark-mode .sm-domain-header{background:linear-gradient(135deg,#1a2733 0%,#2c3e50 100%);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+
+/* ── Hero header (adduser/edituser/addredirect/editredirect) ──────── */
+html.lagom-dark-mode .sm-header{background:linear-gradient(135deg,#1a2733 0%,#2c3e50 100%);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+
+/* ── Code blocks dans le mode sombre ──────────────────────────────── */
+html.lagom-dark-mode .sm-card code,
+html.lagom-dark-mode .sm-mbox code{background:#1c1f24;color:#80cbc4;border-color:#3a3d44}
+
+/* ── Bouton webmail ───────────────────────────────────────────────── */
+html.lagom-dark-mode .sm-webmail-btn{background:#3949ab;color:#fff !important}
+html.lagom-dark-mode .sm-webmail-btn:hover{background:#5c6bc0}
+
+/* ── Lignes stats / infos (dashboard) ─────────────────────────────── */
+html.lagom-dark-mode .sm-stat-row,
+html.lagom-dark-mode .sm-info-row{border-bottom-color:#3a3d44}
+html.lagom-dark-mode .sm-stat-label,
+html.lagom-dark-mode .sm-info-label{color:#999}
+html.lagom-dark-mode .sm-stat-label i{color:#777}
+html.lagom-dark-mode .sm-stat-value,
+html.lagom-dark-mode .sm-info-value{color:#e0e0e0}
+
+/* ── Badges de statut (Active/Suspended/etc.) ─────────────────────── */
+html.lagom-dark-mode .sm-badge.success{background:rgba(102,187,106,.18);color:#81c784}
+html.lagom-dark-mode .sm-badge.warning{background:rgba(255,167,38,.18);color:#ffb74d}
+html.lagom-dark-mode .sm-badge.danger {background:rgba(239,83,80,.18);color:#e57373}
+html.lagom-dark-mode .sm-badge.info   {background:rgba(66,165,245,.18);color:#64b5f6}
+html.lagom-dark-mode .sm-badge.default{background:rgba(158,158,158,.18);color:#bdbdbd}
+
+/* ── Carte DNS : pills + bouton refresh (dashboard) ───────────────── */
+html.lagom-dark-mode .sm-dns-pill.ok     {background:rgba(102,187,106,.18);color:#81c784}
+html.lagom-dark-mode .sm-dns-pill.warn   {background:rgba(255,167,38,.18);color:#ffb74d}
+html.lagom-dark-mode .sm-dns-pill.err    {background:rgba(239,83,80,.18);color:#e57373}
+html.lagom-dark-mode .sm-dns-pill.na     {background:rgba(158,158,158,.18);color:#bdbdbd}
+html.lagom-dark-mode .sm-dns-pill.loading{background:rgba(66,165,245,.18);color:#64b5f6}
+html.lagom-dark-mode .sm-dns-refresh-btn{background:#1c1f24;border-color:#3a3d44;color:#d0d0d0}
+html.lagom-dark-mode .sm-dns-refresh-btn:hover{background:#252830;color:#fff;border-color:#5c6bc0}
+html.lagom-dark-mode .sm-dns-card-toggle{color:#999}
+html.lagom-dark-mode .sm-dns-explain{background:#1c1f24;border-bottom-color:#3a3d44;color:#aaa}
+html.lagom-dark-mode .sm-dns-explain i{color:#5c6bc0}
+html.lagom-dark-mode .sm-dns-checked-at{color:#777}
+
+/* ── Mini-cartes DNS (dashboard) ──────────────────────────────────── */
+html.lagom-dark-mode .sm-dns-mini{background:#2a2d34;border-color:#3a3d44}
+html.lagom-dark-mode .sm-dns-mini.sm-dns-mini-ok  {border-left-color:#66bb6a}
+html.lagom-dark-mode .sm-dns-mini.sm-dns-mini-warn{border-left-color:#ffa726}
+html.lagom-dark-mode .sm-dns-mini.sm-dns-mini-err {border-left-color:#ef5350}
+html.lagom-dark-mode .sm-dns-mini.sm-dns-mini-na  {border-left-color:#616161}
+html.lagom-dark-mode .sm-dns-mini-title{color:#e0e0e0}
+html.lagom-dark-mode .sm-dns-mini-title i{color:#999}
+html.lagom-dark-mode .sm-dns-mini-ok   .sm-dns-mini-status{color:#81c784}
+html.lagom-dark-mode .sm-dns-mini-warn .sm-dns-mini-status{color:#ffb74d}
+html.lagom-dark-mode .sm-dns-mini-err  .sm-dns-mini-status{color:#e57373}
+html.lagom-dark-mode .sm-dns-mini-na   .sm-dns-mini-status{color:#bdbdbd}
+html.lagom-dark-mode .sm-dns-mini-body{color:#bdbdbd}
+html.lagom-dark-mode .sm-dns-mini-line code{background:#1c1f24;color:#80cbc4}
+html.lagom-dark-mode .sm-dns-mini-note{color:#999}
+html.lagom-dark-mode .sm-dns-sub-icon.ok i{color:#81c784}
+html.lagom-dark-mode .sm-dns-sub-icon.err i{color:#e57373}
+html.lagom-dark-mode .sm-dns-btn{background:#1c1f24;border-color:#3a3d44;color:#d0d0d0}
+html.lagom-dark-mode .sm-dns-btn:hover{background:#252830;color:#fff}
+html.lagom-dark-mode .sm-dns-btn.ok{color:#81c784;border-color:#388e3c}
+html.lagom-dark-mode .sm-dns-btn.err{color:#e57373;border-color:#c62828}
+html.lagom-dark-mode .sm-dns-btn.standby{color:#ffb74d;border-color:#e65100}
+
+/* ── DNS status indicators (textes inline) ────────────────────────── */
+html.lagom-dark-mode .sm-dns-ok     {color:#81c784}
+html.lagom-dark-mode .sm-dns-err    {color:#e57373}
+html.lagom-dark-mode .sm-dns-standby{color:#ffb74d}
+html.lagom-dark-mode .sm-dns-na     {color:#9e9e9e}
+
+/* ── Modales (toutes) ─────────────────────────────────────────────── */
+html.lagom-dark-mode .sm-mbox{background:#2a2d34;box-shadow:0 8px 32px rgba(0,0,0,.6)}
+html.lagom-dark-mode .sm-mhead{background:#1f2228;border-bottom-color:#3a3d44;color:#e0e0e0}
+html.lagom-dark-mode .sm-mhead h4{color:#e0e0e0}
+html.lagom-dark-mode .sm-mclose{color:#bdbdbd}
+html.lagom-dark-mode .sm-mclose:hover{color:#fff}
+html.lagom-dark-mode .sm-mbody{color:#d0d0d0}
+html.lagom-dark-mode .sm-mfoot{border-top-color:#3a3d44;background:#1f2228}
+html.lagom-dark-mode .sm-mlabel{color:#bdbdbd}
+/* Variantes colorées des en-têtes de modale — assombries */
+html.lagom-dark-mode .sm-mhead.dark  {background:#0d1419}
+html.lagom-dark-mode .sm-mhead.green {background:#0d3a10}
+html.lagom-dark-mode .sm-mhead.red   {background:#5d0e0e}
+html.lagom-dark-mode .sm-mhead.orange{background:#5d2900}
+html.lagom-dark-mode .sm-mhead.pwd   {background:#0d3a10}
+
+/* ── Inputs / textareas / selects ─────────────────────────────────── */
+html.lagom-dark-mode .sm-record-wrap textarea,
+html.lagom-dark-mode .sm-record-wrap input[type="text"]{
+  background:#1c1f24;color:#80cbc4;border-color:#3a3d44;
+}
+html.lagom-dark-mode .sm-record-wrap .sm-copy-btn{background:#1c1f24;border-color:#3a3d44;color:#d0d0d0}
+html.lagom-dark-mode .sm-record-wrap .sm-copy-btn:hover{background:#252830}
+html.lagom-dark-mode .sm-mbox input[type="text"],
+html.lagom-dark-mode .sm-mbox input[type="password"],
+html.lagom-dark-mode .sm-mbox input[type="number"],
+html.lagom-dark-mode .sm-mbox input[type="email"],
+html.lagom-dark-mode .sm-mbox select,
+html.lagom-dark-mode .sm-mbox textarea{
+  background:#1c1f24 !important;color:#e0e0e0 !important;border-color:#3a3d44 !important;
+}
+/* Alertes info / warn dans modales */
+html.lagom-dark-mode .sm-info-alert{background:rgba(66,165,245,.12);border-color:#1565c0;color:#90caf9}
+html.lagom-dark-mode .sm-warn-alert{background:rgba(255,167,38,.12);border-color:#e65100;color:#ffb74d}
+
+/* ── Carte d'enregistrement dans modales ──────────────────────────── */
+html.lagom-dark-mode .sm-record-card{background:#2a2d34;border-color:#3a3d44}
+html.lagom-dark-mode .sm-record-card-head{background:#1f2228;border-bottom-color:#3a3d44;color:#e0e0e0}
+html.lagom-dark-mode .sm-record-card-head .sm-rc-state.ok {color:#81c784}
+html.lagom-dark-mode .sm-record-card-head .sm-rc-state.err{color:#e57373}
+
+/* ── Bulle (i) d'aide ─────────────────────────────────────────────── */
+html.lagom-dark-mode .sm-help-i{background:#3a3d44;color:#bdbdbd}
+html.lagom-dark-mode .sm-help-i:hover{background:#5c6bc0;color:#fff}
+html.lagom-dark-mode .sm-help-i.dark{background:rgba(255,255,255,.2);color:#fff}
+
+/* ── Tableau des comptes (dashboard) ──────────────────────────────── */
+html.lagom-dark-mode .sm-table-wrap{border-color:#3a3d44}
+html.lagom-dark-mode .sm-list-header{background:#1f2228;border-bottom-color:#3a3d44;color:#e0e0e0}
+html.lagom-dark-mode .sm-list-header,
+html.lagom-dark-mode .sm-user-row{border-bottom-color:#2a2d34}
+html.lagom-dark-mode .sm-user-row:hover{background:#252830}
+html.lagom-dark-mode .sm-col-size{color:#bdbdbd}
+html.lagom-dark-mode .sm-sort-btn{color:#bdbdbd}
+html.lagom-dark-mode .sm-sort-btn:hover{color:#fff;background:#252830}
+html.lagom-dark-mode .sm-sort-icon{color:#666}
+html.lagom-dark-mode .sm-sort-btn.active,
+html.lagom-dark-mode .sm-sort-btn.active .sm-sort-icon{color:#7986cb}
+html.lagom-dark-mode .sm-tag    {background:rgba(92,107,192,.2);color:#9fa8da}
+html.lagom-dark-mode .sm-tag-fwd{background:rgba(102,187,106,.18);color:#81c784}
+html.lagom-dark-mode .sm-empty  {color:#555}
+html.lagom-dark-mode .sm-no-results{color:#777}
+html.lagom-dark-mode .sm-proto-badge.eas {background:rgba(102,187,106,.18);color:#81c784}
+html.lagom-dark-mode .sm-proto-badge.mapi{background:rgba(92,107,192,.2);color:#9fa8da}
+
+/* ── Toolbar (recherche + filtres) ────────────────────────────────── */
+html.lagom-dark-mode .sm-toolbar-search label,
+html.lagom-dark-mode .sm-toolbar-right label{color:#999}
+html.lagom-dark-mode .sm-toolbar-search input,
+html.lagom-dark-mode .sm-toolbar-right select{background:#1c1f24;color:#e0e0e0;border-color:#3a3d44}
+
+/* ── Pagination ───────────────────────────────────────────────────── */
+html.lagom-dark-mode .sm-page-btn{background:#1c1f24;color:#d0d0d0;border-color:#3a3d44}
+html.lagom-dark-mode .sm-page-btn:hover:not([disabled]):not(.active){background:#252830}
+html.lagom-dark-mode .sm-page-btn.active{background:#5c6bc0;color:#fff;border-color:#5c6bc0}
+html.lagom-dark-mode .sm-page-ellipsis{color:#666}
+
+/* ── Boutons standardisés ─────────────────────────────────────────── */
+html.lagom-dark-mode .sm-btn-add{background:#1c1f24;border-color:#5c6bc0;color:#9fa8da}
+html.lagom-dark-mode .sm-btn-add:hover{background:#5c6bc0;color:#fff}
+html.lagom-dark-mode .sm-btn-cancel{background:#1c1f24;color:#bdbdbd;border-color:#3a3d44}
+html.lagom-dark-mode .sm-btn-cancel:hover{background:#252830;color:#fff}
+html.lagom-dark-mode .sm-btn-create{background:#555}
+html.lagom-dark-mode .sm-btn-create.ready{background:#388e3c}
+html.lagom-dark-mode .sm-btn-create.ready:hover{background:#2e7d32}
+html.lagom-dark-mode .sm-btn-del{background:#1c1f24;color:#ef5350;border-color:#c62828}
+html.lagom-dark-mode .sm-btn-del:hover{background:#5d0e0e;color:#fff}
+html.lagom-dark-mode .sm-btn-pwd{background:#ed8b00}
+html.lagom-dark-mode .sm-btn-pwd:hover{background:#bf6500}
+html.lagom-dark-mode .sm-btn-save{background:#555;color:#fff}
+html.lagom-dark-mode .sm-btn-save.dirty{background:#2e7d32;box-shadow:0 0 0 3px rgba(102,187,106,.35)}
+html.lagom-dark-mode .sm-btn-save.dirty:hover{background:#1b5e20}
+html.lagom-dark-mode .sm-btn-setpwd{background:#ed8b00}
+html.lagom-dark-mode .sm-btn-setpwd:hover{background:#bf6500}
+
+/* ── Toggle DKIM ──────────────────────────────────────────────────── */
+html.lagom-dark-mode .sm-toggle-btn{background:#3a3d44}
+html.lagom-dark-mode .sm-toggle-btn.active{background:#388e3c}
+
+/* ── Alias de domaine ─────────────────────────────────────────────── */
+html.lagom-dark-mode .sm-da-pill{background:rgba(92,107,192,.2);color:#9fa8da;border-color:#3a3d44}
+html.lagom-dark-mode .sm-da-pill-x{color:#9fa8da}
+html.lagom-dark-mode .sm-da-pill-x:hover{color:#fff}
+html.lagom-dark-mode .sm-da-empty{color:#777}
+html.lagom-dark-mode .sm-da-del-name{background:#1c1f24;color:#e0e0e0}
+html.lagom-dark-mode .sm-da-del-warn{background:rgba(255,167,38,.12);color:#ffb74d;border-color:#e65100}
+
+/* ── Tooltips ─────────────────────────────────────────────────────── */
+html.lagom-dark-mode .sm-tooltip-bubble{background:#0d1419;color:#e0e0e0}
+html.lagom-dark-mode .sm-tooltip-bubble::before{border-bottom-color:#0d1419}
+html.lagom-dark-mode .sm-tooltip-trigger{color:#777}
+html.lagom-dark-mode .sm-tooltip-trigger:hover{color:#bdbdbd}
+
+/* ── Liens guide DNS / billing detail ─────────────────────────────── */
+html.lagom-dark-mode .sm-dns-guide-link{color:#7986cb}
+html.lagom-dark-mode .sm-dns-guide-link:hover{color:#9fa8da}
+html.lagom-dark-mode .sm-billing-detail-btn{color:#7986cb}
+html.lagom-dark-mode .sm-billing-detail-btn:hover{color:#9fa8da}
+html.lagom-dark-mode .sm-billing-detail-line .sm-bd-email,
+html.lagom-dark-mode .sm-billing-detail-line .sm-bd-price{color:#e0e0e0}
+html.lagom-dark-mode .sm-billing-detail-line .sm-bd-range{color:#999}
+
+/* ── Pages secondaires (adduser/edituser/addredirect/editredirect) ── */
+html.lagom-dark-mode .sm-back{color:#999}
+html.lagom-dark-mode .sm-back:hover{color:#7986cb}
+html.lagom-dark-mode .sm-actions{background:#1f2228;border-color:#3a3d44}
+/* Pills d'alias et de forward (adduser/edituser) */
+html.lagom-dark-mode .sm-pill    {background:rgba(92,107,192,.2);color:#9fa8da}
+html.lagom-dark-mode .sm-pill.fwd{background:rgba(102,187,106,.18);color:#81c784}
+html.lagom-dark-mode .sm-pill-x{color:inherit;opacity:.7}
+html.lagom-dark-mode .sm-pill-x:hover{opacity:1}
+html.lagom-dark-mode .sm-pills-empty{color:#777}
+/* Form labels et hints (adduser/edituser) */
+html.lagom-dark-mode .sm-form-label{color:#bdbdbd}
+html.lagom-dark-mode .sm-form-hint {color:#777}
+html.lagom-dark-mode .sm-chk-row label{color:#d0d0d0}
+/* Bouton (i) info dans adduser */
+html.lagom-dark-mode .sm-info-btn{background:#3a3d44;color:#bdbdbd}
+html.lagom-dark-mode .sm-info-btn:hover{background:#5c6bc0;color:#fff}
+/* Champ email avec suffixe @domaine.com (adduser) */
+html.lagom-dark-mode .sm-email-row input{background:#1c1f24;color:#e0e0e0;border-color:#3a3d44}
+html.lagom-dark-mode .sm-email-row input:focus{border-color:#5c6bc0}
+html.lagom-dark-mode .sm-email-suffix{background:#1f2228;color:#bdbdbd;border-color:#3a3d44}
+/* Statut "mot de passe défini" (adduser) */
+html.lagom-dark-mode .sm-pwd-status{background:#1c1f24;color:#999;border-color:#3a3d44}
+html.lagom-dark-mode .sm-pwd-status.set{background:rgba(102,187,106,.12);color:#81c784;border-color:#388e3c}
+/* Options de forward (adduser) */
+html.lagom-dark-mode .sm-fwd-opts{color:#bdbdbd}
+/* Encadré prix (adduser) */
+html.lagom-dark-mode .sm-price-box{background:#1c1f24;border-color:#3a3d44;color:#bdbdbd}
+html.lagom-dark-mode .sm-proto-billing-notice{color:#999}
+/* Critères mot de passe (adduser/edituser) */
+html.lagom-dark-mode .sm-pwd-crit li{color:#999}
+html.lagom-dark-mode .sm-pwd-crit li.ok{color:#81c784}
+/* Barre de progression (edituser — usage de la boîte) */
+html.lagom-dark-mode .sm-progress{background:rgba(255,255,255,.1)}
+html.lagom-dark-mode .sm-progress-bar.low {background:#66bb6a}
+html.lagom-dark-mode .sm-progress-bar.mid {background:#ffa726}
+html.lagom-dark-mode .sm-progress-bar.high{background:#ef5350}
+/* Avertissement de suppression (edituser) */
+html.lagom-dark-mode .sm-del-warn{background:rgba(239,83,80,.12);color:#e57373;border-color:#c62828}

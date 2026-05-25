@@ -81,6 +81,7 @@
 .sm-minput-full:focus{border-color:#2e7d32;outline:none}
 .sm-merr{color:#e74c3c;font-size:12px;margin-top:6px;display:none}
 {/literal}
+{* Dark mode + fix <code> : injectés via hook (voir hooks.php). *}
 </style>
 
 {* ── Lien retour ─────────────────────────────────────────────────────── *}

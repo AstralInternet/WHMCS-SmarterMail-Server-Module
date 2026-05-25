@@ -127,6 +127,91 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
   `tblpaymentgateways.value` (setting=`name`), puis `ucfirst` du slug brut.
   Libellés stockés dans les fichiers de langue (`pm_credit_card`).
 
+### Corrigé
+
+- **Tag `<code>` rendu en rouge « erreur »** par certains thèmes WHMCS
+  (notamment Lagom, `rgb(199, 37, 78)` sur fond beige) dans le tableau de
+  bord client. Le client pouvait croire qu'il s'agissait d'un message
+  d'erreur alors que le `<code>` ne sert qu'à afficher une valeur DNS,
+  un nom d'hôte, etc. Remplacé par un bleu indigo cohérent avec l'accent
+  du module (`#3949ab`), sur fond gris très clair (`#f7f8fa`). Scope
+  limité à `.sm-card code` et `.sm-mbox code` pour ne pas affecter
+  d'autres modules WHMCS partageant la page.
+
+- **Mots de passe contenant des caractères HTML spéciaux (`&`, `<`, `>`, `"`, `'`)**
+  étaient envoyés à SmarterMail sous leur forme HTML-encodée (`foo&bar` →
+  `foo&amp;bar`), ce qui rendait impossible la connexion ultérieure avec le
+  mot de passe original. Cause probable : WHMCS applique une couche de
+  sanitization HTML sur les champs `$params['password']`, `$params['serverpassword']`
+  et potentiellement `$_POST['password']` selon la configuration anti-XSS
+  active.
+
+  **Fix** : nouveau helper `_sm_decodePassword()` (appliquant
+  `html_entity_decode($pwd, ENT_QUOTES | ENT_HTML5, 'UTF-8')` + `trim`) inséré
+  à tous les points d'entrée :
+  - `_sm_initDomainAdmin` (auth DA via `$params['password']`)
+  - `_sm_initApi` → `loginSysAdminFromParams` (auth SA via `$params['serverpassword']`)
+  - `smartermail_CreateAccount` (mot de passe admin secret)
+  - `smartermail_ChangePassword` (changement admin via WHMCS Admin)
+  - `smartermail_savepassword` (changement par le client dans l'espace client)
+  - `smartermail_createuser` (création de boîte)
+  - `smartermail_saveuser` (modification de boîte + changement de mot de passe)
+
+  Le helper est **idempotent** — `html_entity_decode` sur une chaîne déjà
+  brute est un no-op, donc aucun risque de double-décodage si WHMCS cesse
+  un jour d'encoder.
+
+- **Nom complet (`fullName`) contenant `&`, apostrophe ou guillemets**
+  pouvait subir le même problème (« O'Brien » → « O&#039;Brien »). Même
+  fix appliqué dans `smartermail_saveuser` : la chaîne passe désormais par
+  `strip_tags → html_entity_decode → trim → mb_substr(0, 100)`.
+
+### Ajouté (suite)
+
+- **Mode sombre Lagom (`html.lagom-dark-mode`)** : le tableau de bord client
+  s'adapte automatiquement quand l'utilisateur active le mode sombre depuis
+  la barre supérieure du thème Lagom. Couverture exhaustive de tous les
+  composants de la dashboard :
+  - Cartes (Stats, Info service, DNS, Comptes courriel, Alias de domaine)
+  - Mini-cartes DNS (SPF/DKIM/Autodiscover/DMARC) + 4 pills + bouton refresh
+  - Modales (Autodiscover, DMARC, DMARC Builder, SPF, DKIM, guide DNS,
+    facturation, mot de passe, alias)
+  - Tableaux + pagination + boutons + toggle DKIM + tooltips
+  - Inputs, textareas, selects (forcés en `#1c1f24` / `#e0e0e0` via `!important`
+    pour neutraliser les styles Bootstrap inline)
+  - Code blocks → bleu teal (`#80cbc4`) sur fond très sombre pour distinguer
+    visuellement du rouge "erreur"
+  - Badges de statut et étiquettes (Active/Suspended/etc., EAS/MAPI, alias)
+    avec arrière-plans translucides pour conserver la lisibilité
+  - Variantes colorées des en-têtes de modale (`.sm-mhead.dark/.green/.red/.orange`)
+    assombries pour préserver le contraste avec le texte blanc.
+
+  **Architecture : injection PHP via hook** : toutes les règles dark mode
+  + le fix `<code>` sont stockées dans un fichier CSS unique
+  `templates/_sm_dark_mode.css`. Un nouveau hook `ClientAreaHeadOutput`
+  (`hooks.php`) injecte ce CSS dans le `<head>` de toutes les pages
+  `clientarea.php?action=productdetails` dont le service appartient au
+  module `smartermail` (vérifié via JOIN sur `tblservers.type`). Avantages :
+  - Source unique (un seul fichier à modifier pour les futures évolutions)
+  - Aucun chemin Smarty fragile (`{include}` cross-module ne fonctionne pas
+    de façon fiable dans le contexte clientarea WHMCS)
+  - Injection automatique sur toutes les pages du module (dashboard +
+    pages secondaires) sans modification des templates
+  - Aucune injection sur les services d'autres modules (filtre `serverType`)
+
+  **Couverture pages secondaires** : règles spécifiques aux pages d'édition
+  ajoutées au partial — `.sm-back`, `.sm-header` (hero gradient),
+  `.sm-actions`, `.sm-pill`/`.sm-pill.fwd` (alias et forwards),
+  `.sm-form-label`/`.sm-form-hint`, `.sm-chk-row label`, `.sm-info-btn`,
+  `.sm-email-row`/`.sm-email-suffix`, `.sm-pwd-status`/`.sm-btn-setpwd`,
+  `.sm-fwd-opts`, `.sm-price-box`, `.sm-pwd-crit`, `.sm-progress`,
+  `.sm-del-warn`, `.sm-btn-pwd`/`.sm-btn-save`.
+
+  **Correction** : la classe `.sm-dns-card-header` (utilisée dans la
+  carte DNS de la dashboard, en plus de `.sm-card-header`) avait été
+  oubliée — l'en-tête de la carte DNS restait gris clair en mode sombre.
+  Maintenant inclus dans le partial.
+
 ### Modifié
 
 - **Repositionnement de la carte "Alias de domaine"** : déplacée de sous le

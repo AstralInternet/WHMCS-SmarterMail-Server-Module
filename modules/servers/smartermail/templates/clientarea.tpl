@@ -577,7 +577,14 @@
 .sm-tooltip-bubble.visible{display:block}
 .sm-tooltip-trigger{color:#90a4ae;cursor:pointer;font-size:12px;transition:color .12s}
 .sm-tooltip-trigger:hover{color:#546e7a}
+
 {/literal}
+{*
+ * Le mode sombre Lagom + le fix <code> sont injectés dans <head> via
+ * le hook ClientAreaHeadOutput (voir hooks.php → _sm_injectDarkModeCss).
+ * Source unique : templates/_sm_dark_mode.css. Aucune duplication par
+ * template, aucun chemin Smarty fragile.
+ *}
 </style>
 
 {* ── En-tête domaine ─────────────────────────────────────────────────── *}

@@ -483,7 +483,18 @@ class SmarterMailApi
      */
     public function loginSysAdminFromParams(array $params): ?string
     {
-        return $this->loginSysAdmin($params['serverusername'], $params['serverpassword']);
+        // html_entity_decode : WHMCS applique parfois une couche de
+        // sanitization HTML aux champs $params, ce qui transforme par
+        // exemple « foo&bar » en « foo&amp;bar » dans serverpassword.
+        // Sans ce decode, l'authentification SA échoue silencieusement
+        // chaque fois que le mot de passe contient un caractère spécial
+        // HTML (& < > " '). No-op si la chaîne est déjà brute.
+        $password = html_entity_decode(
+            (string) ($params['serverpassword'] ?? ''),
+            ENT_QUOTES | ENT_HTML5,
+            'UTF-8'
+        );
+        return $this->loginSysAdmin($params['serverusername'] ?? '', $password);
     }
 
 

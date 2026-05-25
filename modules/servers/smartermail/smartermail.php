@@ -790,6 +790,43 @@ function _sm_checkCsrf(): bool
     return $ok;
 }
 
+/**
+ * Décode les entités HTML d'un mot de passe lu depuis $params ou $_POST.
+ *
+ * POURQUOI :
+ *   WHMCS applique parfois une couche de sanitization HTML sur les champs
+ *   passés aux hooks de modules (notamment $params['password'] et
+ *   $params['serverpassword']). Résultat : un mot de passe contenant
+ *   « foo&bar » devient « foo&amp;bar », « foo<bar » devient « foo&lt;bar »,
+ *   etc. Si on l'envoie tel quel à SmarterMail, le compte sera créé/
+ *   modifié avec la version encodée — le client ne pourra plus se connecter
+ *   avec son mot de passe original.
+ *
+ *   Le formulaire de l'espace client (clientarea.php) peut aussi être
+ *   sujet à ce comportement selon la configuration WHMCS (anti-XSS
+ *   middleware), donc on applique le même traitement à $_POST['password']
+ *   par précaution — html_entity_decode sur une chaîne sans entités
+ *   est un no-op, donc aucun risque de double-décodage.
+ *
+ * CARACTÈRES COUVERTS :
+ *   - &amp;  → &
+ *   - &lt;   → <
+ *   - &gt;   → >
+ *   - &quot; → "
+ *   - &#039; / &apos; → '
+ *   - autres entités numériques et nommées HTML5
+ *
+ * @param  string $pwd Mot de passe potentiellement encodé HTML
+ * @return string      Mot de passe brut (entités décodées + trim)
+ */
+function _sm_decodePassword(string $pwd): string
+{
+    // ENT_QUOTES gère les apostrophes simples et doubles.
+    // ENT_HTML5 reconnaît un plus grand jeu d'entités nommées.
+    // UTF-8 explicite pour éviter les surprises selon la locale serveur.
+    return trim(html_entity_decode($pwd, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+}
+
 function _sm_randomUsername(int $length = 10): string
 {
     $chars  = 'abcdefghijklmnopqrstuvwxyz';
@@ -1003,7 +1040,9 @@ function _sm_initDomainAdmin(array $params): array
     // On normalise en minuscules pour cohérence avec _sm_randomUsername() et éviter
     // les échecs d'authentification causés par des majuscules saisies manuellement.
     $daUser = strtolower(trim($params['username'] ?? ''));
-    $daPass = trim($params['password'] ?? '');
+    // _sm_decodePassword : neutralise l'encodage HTML appliqué par WHMCS
+    // sur $params['password'] (sinon « foo&bar » → « foo&amp;bar » → login KO).
+    $daPass = _sm_decodePassword((string) ($params['password'] ?? ''));
 
     // ── Étape 1 : Connexion SA ───────────────────────────────────
     $saToken = $api->loginSysAdminFromParams($params);
@@ -1380,7 +1419,9 @@ function smartermail_CreateAccount(array $params): string
     // strtolower() appliqué immédiatement : si un admin a saisi "AdminUser"
     // manuellement dans WHMCS, on normalise ici avant tout traitement.
     $adminUser = strtolower(trim($params['username'] ?? ''));
-    $adminPass = trim($params['password'] ?? '');
+    // _sm_decodePassword : voir helper ; corrige les entités HTML que WHMCS
+    // pourrait avoir appliquées (& → &amp;, < → &lt;, etc.).
+    $adminPass = _sm_decodePassword((string) ($params['password'] ?? ''));
 
     // Indique si les credentials ont été modifiés → déclenche la mise à jour WHMCS
     $credentialsUpdated = false;
@@ -1745,7 +1786,10 @@ function smartermail_ChangePassword(array $params): string
     // strtolower() pour cohérence — SmarterMail stocke les usernames en minuscules
     $username = strtolower(trim($params['username'] ?? ''));
     $domain   = $params['domain'];
-    $password = $params['password'];
+    // _sm_decodePassword : décode les entités HTML potentiellement appliquées
+    // par WHMCS sur $params['password'] (cas typique : « foo&bar » devient
+    // « foo&amp;bar » côté admin WHMCS lors d'un changement manuel).
+    $password = _sm_decodePassword((string) ($params['password'] ?? ''));
 
     // ── Validation : username présent ─────────────────────────────────────
     // Sans username, on ne peut pas identifier le compte DA à modifier dans WHMCS.
@@ -3615,7 +3659,9 @@ function smartermail_createuser(array $params): string
 
     // ── Lecture et validation des entrées ─────────────────────────────────
     $username = strtolower(trim($_POST['username'] ?? ''));
-    $password = trim($_POST['password'] ?? '');
+    // _sm_decodePassword : voir helper. Préserve les caractères spéciaux
+    // (&, <, >, ", ') que WHMCS pourrait avoir HTML-encodés.
+    $password = _sm_decodePassword((string) ($_POST['password'] ?? ''));
     $sizeMB   = max(0, min(1048576, (int) ($_POST['mailboxsize_mb'] ?? 0))); // max 1 To
 
     if ($username === '') {
@@ -3908,7 +3954,9 @@ function smartermail_savepassword(array $params): string
     if (isset($init['error'])) return $init['error'];
 
     $username = trim($_POST['selectuser'] ?? '');
-    $password = trim($_POST['password']   ?? '');
+    // _sm_decodePassword : par précaution sur $_POST aussi (au cas où un
+    // middleware anti-XSS WHMCS encoderait les entrées). No-op si déjà brut.
+    $password = _sm_decodePassword((string) ($_POST['password'] ?? ''));
 
     if ($username === '' || !preg_match('/^[a-z0-9._\-]+$/i', $username)) {
         $l = _sm_lang($params); return $l['err_user_required'] ?? 'Utilisateur non spécifié ou invalide.';
@@ -3981,11 +4029,26 @@ function smartermail_saveuser(array $params): string
     $sizeMB = max(0, min(1048576, (int) ($_POST['mailboxsize_mb'] ?? 0))); // max 1 To (1 048 576 MB)
 
     // ── Profil utilisateur ────────────────────────────────────────────────
+    // fullName : ordre des transformations volontaire :
+    //   1. strip_tags    → retire les balises HTML injectées (<script>, etc.)
+    //   2. html_entity_decode → restaure les caractères réels (« O&#039;Brien »
+    //      → « O'Brien », « Café & Cie » → « Café & Cie ») au cas où WHMCS
+    //      ou un middleware aurait encodé les entrées en transit.
+    //   3. trim          → retire les espaces autour
+    //   4. mb_substr     → limite à 100 caractères (limite SmarterMail)
     $userData = [
-        'fullName'        => mb_substr(trim(strip_tags($_POST['fullname'] ?? '')), 0, 100),
+        'fullName' => mb_substr(
+            trim(html_entity_decode(
+                strip_tags($_POST['fullname'] ?? ''),
+                ENT_QUOTES | ENT_HTML5,
+                'UTF-8'
+            )),
+            0, 100
+        ),
         'maxMailboxSize'  => $sizeMB > 0 ? $sizeMB * 1024 * 1024 : 0,
     ];
-    $newPassword = trim($_POST['password'] ?? '');
+    // _sm_decodePassword : empêche & → &amp; (ou autres entités) côté serveur
+    $newPassword = _sm_decodePassword((string) ($_POST['password'] ?? ''));
     if ($newPassword !== '') {
         if (strlen($newPassword) < (int) ($params['configoption9'] ?? 6)) {
             // Vérification rapide de longueur — sans sprintf car configoption9 non chargé ici
