@@ -10,6 +10,109 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.2.1] - 2026-06-04
+
+### Corrigé
+
+#### « Token DA absent » → suppléments EAS/MAPI non facturés en production
+
+- **Symptôme** : après déploiement de la 1.2.0, le hook journalisait
+  `[UpdateInvoice] OK … + 0 ligne(s) EAS/MAPI` accompagné de `Token DA absent —
+  Phase 2 live ignorée`. La ligne disque se facturait correctement, mais aucune
+  ligne EAS/MAPI n'était ajoutée pour les boîtes facturées via la **Phase 2
+  (fallback live API)**.
+
+- **Cause** : le hook `InvoiceCreation` authentifiait le SysAdmin SmarterMail
+  avec `decrypt($service->serverpassword)` **sans** `html_entity_decode`,
+  contrairement au reste du module (`loginSysAdminFromParams`,
+  `_sm_decodePassword`). Quand le mot de passe SA contient un caractère HTML
+  (`&`, `<`, `>`, `"`, `'`), WHMCS le stocke encodé (`p&ss` → `p&amp;ss`) : la
+  forme brute fait échouer l'authentification SA → aucun token Domain Admin →
+  Phase 2 ignorée. Le `SmarterMailMetricsProvider` fonctionnait déjà (d'où des
+  statistiques disque correctes) **car il applique `html_entity_decode`** via
+  `loginSysAdminFromParams` — d'où l'asymétrie qui a permis d'isoler la cause.
+
+- **Correctif** : le hook applique désormais
+  `html_entity_decode(decrypt(...), ENT_QUOTES | ENT_HTML5, 'UTF-8')` au mot de
+  passe serveur avant le login SA, alignant le hook sur le reste du module.
+  Opération **idempotente** (no-op si le mot de passe est déjà brut).
+
+### Outils
+
+- Ajout de `tools/diag_billing.php` — script de diagnostic **lecture seule**
+  (CLI) qui vérifie, sur un serveur de production, tous les points de
+  défaillance de la facturation EAS/MAPI : version WHMCS, code réellement
+  déployé, OPcache, compte admin `localAPI` + permission factures, connexion API
+  SmarterMail (test du mot de passe **brut** et **décodé** pour isoler le
+  problème d'encodage), état de `mod_sm_proto_usage`, puis un **verdict** ciblé.
+  À supprimer après usage.
+
+---
+
+## [1.2.0] - 2026-06-04
+
+### Corrigé
+
+#### Facturation EAS/MAPI absente sur WHMCS 9.0 (régression majeure)
+
+- **Symptôme** : après la migration vers **WHMCS 9.0**, les lignes de
+  supplément **ActiveSync (EAS)** et **MAPI/Exchange** n'apparaissaient plus
+  sur les factures clients. La ligne principale (disque, facturée à la tranche)
+  restait correcte.
+
+- **Cause** : WHMCS 9.0 a introduit l'**immutabilité des factures** (*« non-Draft
+  invoices are immutable »*). Le hook `InvoiceCreation` écrivait les lignes
+  directement dans `tblinvoiceitems` en **SQL brut** (`Capsule::insert/delete`)
+  puis mettait à jour `tblinvoices.total` à la main. En 9.0, WHMCS **finalise et
+  recalcule la facture après le hook** via sa couche modèle : il conserve la
+  ligne `Hosting` (reconnue, `type='Hosting'`/`relid=<serviceid>`) mais
+  **élimine les lignes « orphelines »** insérées en SQL brut
+  (`type=''`/`relid=0`) — précisément les lignes EAS/MAPI. Le `total` recalculé
+  par WHMCS écrasait aussi le total écrit manuellement.
+
+- **Correctif** : le hook `InvoiceCreation` passe désormais par l'**API
+  officielle `UpdateInvoice`** (LocalAPI) au lieu de toute écriture SQL directe :
+  - Ligne disque modifiée **en place** via `itemdescription` / `itemamount` /
+    `itemtaxed` (indexés par `lineItemId`) — préserve `type='Hosting'` et
+    `relid`, donc le renouvellement du service reste correct.
+  - Lignes EAS/MAPI **ajoutées** via `newitemdescription` / `newitemamount` /
+    `newitemtaxed` — WHMCS les conserve comme items légitimes.
+  - **Total recalculé automatiquement** par WHMCS (la fonction
+    `_sm_recalculerTotalFacture()`, qui écrivait `tblinvoices.total` en direct,
+    est supprimée).
+  - L'appel `localAPI` s'exécute avec un **compte administrateur actif** (helper
+    `_sm_getAdminUsername()`) et **journalise systématiquement son résultat**
+    (succès *et* échec) dans `Configuration → Journal d'activité` — aucune
+    défaillance silencieuse possible (contrairement au SQL brut).
+
+### Modifié
+
+- **Phase 1 (suivi `mod_sm_proto_usage`) découplée de l'API** : la facturation
+  des suppléments **tracés** est désormais appliquée **même si le serveur
+  SmarterMail est injoignable** au moment de la génération de la facture.
+  Auparavant, l'absence de token Domain Admin faisait sauter *toute* la
+  facturation EAS/MAPI (Phase 1 incluse), alors que la Phase 1 ne lit que la
+  base de données. La **Phase 2** (fallback live API) reste, elle, conditionnée
+  à la connexion API et est simplement ignorée (avec journalisation) si le
+  token DA est absent.
+
+- **Point de sortie unique** dans le hook : suppression des `continue`
+  prématurés ; toutes les écritures sont accumulées dans un payload appliqué en
+  **un seul appel `UpdateInvoice` par service**.
+
+### Compatibilité
+
+- Module **compatible WHMCS 9.0+** (en plus de 8.x). Le hook `InvoiceCreation`
+  reste le point d'entrée ; seule la **méthode d'écriture** des lignes change.
+
+### Migration
+
+- **Aucune action manuelle requise** au déploiement. Le correctif prend effet à
+  la prochaine génération de factures. Les factures **déjà émises** avant la
+  mise à jour ne sont pas rétroactivement corrigées (factures immuables en 9.0).
+
+---
+
 ## [1.1.0] - 2026-04-29
 
 ### Ajouté

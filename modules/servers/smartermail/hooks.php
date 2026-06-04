@@ -197,6 +197,43 @@ function _sm_hookLang(): array
 
 
 // =============================================================================
+//  FONCTION UTILITAIRE : Compte administrateur pour localAPI
+// =============================================================================
+
+/**
+ * Retourne le username d'un administrateur WHMCS actif, requis comme contexte
+ * d'exécution par localAPI() (notamment pour UpdateInvoice).
+ *
+ * On sélectionne le plus ancien administrateur non désactivé (id le plus bas =
+ * généralement le super-administrateur principal), qui dispose des permissions
+ * complètes. Le résultat est mis en cache statique pour toute la durée du cron.
+ *
+ * @return string Username admin, ou '' si aucun admin actif n'est trouvé
+ *                (dans ce cas l'appelant journalise et n'effectue pas l'appel API).
+ */
+function _sm_getAdminUsername(): string
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    try {
+        $username = Capsule::table('tbladmins')
+            ->where('disabled', 0)
+            ->orderBy('id')
+            ->value('username');
+        $cached = (string) ($username ?? '');
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [getAdminUsername] EXCEPTION : ' . $e->getMessage());
+        $cached = '';
+    }
+
+    return $cached;
+}
+
+
+// =============================================================================
 //  HOOK : InvoiceCreated — Facturation dynamique
 // =============================================================================
 
@@ -335,15 +372,29 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         $saToken = null;
         $daToken = null;
         try {
+            // ⚠️  DÉCODAGE DU MOT DE PASSE SERVEUR (cohérence avec le reste du module)
+            // WHMCS applique parfois une couche de sanitization HTML aux identifiants
+            // serveur : un mot de passe SA contenant & < > " ' est alors stocké encodé
+            // (ex: « p&ss » → « p&amp;ss »). Le decrypt() brut renvoie cette forme
+            // encodée → l'authentification SA échoue silencieusement → pas de token DA
+            // (symptôme observé en production : « Token DA absent », alors que le
+            // MetricsProvider fonctionne car il applique déjà html_entity_decode via
+            // loginSysAdminFromParams). On décode ici de la même façon pour aligner le
+            // hook sur le reste du module. html_entity_decode est IDEMPOTENT : c'est un
+            // no-op si le mot de passe est déjà brut (aucun risque de double-décodage).
             $saToken = $api->loginSysAdmin(
                 $service->serverusername,
-                decrypt($service->serverpassword)
+                html_entity_decode(
+                    (string) decrypt($service->serverpassword),
+                    ENT_QUOTES | ENT_HTML5,
+                    'UTF-8'
+                )
             );
             if ($saToken) {
                 $daToken = $api->loginDomainAdmin($saToken, $service->domain);
             }
         } catch (\Exception $e) {
-            logActivity('SmarterMail InvoiceCreated [API connexion] EXCEPTION '
+            logActivity('SmarterMail InvoiceCreation [API connexion] EXCEPTION '
                 . '(service #' . $serviceId . '): ' . $e->getMessage());
         }
 
@@ -413,65 +464,77 @@ add_hook('InvoiceCreation', 1, function (array $params) {
             $baseUnitPrice     // %4$s — prix unitaire par tranche
         );
 
-        // ── Mise à jour et repositionnement de la ligne principale ─────────
+        // ── Ligne principale (disque) via l'API UpdateInvoice ─────────────────
         //
-        // Au lieu d'un simple UPDATE (qui garde le même id et donc la même position),
-        // on supprime la ligne et on la réinsère avec le nouvel AUTO_INCREMENT.
-        // Cela garantit que la ligne principale obtient un id > toutes les autres
-        // lignes déjà présentes (autres produits, domaines, etc.) et que les lignes
-        // EAS/MAPI insérées JUSTE APRÈS auront des ids encore supérieurs.
+        // ⚠️  WHMCS 9.0 — IMMUTABILITÉ DES FACTURES
+        // Depuis WHMCS 9.0, les factures hors statut « Draft » sont immuables.
+        // Toute écriture DIRECTE dans tblinvoiceitems (INSERT/DELETE via Capsule)
+        // pendant la génération n'est plus reprise : WHMCS reconstruit l'ensemble
+        // des lignes après le hook et ÉLIMINE les lignes « orphelines »
+        // (type='' / relid=0) ajoutées en SQL brut — d'où la disparition
+        // silencieuse des suppléments EAS/MAPI constatée après la migration 9.0.
         //
-        // Résultat sans aucune détection d'ordre ni renumérisation :
-        //   [autres produits existants]   ← ids inchangés
-        //   [courriel] ← DELETE + INSERT  ← nouvel id élevé
-        //   [EAS/MAPI] ← INSERT           ← ids encore plus élevés
-        // Construire la description finale avec retour de ligne et préfixe "»".
-        // Le préfixe est lu depuis le fichier de langue (clé 'inv_usage_prefix')
-        // afin de respecter la convention d'externalisation des textes visibles.
-        // Le "\n" est un saut de ligne reconnu par le moteur PDF de WHMCS
-        // (TCPDF/mPDF) et par les templates HTML de factures courriel.
+        // SOLUTION : on passe par l'API officielle UpdateInvoice (couche modèle
+        // WHMCS, compatible 9.0). Le payload est construit progressivement puis
+        // appliqué en UN SEUL appel localAPI() à la fin du traitement du service :
+        //   - itemdescription/itemamount/itemtaxed → modifient EN PLACE la ligne
+        //     Hosting existante (indexées par son lineItemId = $item->id).
+        //     L'édition préserve type='Hosting' et relid=<serviceid>, donc le
+        //     renouvellement du service reste correct.
+        //   - newitemdescription/newitemamount/newitemtaxed → AJOUTENT les lignes
+        //     EAS/MAPI comme items légitimes (WHMCS ne les retire plus).
+        //   - WHMCS recalcule le total automatiquement (plus de recalcul manuel).
         //
-        // SÉCURITÉ : $item->description provient de WHMCS (description générée
-        // automatiquement par le système) ; $usageLabel est construit à partir
-        // de number_format() et de paramètres numériques castés — aucun risque
-        // d'injection dans ces deux valeurs.
+        // SÉCURITÉ : $item->description provient de WHMCS ; $usageLabel est
+        // construit via number_format() et des paramètres numériques castés —
+        // aucun risque d'injection.
         $usagePrefix        = $hookLang['inv_usage_prefix'] ?? '» ';
         $updatedDescription = $item->description . "\n" . $usagePrefix . $usageLabel;
 
-        // Supprimer l'ancienne ligne puis réinsérer avec les nouvelles valeurs
-        Capsule::table('tblinvoiceitems')->where('id', $item->id)->delete();
-        Capsule::table('tblinvoiceitems')->insert([
-            'invoiceid'   => $item->invoiceid,
-            'type'        => $item->type,
-            'relid'       => $item->relid,
-            'description' => $updatedDescription,
-            'amount'      => $newAmount,
-            'taxed'       => $item->taxed,
-            'duedate'     => $item->duedate,
-        ]);
-        // $item->id n'est plus valide après le DELETE — on n'en a plus besoin.
+        // Statut de taxation hérité de la ligne Hosting d'origine — appliqué à la
+        // ligne principale ET aux lignes EAS/MAPI (préserve 'taxed' => $item->taxed).
+        $itemTaxed = (bool) $item->taxed;
+
+        // Payload UpdateInvoice. Clés item* indexées par lineItemId ; clés
+        // newitem* = tableaux numériques (une entrée par ligne EAS/MAPI ajoutée).
+        $update = [
+            'invoiceid'          => $invoiceId,
+            'itemdescription'    => [(int) $item->id => $updatedDescription],
+            'itemamount'         => [(int) $item->id => $newAmount],
+            'itemtaxed'          => [(int) $item->id => $itemTaxed],
+            'newitemdescription' => [],
+            'newitemamount'      => [],
+            'newitemtaxed'       => [],
+        ];
+
+        // Helper : empile une ligne EAS/MAPI dans le payload newitem*.
+        // (Remplace les anciens Capsule::table('tblinvoiceitems')->insert().)
+        $addLine = function (string $desc, float $amount) use (&$update, $itemTaxed): void {
+            $update['newitemdescription'][] = $desc;
+            $update['newitemamount'][]      = round($amount, 2);
+            $update['newitemtaxed'][]       = $itemTaxed;
+        };
 
         // ── Facturation EAS/MAPI ─────────────────────────────────────────────
-        if ($easPrice <= 0 && $mapiPrice <= 0) {
-            _sm_recalculerTotalFacture($invoiceId);
-            continue;
-        }
-
-        if (!$daToken) {
-            logActivity('SmarterMail InvoiceCreated: Token DA absent — '
-                . 'lignes EAS/MAPI omises (service #' . $serviceId . ').');
-            _sm_recalculerTotalFacture($invoiceId);
-            continue;
-        }
-
-        $dueDate            = $item->duedate;  // Déjà disponible depuis $item
-        $billedByProtoUsage = [];              // emails déjà facturés via Phase 1 (anti double-billing)
+        // $doEasMapi : un prix EAS ou MAPI est-il configuré ? Si non, aucune ligne
+        // de supplément n'est ajoutée (la ligne disque est tout de même appliquée
+        // plus bas via UpdateInvoice). On NE fait PLUS de « continue » prématuré :
+        // toutes les écritures passent désormais par un appel UpdateInvoice unique
+        // en fin de boucle — point de sortie unique du traitement du service.
+        $doEasMapi          = ($easPrice > 0 || $mapiPrice > 0);
+        $billedByProtoUsage = [];  // emails déjà facturés via Phase 1 (anti double-billing)
 
         // ════════════════════════════════════════════════════════════════════
         //  PHASE 1 — SUIVI D'UTILISATION (mod_sm_proto_usage)
         //  Adresses trackées depuis l'installation du suivi d'utilisation.
+        //
+        //  Phase 1 est 100 % basée sur la base de données (mod_sm_proto_usage) et
+        //  NE dépend PAS de la connexion API. Contrairement à l'ancienne version
+        //  (qui sautait toute la facturation EAS/MAPI quand $daToken était absent),
+        //  les suppléments TRACÉS sont désormais facturés même si le serveur
+        //  SmarterMail est momentanément injoignable au moment de la facture.
         // ════════════════════════════════════════════════════════════════════
-        if ($lockDays >= 1) {
+        if ($doEasMapi && $lockDays >= 1) {
             try {
                 $period = _sm_getBillingPeriod($serviceId);
 
@@ -532,18 +595,11 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                     //   'inv_eas_hdr'      → ActiveSync (EAS) :
                     //   'inv_mapi_hdr'     → MAPI/Exchange :
                     if (!empty($combinedEmails) && $combinedPrice > 0) {
-                        $count = count($combinedEmails);
-                        $desc  = ($hookLang['inv_combined_hdr'] ?? 'EAS + MAPI/Exchange :')
-                                 . "\n" . implode("\n", $combinedEmails);
-                        Capsule::table('tblinvoiceitems')->insert([
-                            'invoiceid'   => $invoiceId,
-                            'type'        => '',     // Pas de type Hosting : évite le renouvellement multiple du service
-                            'relid'       => 0,       // relid=0 : non lié au service, pas de renouvellement
-                            'description' => $desc,
-                            'amount'      => round($count * $combinedPrice, 2),
-                            'taxed'       => $item->taxed,
-                            'duedate'     => $dueDate,
-                        ]);
+                        $addLine(
+                            ($hookLang['inv_combined_hdr'] ?? 'EAS + MAPI/Exchange :')
+                                . "\n" . implode("\n", $combinedEmails),
+                            count($combinedEmails) * $combinedPrice
+                        );
                     } elseif (!empty($combinedEmails)) {
                         // Pas de prix combiné configuré → deux listes séparées
                         $easEmails   = array_merge($easEmails,  $combinedEmails);
@@ -551,33 +607,19 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                     }
 
                     if (!empty($easEmails) && $easPrice > 0) {
-                        $count = count($easEmails);
-                        $desc  = ($hookLang['inv_eas_hdr'] ?? 'ActiveSync (EAS) :')
-                                 . "\n" . implode("\n", $easEmails);
-                        Capsule::table('tblinvoiceitems')->insert([
-                            'invoiceid'   => $invoiceId,
-                            'type'        => '',     // Pas de type Hosting : évite le renouvellement multiple du service
-                            'relid'       => 0,       // relid=0 : non lié au service, pas de renouvellement
-                            'description' => $desc,
-                            'amount'      => round($count * $easPrice, 2),
-                            'taxed'       => $item->taxed,
-                            'duedate'     => $dueDate,
-                        ]);
+                        $addLine(
+                            ($hookLang['inv_eas_hdr'] ?? 'ActiveSync (EAS) :')
+                                . "\n" . implode("\n", $easEmails),
+                            count($easEmails) * $easPrice
+                        );
                     }
 
                     if (!empty($mapiEmails) && $mapiPrice > 0) {
-                        $count = count($mapiEmails);
-                        $desc  = ($hookLang['inv_mapi_hdr'] ?? 'MAPI/Exchange :')
-                                 . "\n" . implode("\n", $mapiEmails);
-                        Capsule::table('tblinvoiceitems')->insert([
-                            'invoiceid'   => $invoiceId,
-                            'type'        => '',     // Pas de type Hosting : évite le renouvellement multiple du service
-                            'relid'       => 0,       // relid=0 : non lié au service, pas de renouvellement
-                            'description' => $desc,
-                            'amount'      => round($count * $mapiPrice, 2),
-                            'taxed'       => $item->taxed,
-                            'duedate'     => $dueDate,
-                        ]);
+                        $addLine(
+                            ($hookLang['inv_mapi_hdr'] ?? 'MAPI/Exchange :')
+                                . "\n" . implode("\n", $mapiEmails),
+                            count($mapiEmails) * $mapiPrice
+                        );
                     }
 
                     _sm_markEntriesAsBilled($billableByEmail);
@@ -593,75 +635,107 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         //  PHASE 2 — FALLBACK LIVE API
         //  Adresses EAS/MAPI actives NON tracées dans mod_sm_proto_usage.
         //  Rétrocompatibilité pour les services antérieurs au suivi.
+        //  Nécessite la connexion API (token DA) — sautée si absente (la Phase 1
+        //  basée DB a déjà facturé les suppléments tracés dans ce cas).
         // ════════════════════════════════════════════════════════════════════
-        try {
-            $easMailboxes  = $api->getActiveSyncMailboxes($daToken);
-            $mapiMailboxes = $api->getMapiMailboxes($daToken);
+        if ($doEasMapi && $daToken) {
+            try {
+                $easMailboxes  = $api->getActiveSyncMailboxes($daToken);
+                $mapiMailboxes = $api->getMapiMailboxes($daToken);
 
-            // Filtrer : ignorer les adresses déjà facturées en Phase 1
-            $liveEasEmails  = [];
-            $liveMapiEmails = [];
-            $liveCombined   = [];
+                // Filtrer : ignorer les adresses déjà facturées en Phase 1
+                $liveEasEmails  = [];
+                $liveMapiEmails = [];
+                $liveCombined   = [];
 
-            $allLiveEmails = array_unique(array_merge(
-                array_keys($easMailboxes),
-                array_keys($mapiMailboxes)
-            ));
-            $allLiveEmails = array_values(array_filter($allLiveEmails,
-                fn($a) => filter_var($a, FILTER_VALIDATE_EMAIL) !== false
-            ));
+                $allLiveEmails = array_unique(array_merge(
+                    array_keys($easMailboxes),
+                    array_keys($mapiMailboxes)
+                ));
+                $allLiveEmails = array_values(array_filter($allLiveEmails,
+                    fn($a) => filter_var($a, FILTER_VALIDATE_EMAIL) !== false
+                ));
 
-            foreach ($allLiveEmails as $liveEmail) {
-                if (isset($billedByProtoUsage[$liveEmail])) continue;
-                $hasEAS  = isset($easMailboxes[$liveEmail]);
-                $hasMAPI = isset($mapiMailboxes[$liveEmail]);
-                // Préfixe de puce depuis le fichier de langue ('- ' par défaut)
-                $prefix  = $hookLang['inv_entry_prefix'] ?? '- ';
-                if ($hasEAS && $hasMAPI)  $liveCombined[]  = $prefix . $liveEmail;
-                elseif ($hasEAS)          $liveEasEmails[] = $prefix . $liveEmail;
-                elseif ($hasMAPI)         $liveMapiEmails[] = $prefix . $liveEmail;
+                foreach ($allLiveEmails as $liveEmail) {
+                    if (isset($billedByProtoUsage[$liveEmail])) continue;
+                    $hasEAS  = isset($easMailboxes[$liveEmail]);
+                    $hasMAPI = isset($mapiMailboxes[$liveEmail]);
+                    // Préfixe de puce depuis le fichier de langue ('- ' par défaut)
+                    $prefix  = $hookLang['inv_entry_prefix'] ?? '- ';
+                    if ($hasEAS && $hasMAPI)  $liveCombined[]  = $prefix . $liveEmail;
+                    elseif ($hasEAS)          $liveEasEmails[] = $prefix . $liveEmail;
+                    elseif ($hasMAPI)         $liveMapiEmails[] = $prefix . $liveEmail;
+                }
+
+                // Une ligne par type (même format que Phase 1)
+                // En-têtes externalisés dans les fichiers de langue (mêmes clés que Phase 1)
+                if (!empty($liveCombined) && $combinedPrice > 0) {
+                    $addLine(
+                        ($hookLang['inv_combined_hdr'] ?? 'EAS + MAPI/Exchange :')
+                            . "\n" . implode("\n", $liveCombined),
+                        count($liveCombined) * $combinedPrice
+                    );
+                } elseif (!empty($liveCombined)) {
+                    $liveEasEmails  = array_merge($liveEasEmails,  $liveCombined);
+                    $liveMapiEmails = array_merge($liveMapiEmails, $liveCombined);
+                }
+                if (!empty($liveEasEmails) && $easPrice > 0) {
+                    $addLine(
+                        ($hookLang['inv_eas_hdr'] ?? 'ActiveSync (EAS) :')
+                            . "\n" . implode("\n", $liveEasEmails),
+                        count($liveEasEmails) * $easPrice
+                    );
+                }
+                if (!empty($liveMapiEmails) && $mapiPrice > 0) {
+                    $addLine(
+                        ($hookLang['inv_mapi_hdr'] ?? 'MAPI/Exchange :')
+                            . "\n" . implode("\n", $liveMapiEmails),
+                        count($liveMapiEmails) * $mapiPrice
+                    );
+                }
+
+            } catch (\Exception $e) {
+                logActivity('SmarterMail InvoiceCreation [Phase 2 live-api] EXCEPTION '
+                    . '(service #' . $serviceId . ', domaine: ' . ($service->domain ?? '') . '): '
+                    . $e->getMessage());
             }
-
-            // Une ligne par type (même format que Phase 1)
-            // En-têtes externalisés dans les fichiers de langue (même clés que Phase 1)
-            if (!empty($liveCombined) && $combinedPrice > 0) {
-                Capsule::table('tblinvoiceitems')->insert([
-                    'invoiceid'   => $invoiceId, 'type' => '', 'relid' => 0,
-                    'description' => ($hookLang['inv_combined_hdr'] ?? 'EAS + MAPI/Exchange :')
-                                     . "\n" . implode("\n", $liveCombined),
-                    'amount'      => round(count($liveCombined) * $combinedPrice, 2),
-                    'taxed'       => $item->taxed, 'duedate' => $dueDate,
-                ]);
-            } elseif (!empty($liveCombined)) {
-                $liveEasEmails  = array_merge($liveEasEmails,  $liveCombined);
-                $liveMapiEmails = array_merge($liveMapiEmails, $liveCombined);
-            }
-            if (!empty($liveEasEmails) && $easPrice > 0) {
-                Capsule::table('tblinvoiceitems')->insert([
-                    'invoiceid'   => $invoiceId, 'type' => '', 'relid' => 0,
-                    'description' => ($hookLang['inv_eas_hdr'] ?? 'ActiveSync (EAS) :')
-                                     . "\n" . implode("\n", $liveEasEmails),
-                    'amount'      => round(count($liveEasEmails) * $easPrice, 2),
-                    'taxed'       => $item->taxed, 'duedate' => $dueDate,
-                ]);
-            }
-            if (!empty($liveMapiEmails) && $mapiPrice > 0) {
-                Capsule::table('tblinvoiceitems')->insert([
-                    'invoiceid'   => $invoiceId, 'type' => '', 'relid' => 0,
-                    'description' => ($hookLang['inv_mapi_hdr'] ?? 'MAPI/Exchange :')
-                                     . "\n" . implode("\n", $liveMapiEmails),
-                    'amount'      => round(count($liveMapiEmails) * $mapiPrice, 2),
-                    'taxed'       => $item->taxed, 'duedate' => $dueDate,
-                ]);
-            }
-
-        } catch (\Exception $e) {
-            logActivity('SmarterMail InvoiceCreated [Phase 2 live-api] EXCEPTION '
-                . '(service #' . $serviceId . ', domaine: ' . ($service->domain ?? '') . '): '
-                . $e->getMessage());
+        } elseif ($doEasMapi) {
+            // Token DA absent : seule la Phase 2 (live) est ignorée. La Phase 1
+            // (proto_usage, basée DB) a déjà pu facturer les suppléments tracés.
+            logActivity('SmarterMail InvoiceCreation: Token DA absent — '
+                . 'Phase 2 live ignorée, Phase 1 proto_usage appliquée '
+                . '(service #' . $serviceId . ').');
         }
 
-        _sm_recalculerTotalFacture($invoiceId);
+        // ── Application du payload via l'API officielle UpdateInvoice ─────────
+        // UN SEUL appel par service : modifie la ligne disque EN PLACE et ajoute
+        // les lignes EAS/MAPI accumulées. WHMCS recalcule le total automatiquement.
+        //
+        // On exécute localAPI avec un compte admin valide et on journalise le
+        // résultat (succès ET échec) : aucune défaillance silencieuse possible —
+        // contrairement à l'écriture SQL brute, on saura toujours si la facture a
+        // bien été modifiée (vérifiable dans Configuration → Journal d'activité).
+        $nbNew     = count($update['newitemdescription']);
+        $adminUser = _sm_getAdminUsername();
+
+        if ($adminUser === '') {
+            logActivity('SmarterMail InvoiceCreation [UpdateInvoice] ABANDON : '
+                . 'aucun administrateur actif trouvé pour exécuter localAPI '
+                . '(facture #' . $invoiceId . ', service #' . $serviceId . ').');
+        } else {
+            $apiRes = localAPI('UpdateInvoice', $update, $adminUser);
+            if (($apiRes['result'] ?? '') === 'success') {
+                logActivity(sprintf(
+                    'SmarterMail InvoiceCreation [UpdateInvoice] OK : facture #%d, '
+                        . 'service #%d — ligne disque mise à jour + %d ligne(s) EAS/MAPI ajoutée(s).',
+                    $invoiceId, $serviceId, $nbNew
+                ));
+            } else {
+                logActivity('SmarterMail InvoiceCreation [UpdateInvoice] ÉCHEC '
+                    . '(facture #' . $invoiceId . ', service #' . $serviceId . ') : '
+                    . ($apiRes['message'] ?? json_encode($apiRes)));
+            }
+        }
 
       } catch (\Throwable $e) {
             // Catch global : toute exception non couverte est loguée sans crasher le cron
@@ -674,40 +748,19 @@ add_hook('InvoiceCreation', 1, function (array $params) {
 
 
 // =============================================================================
-//  FONCTION UTILITAIRE : Recalcul du total de la facture
+//  NOTE — Recalcul du total de la facture (fonction retirée)
 // =============================================================================
-
-/**
- * Recalcule et met à jour le total d'une facture dans WHMCS.
- *
- * Cette fonction est nécessaire car WHMCS ne recalcule pas automatiquement
- * tblinvoices.total lorsqu'on insère des lignes directement dans tblinvoiceitems
- * via Capsule (contrairement à l'API LocalAPI AddInvoicePayment qui le ferait).
- *
- * MÉTHODE :
- *   Additionne le champ 'amount' de TOUTES les lignes de la facture et
- *   met à jour tblinvoices.total avec cette somme arrondie à 2 décimales.
- *
- * NOTES :
- *   - Les lignes avec amount négatif (remises, crédits) sont incluses → correct
- *   - Les taxes ne sont PAS recalculées ici (tblinvoices.taxrate, tax2rate, etc.)
- *     Si votre configuration utilise des taxes, vérifiez la logique de TVA
- *     et envisagez d'utiliser localAPI('UpdateInvoice', ...) à la place.
- *
- * @param int $invoiceId ID de la facture (tblinvoices.id) à recalculer
- */
-function _sm_recalculerTotalFacture(int $invoiceId): void
-{
-    // Sommer tous les montants des lignes de cette facture
-    $newTotal = Capsule::table('tblinvoiceitems')
-        ->where('invoiceid', $invoiceId)
-        ->sum('amount');
-
-    // Mettre à jour le total dans l'en-tête de la facture
-    Capsule::table('tblinvoices')
-        ->where('id', $invoiceId)
-        ->update(['total' => round((float) $newTotal, 2)]);
-}
+//
+//  L'ancienne fonction _sm_recalculerTotalFacture() additionnait les lignes et
+//  écrivait DIRECTEMENT dans tblinvoices.total après des INSERT SQL bruts.
+//  Cette approche est INCOMPATIBLE avec l'immutabilité des factures de
+//  WHMCS 9.0+ et a été supprimée : le hook InvoiceCreation passe désormais par
+//  localAPI('UpdateInvoice'), qui recalcule le total lui-même via la couche
+//  modèle de WHMCS.
+//
+//  ⚠️  Ne PAS réintroduire d'écriture directe dans tblinvoices / tblinvoiceitems
+//      pendant la génération de factures — utiliser l'API UpdateInvoice.
+// =============================================================================
 
 
 // =============================================================================
