@@ -10,6 +10,47 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.2.2] - 2026-06-09
+
+### Sécurité
+
+Durcissement suite à un audit de sécurité statique externe (verdict : **aucune
+vulnérabilité critique ou exploitable** ; code défensif de bonne qualité). Trois
+points de faible sévérité traités, deux décisions produit prises.
+
+- **F-1 — Avertissement transport HTTP en clair.** Le constructeur de
+  `SmarterMailApi` journalise désormais un avertissement (`logActivity`)
+  lorsqu'un serveur est configuré **sans SSL** : dans ce cas, les identifiants
+  SysAdmin et les tokens JWT Bearer transitent **en clair**. L'avertissement
+  n'est **pas bloquant** (certains déploiements internes utilisent HTTP
+  volontairement — décision produit) et est limité à un message par hôte et par
+  requête PHP (garde statique). Placé dans le **constructeur** plutôt que
+  `fromParams()` pour couvrir aussi les instanciations directes (ex: le hook de
+  facturation).
+
+- **F-1 (annexe) — Docblock `$verifySsl` corrigé.** L'ancienne documentation
+  indiquait « FALSE (défaut) », en contradiction avec le constructeur (défaut
+  `true`) et `fromParams()` (`= $secure`). Réécrite pour refléter le comportement
+  réel : vérification TLS **activée par défaut**, stricte en HTTPS
+  (`CURLOPT_SSL_VERIFYPEER` + `CURLOPT_SSL_VERIFYHOST = 2`).
+
+- **F-3 — Encodage JSON durci (defense-in-depth).** L'injection des cibles de
+  redirection dans le `<script>` d'`editredirect.tpl` ajoute désormais
+  `JSON_HEX_APOS | JSON_HEX_QUOT` aux flags existants `JSON_HEX_TAG |
+  JSON_UNESCAPED_UNICODE` (`smartermail.php`). Non exploitable en l'état (les
+  cibles passent par `FILTER_VALIDATE_EMAIL`), mais protège si la validation
+  amont venait à être assouplie.
+
+### Non retenu (volontairement)
+
+- **F-2 — hook `ClientAreaHeadOutput` sans contrôle de propriété** : laissé tel
+  quel. Impact réel **nul** (la seule sortie est un bloc `<style>` statique
+  chargé d'un fichier du module, aucune donnée de la requête n'est reflétée), et
+  ajouter un filtre par `userid` risquerait de casser l'affichage du mode sombre
+  lors d'une consultation admin en impersonation — pour aucun gain de sécurité.
+
+---
+
 ## [1.2.1] - 2026-06-04
 
 ### Corrigé

@@ -1,0 +1,6 @@
+# Sidebar order for SmarterMail (WHMCS) docs (README is the home page).
+installation.md
+configuration.md
+billing.md
+client-area.md
+admin.md

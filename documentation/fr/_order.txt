@@ -1,0 +1,6 @@
+# Ordre du menu pour la doc SmarterMail (WHMCS) (README est la page d'accueil).
+installation.md
+configuration.md
+billing.md
+client-area.md
+admin.md

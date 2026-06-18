@@ -1,0 +1,13 @@
+{
+    "name": {
+        "en": "SmarterMail — Email Hosting (WHMCS)",
+        "fr": "SmarterMail — Hébergement courriel (WHMCS)"
+    },
+    "tagline": {
+        "en": "WHMCS provisioning module for SmarterMail: usage-based billing, EAS/MAPI add-ons, mailbox & alias self-service, and SPF/DMARC/Autodiscover DNS checks.",
+        "fr": "Module d'approvisionnement WHMCS pour SmarterMail : facturation à l'usage, options EAS/MAPI, libre-service des boîtes et alias, et vérifications DNS SPF/DMARC/Autodiscover."
+    },
+    "icon": "✉️",
+    "accent": "#7C5CCF",
+    "order": 3
+}
