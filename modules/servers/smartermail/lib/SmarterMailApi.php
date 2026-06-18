@@ -115,20 +115,21 @@ class SmarterMailApi
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @var bool Indique si cURL doit vérifier le certificat SSL du serveur.
+     * @var bool Indique si cURL doit vérifier le certificat TLS du serveur.
      *
-     *           FALSE (défaut) : Recommandé pour la plupart des déploiements,
-     *           car SmarterMail utilise souvent des certificats auto-signés
-     *           ou des certificats internes non reconnus par l'autorité du serveur WHMCS.
+     *           DÉFAUT : true (voir le constructeur). La vérification du
+     *           certificat est ACTIVÉE par défaut afin de prévenir les attaques
+     *           MITM (CURLOPT_SSL_VERIFYPEER + CURLOPT_SSL_VERIFYHOST = 2).
      *
-     *           TRUE : Active la vérification stricte du certificat.
-     *           Utiliser seulement si le certificat du serveur SmarterMail est
-     *           signé par une autorité de certification reconnue (Let's Encrypt, etc.)
-     *           ET que le hostname correspond exactement au CN du certificat.
+     *           Via fromParams() : $verifySsl = $secure. Donc :
+     *             - HTTPS (serversecure=1) → true  : vérification stricte du cert.
+     *             - HTTP  (serversecure=0) → false : sans objet (aucun TLS) — mais
+     *               le transport est alors EN CLAIR (voir l'avertissement de
+     *               sécurité journalisé par le constructeur).
      *
-     *           ⚠️  SÉCURITÉ : Toujours true en production. Passer false
-     *           explicitement uniquement pour le développement local avec
-     *           des certificats auto-signés ou des connexions HTTP internes.
+     *           Ne passer false explicitement que pour du développement local
+     *           contre un certificat auto-signé. À PROSCRIRE en production :
+     *           désactiver la vérification rouvre la porte au MITM.
      */
     private bool $verifySsl;
 
@@ -179,6 +180,25 @@ class SmarterMailApi
         }
 
         $this->verifySsl = $verifySsl;
+
+        // ── F-1 — Avertissement sécurité : transport HTTP en clair ──────────────
+        // Si le serveur est configuré sans SSL, TOUS les appels — dont
+        // authenticate-user qui transmet les identifiants SysAdmin et reçoit des
+        // tokens JWT Bearer — transitent EN CLAIR. On journalise un avertissement
+        // explicite, SANS bloquer (certains déploiements internes utilisent HTTP
+        // volontairement — décision produit). Placé dans le constructeur (et non
+        // dans fromParams) pour couvrir AUSSI les instanciations directes, comme
+        // celle du hook de facturation. Garde statique par hôte : au plus un
+        // avertissement par hôte et par requête PHP, pour ne pas inonder le journal.
+        if (!$secure && function_exists('logActivity')) {
+            static $httpWarned = [];
+            if (!isset($httpWarned[$hostname])) {
+                $httpWarned[$hostname] = true;
+                logActivity('SmarterMail [SÉCURITÉ] Connexion en HTTP vers « ' . $hostname
+                    . ' » : les identifiants SysAdmin et les tokens JWT transitent EN CLAIR. '
+                    . 'Activez SSL sur ce serveur (Configuration → Serveurs).');
+            }
+        }
     }
 
     /**

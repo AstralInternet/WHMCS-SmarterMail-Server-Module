@@ -134,7 +134,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.2.1',
+        'MODVersion' => '1.2.2',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -4886,7 +4886,7 @@ function smartermail_editredirectpage(array $params): array
             // </script> dans une adresse de fermer prématurément le bloc <script>
             // du template. Les adresses sont validées par FILTER_VALIDATE_EMAIL,
             // mais cette protection défensive est préférable selon les standards OWASP.
-            'targets'   => json_encode($targets, JSON_HEX_TAG | JSON_UNESCAPED_UNICODE),
+            'targets'   => json_encode($targets, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE),
             // Jeton CSRF — injecté dans les <form> par editredirect.tpl
             // (saveredirect, deleteredirect).
             'csrfToken' => _sm_csrfToken(),
