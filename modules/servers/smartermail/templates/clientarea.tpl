@@ -2827,6 +2827,12 @@ function smRefreshDns(){
   var url = 'clientarea.php?action=productdetails&id=' + ctx.serviceid;
   var body = 'customAction=refreshdns&token=' + encodeURIComponent(ctx.csrfToken);
 
+  // (P1.3) Garde-fou : abandonner la requête si le serveur ne répond pas dans
+  // les 20 s (résolveur DNS lent ou en panne côté serveur) au lieu de laisser le
+  // bouton figé en « vérification… » indéfiniment.
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var to   = ctrl ? setTimeout(function(){ ctrl.abort(); }, 20000) : null;
+
   fetch(url, {
     method: 'POST',
     headers: {
@@ -2834,7 +2840,8 @@ function smRefreshDns(){
       'X-Requested-With': 'XMLHttpRequest'
     },
     body: body,
-    credentials: 'same-origin'
+    credentials: 'same-origin',
+    signal: ctrl ? ctrl.signal : undefined
   })
   .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'parse'}; }); })
   .then(function(json){
@@ -2851,9 +2858,14 @@ function smRefreshDns(){
     }
   })
   .catch(function(err){
-    console.warn('[SM] refresh DNS erreur réseau:', err);
+    if(err && err.name === 'AbortError'){
+      console.warn('[SM] refresh DNS : délai dépassé (20s)');
+    } else {
+      console.warn('[SM] refresh DNS erreur réseau:', err);
+    }
   })
   .finally(function(){
+    if(to){ clearTimeout(to); }
     if(btn){
       btn.disabled = false;
       btn.classList.remove('spinning');
@@ -2981,10 +2993,16 @@ function smCheckDnsLazy(){
   var url = 'clientarea.php?action=productdetails&id=' + ctx.serviceid
           + '&customAction=checkdns';
 
+  // (P1.3) Même garde-fou que smRefreshDns : abandonner après 20 s pour ne pas
+  // laisser des pills en 'loading' indéfiniment si le serveur ne répond pas.
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var to   = ctrl ? setTimeout(function(){ ctrl.abort(); }, 20000) : null;
+
   fetch(url, {
     method: 'GET',
     headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    credentials: 'same-origin'
+    credentials: 'same-origin',
+    signal: ctrl ? ctrl.signal : undefined
   })
   .then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
   .then(function(json){
@@ -2996,7 +3014,14 @@ function smCheckDnsLazy(){
     // "Actualiser" donnera au client une autre tentative explicite.
   })
   .catch(function(err){
-    console.warn('[SM] checkdns lazy erreur:', err);
+    if(err && err.name === 'AbortError'){
+      console.warn('[SM] checkdns lazy : délai dépassé (20s)');
+    } else {
+      console.warn('[SM] checkdns lazy erreur:', err);
+    }
+  })
+  .finally(function(){
+    if(to){ clearTimeout(to); }
   });
 }
 

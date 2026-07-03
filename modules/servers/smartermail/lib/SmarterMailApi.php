@@ -133,6 +133,18 @@ class SmarterMailApi
      */
     private bool $verifySsl;
 
+    /**
+     * @var int (P1.2) Timeout global d'une requête HTTP, en secondes. Configurable
+     *          via setTimeouts() — les crons peuvent le réduire pour ne pas rester
+     *          bloqués longtemps quand le serveur SmarterMail est lent.
+     */
+    private int $timeout = 30;
+
+    /**
+     * @var int (P1.2) Timeout d'établissement de la connexion TCP, en secondes.
+     */
+    private int $connectTimeout = 10;
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // Constructeur et factory
@@ -290,97 +302,108 @@ class SmarterMailApi
      */
     private function request(string $method, string $endpoint, array $data = [], string $token = ''): array
     {
-        // Construire l'URL complète en combinant l'URL de base et l'endpoint
-        // ltrim retire un éventuel slash en début d'endpoint pour éviter les doubles slashes
         $url = $this->baseUrl . '/' . ltrim($endpoint, '/');
 
-        // Initialiser la session cURL
+        // (P1.2) Retry sur erreur TRANSITOIRE (réseau code=0, ou HTTP 5xx), UNIQUEMENT
+        // pour les méthodes idempotentes (GET/DELETE) — jamais POST, pour ne pas
+        // ré-exécuter une création/modification. Backoff progressif avec jitter.
+        $idempotent  = ($method === 'GET' || $method === 'DELETE');
+        $maxAttempts = $idempotent ? 3 : 1;
+        $resp        = ['success' => false, 'code' => 0, 'data' => null, 'error' => 'Non exécuté'];
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $resp = $this->execute($method, $url, $method === 'POST' ? $data : [], $token);
+
+            $transient = ($resp['code'] === 0) || ($resp['code'] >= 500 && $resp['code'] <= 599);
+            if (!$transient || $attempt >= $maxAttempts) {
+                break;
+            }
+            // Backoff : ~0,4 s puis ~0,8 s, + jitter aléatoire (0-0,2 s).
+            usleep(($attempt * 400000) + random_int(0, 200000));
+        }
+
+        // (P1.2) Journaliser les ÉCHECS dans le Module Log WHMCS (logModuleCall) —
+        // l'outil de diagnostic standard, avec masquage du token et du mot de passe.
+        // Absent jusqu'ici (0 occurrence) : les pannes des getters « simplifiés »
+        // (qui retournent [] sur erreur) étaient totalement invisibles.
+        if (!$resp['success'] && function_exists('logModuleCall')) {
+            $mask = array_values(array_filter([
+                $token,
+                $data['password'] ?? null,
+            ], static fn($v) => is_string($v) && $v !== ''));
+            logModuleCall('smartermail', $method . ' ' . $endpoint, $data, $resp, '', $mask);
+        }
+
+        return $resp;
+    }
+
+    /**
+     * (P1.2) Exécute UNE tentative HTTP. Extraite de request() pour permettre le retry.
+     *
+     * @return array Tableau standardisé { success, code, data, error }.
+     */
+    private function execute(string $method, string $url, array $data, string $token): array
+    {
         $ch = curl_init($url);
 
-        // ── En-têtes HTTP ────────────────────────────────────────────────────
-        // Content-Type et Accept : l'API SmarterMail communique exclusivement en JSON
         $headers = [
             'Content-Type: application/json',
             'Accept: application/json',
         ];
-
-        // Ajouter le token d'authentification si fourni
-        // Format Bearer Token selon RFC 6750 (standard OAuth2/JWT)
         if ($token) {
+            // Format Bearer Token selon RFC 6750 (standard OAuth2/JWT)
             $headers[] = 'Authorization: Bearer ' . $token;
         }
 
-        // ── Options cURL communes ────────────────────────────────────────────
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);  // Retourner la réponse comme string (pas echo)
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $this->verifySsl); // Vérifier le certificat SSL du serveur
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $this->verifySsl ? 2 : 0); // Vérifier que le CN correspond au hostname
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);           // Timeout global de 30 secondes
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);    // Timeout connexion TCP de 10 secondes
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $this->verifySsl);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $this->verifySsl ? 2 : 0);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);              // (P1.2) configurable
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $this->connectTimeout); // (P1.2) configurable
 
-        // ── Options spécifiques à la méthode HTTP ────────────────────────────
         if ($method === 'POST') {
-            // Encoder le corps en JSON
             $body = json_encode($data);
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-            // Content-Length est techniquement optionnel en HTTP/1.1 avec chunked encoding,
-            // mais SmarterMail semble l'exiger pour certains endpoints
+            // Content-Length exigé par certains endpoints SmarterMail.
             $headers[] = 'Content-Length: ' . strlen($body);
-
         } elseif ($method === 'DELETE') {
-            // DELETE sans corps (les infos sont dans l'URL pour SmarterMail)
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
-
         }
-        // GET est la méthode par défaut de cURL, pas besoin de l'expliciter
+        // GET est la méthode par défaut de cURL.
 
-        // Appliquer les en-têtes (après avoir construit la liste complète)
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
-        // ── Exécution de la requête ──────────────────────────────────────────
-        $result    = curl_exec($ch);          // Corps de la réponse HTTP (string)
-        $httpCode  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE); // Code de statut HTTP
-        $curlError = curl_error($ch);         // Message d'erreur cURL (vide si succès)
+        $result    = curl_exec($ch);
+        $httpCode  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
 
-        // ── Gestion des erreurs réseau (pas de réponse du serveur) ───────────
+        // ── Erreur réseau (pas de réponse du serveur) ────────────────────────
         if ($curlError) {
-            // Erreurs possibles : connexion refusée, timeout, DNS non résolu,
-            // problème de certificat SSL, etc.
             return [
                 'success' => false,
-                'code'    => 0,   // 0 indique une erreur réseau, pas HTTP
+                'code'    => 0,   // 0 = erreur réseau, pas HTTP
                 'data'    => null,
                 'error'   => 'Erreur réseau cURL : ' . $curlError,
             ];
         }
 
         // ── Décodage de la réponse JSON ──────────────────────────────────────
-        // json_decode avec true = tableau associatif (pas objet stdClass)
-        // $result peut être vide si l'API retourne un 204 No Content par exemple
         $decoded = !empty($result) ? json_decode($result, true) : null;
 
-        // Succès = tout code HTTP entre 200 et 299 inclus
         $success = ($httpCode >= 200 && $httpCode < 300);
         $error   = null;
 
         if (!$success) {
             $error = $decoded['message'] ?? 'Erreur HTTP ' . $httpCode;
         } elseif (!empty($result) && $decoded === null && json_last_error() !== JSON_ERROR_NONE) {
-            // (P0.2) HTTP 2xx mais corps NON-JSON : page HTML d'un proxy/WAF, portail
-            // d'authentification, page de maintenance IIS… À traiter comme un échec,
-            // sinon les getters simplifiés retournent [] et propagent un faux succès.
+            // (P0.2) HTTP 2xx mais corps NON-JSON (proxy/WAF, portail, maintenance IIS).
             $success = false;
             $error   = 'Réponse non-JSON (HTTP ' . $httpCode . ')';
         } elseif (is_array($decoded) && array_key_exists('success', $decoded)
                   && $decoded['success'] === false) {
-            // (P0.2) L'API SmarterMail peut répondre HTTP 200 avec
-            // { "success": false, "message": "..." } — contrat documenté en tête de
-            // ce fichier mais jamais honoré jusqu'ici : un échec métier passait pour
-            // un succès (createUser, deleteUser, setActiveSyncEnabled/setMapiEnabled…).
-            // On le détecte UNE FOIS ICI pour corriger TOUS les appelants d'un coup.
-            // (Ne se déclenche que si la clé 'success' vaut explicitement false ; les
-            // réponses sans clé 'success' — ex. login — ne sont pas affectées.)
+            // (P0.2) HTTP 200 avec { "success": false, "message": "..." } = échec métier.
             $success = false;
             $error   = (string) ($decoded['message'] ?? 'Erreur métier API (success=false)');
         }
@@ -391,6 +414,16 @@ class SmarterMailApi
             'data'    => $decoded,
             'error'   => $error,
         ];
+    }
+
+    /**
+     * (P1.2) Configure les timeouts cURL (secondes). Utile pour les crons qui
+     * veulent échouer vite plutôt que rester bloqués sur un serveur lent.
+     */
+    public function setTimeouts(int $timeout, ?int $connectTimeout = null): void
+    {
+        $this->timeout        = max(1, $timeout);
+        $this->connectTimeout = max(1, $connectTimeout ?? $this->connectTimeout);
     }
 
     /**
@@ -464,12 +497,30 @@ class SmarterMailApi
      */
     public function loginSysAdmin(string $username, string $password): ?string
     {
-        $resp = $this->request('POST', 'api/v1/auth/authenticate-user', [
+        // (P1.2) Cache de token SA par (serveur + identifiants), à courte durée de vie
+        // (90 s). Évite de ré-authentifier à CHAQUE itération de la boucle
+        // InvoiceCreation (1 login par service → 1 login par serveur) et à chaque
+        // _sm_initApi d'une page ClientArea. Le TTL de 90 s reste sous la durée de vie
+        // du JWT SmarterMail (« quelques minutes ») : aucune réutilisation d'un token
+        // expiré sur un long cron — au pire, une nouvelle authentification toutes les 90 s.
+        static $cache = [];
+        $key = $this->baseUrl . '|' . $username . '|' . md5($password);
+        $now = time();
+        if (isset($cache[$key]) && $cache[$key]['exp'] > $now) {
+            return $cache[$key]['token'];
+        }
+
+        $resp  = $this->request('POST', 'api/v1/auth/authenticate-user', [
             'username' => $username,
             'password' => $password,
         ]);
+        $token = $resp['success'] ? ($resp['data']['accessToken'] ?? null) : null;
+
+        if ($token !== null) {
+            $cache[$key] = ['token' => $token, 'exp' => $now + 90];
+        }
         // Retourner null pour signaler l'échec proprement à l'appelant
-        return $resp['success'] ? ($resp['data']['accessToken'] ?? null) : null;
+        return $token;
     }
 
     /**

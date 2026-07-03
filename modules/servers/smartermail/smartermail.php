@@ -134,7 +134,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.2.3',
+        'MODVersion' => '1.3.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -2023,6 +2023,27 @@ function _sm_handleDnsAjax(array $params, bool $forceRefresh): array
         exit;
     }
 
+    // (P1.3) Cooldown anti-martèlement sur refreshdns. Chaque rafraîchissement
+    // FORCÉ déclenche jusqu'à ~6 requêtes DNS live (SPF / Autodiscover / DMARC /
+    // DKIM / MX / …), potentiellement lentes. Sans throttle, un client qui spamme
+    // le bouton « Actualiser » peut saturer les workers PHP. On limite un
+    // rafraîchissement forcé à 1 / 20 s / service ; au-delà, on rétrograde vers
+    // une lecture cache (réponse valide, pas d'erreur : l'utilisateur voit
+    // simplement le dernier état connu).
+    if ($forceRefresh) {
+        $serviceId = (int) ($params['serviceid'] ?? 0);
+        if ($serviceId > 0 && session_status() === PHP_SESSION_ACTIVE) {
+            $ckey = 'sm_dns_refresh_' . $serviceId;
+            $last = (int) ($_SESSION[$ckey] ?? 0);
+            $now  = time();
+            if ($last > 0 && ($now - $last) < 20) {
+                $forceRefresh = false; // dans la fenêtre de cooldown → cache
+            } else {
+                $_SESSION[$ckey] = $now;
+            }
+        }
+    }
+
     // Récupération du selector + publicKey DKIM côté SmarterMail.
     // _sm_checkDkimDns n'a besoin QUE de ces 2 champs pour faire la
     // requête DNS — on évite donc le full state machine du dashboard.
@@ -2986,8 +3007,12 @@ function smartermail_ClientArea(array $params): array
     $nsClient = ['zone1.astralinternet.com', 'zone2.astralinternet.com', 'zone3.astralinternet.com'];
 
     try {
-        // Récupérer les NS du domaine (requête DNS type NS)
-        $nsRecords = @dns_get_record($domain, DNS_NS) ?: [];
+        // (P1.3) Récupérer les NS via le CACHE DNS partagé au lieu d'un lookup live
+        // à CHAQUE rendu du dashboard (l'ancien @dns_get_record bloquait la page
+        // 10-30 s si le résolveur était lent, en contradiction avec la stratégie
+        // lazy documentée). La valeur NS est désormais mise en cache 4 h ; un seul
+        // lookup live par période, et les échecs de résolution ne sont pas figés.
+        $nsRecords = _sm_dnsLookup($domain, DNS_NS, 14400) ?? [];
 
         // Extraire et normaliser les noms de serveurs
         $nsNames = array_map('strtolower', array_column($nsRecords, 'target'));

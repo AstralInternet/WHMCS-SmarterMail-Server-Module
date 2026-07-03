@@ -134,9 +134,19 @@ function _sm_dnsLookup(
     _sm_ensureDnsCacheTable();
     $typeStr = _sm_dnsTypeName($type);
 
-    // Normalisation : DNS est insensible à la casse, on stocke en minuscules
-    $host = strtolower(trim($host));
+    // Normalisation. DNS est insensible à la casse. (P1.3) Conversion IDN →
+    // punycode AVANT le strtolower (qui est byte-wise) : un domaine accentué
+    // (« café.ca ») doit être interrogé en « xn--caf-dma.ca », sinon
+    // dns_get_record échoue toujours et la vérification reste rouge en permanence.
+    $host = trim($host);
     if ($host === '') return [];
+    if (function_exists('idn_to_ascii')) {
+        $ascii = @idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
+        if (is_string($ascii) && $ascii !== '') {
+            $host = $ascii;
+        }
+    }
+    $host = strtolower($host); // ASCII désormais → strtolower sûr
 
     // Lecture cache si non forcé
     if (!$forceRefresh) {
@@ -164,14 +174,22 @@ function _sm_dnsLookup(
     }
 
     // Requête live — @ supprime les warnings PHP en cas de timeout/NXDOMAIN.
-    // On considère qu'un échec = tableau vide (pas d'enregistrement trouvé),
-    // ce qui est sémantiquement correct pour les vérifications de présence.
     $result = @dns_get_record($host, $type);
+
+    // (P1.3) Distinguer un ÉCHEC de résolution (false : timeout, SERVFAIL,
+    // résolveur du serveur WHMCS en panne) d'une ABSENCE réelle d'enregistrement
+    // ([]). En cas d'ÉCHEC, on NE MET PAS en cache : le résultat vide n'est pas
+    // figé 4 h, et la vérification se retentera au prochain affichage
+    // (auto-guérison dès que le résolveur revient) au lieu d'afficher un faux
+    // « rouge » (« enregistrements manquants ») pendant des heures.
+    if ($result === false) {
+        return [];
+    }
     if (!is_array($result)) {
         $result = [];
     }
 
-    // Écriture cache — en upsert pour remplacer une entrée stale
+    // Écriture cache — uniquement pour une réponse VALIDE (records ou vraie absence).
     try {
         Capsule::table('mod_sm_dns_cache')->updateOrInsert(
             ['host' => $host, 'record_type' => $typeStr],

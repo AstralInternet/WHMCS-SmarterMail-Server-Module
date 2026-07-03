@@ -10,6 +10,85 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.3.0] - 2026-07-03
+
+Phase 1 de la remédiation d'audit — **robustesse**. Restaure l'intégrité de la
+facturation récurrente et fiabilise le transport API, les vérifications DNS, la
+résiliation et la politique de mots de passe.
+
+### Ajouté / Modifié — facturation récurrente résiliente (rollover `proto_usage`)
+
+- **Report (« rollover ») des lignes `proto_usage` d'une période à l'autre.** La
+  récurrence EAS/MAPI ne dépend plus d'un appel API *live* au moment de la
+  facturation : après un `UpdateInvoice` réussi, les lignes `grace`/`active` sont
+  reportées sur la période suivante (`billed=0`) dans la **même transaction** que
+  le marquage. La facture du mois suivant se génère donc même si l'API SmarterMail
+  est injoignable ce jour-là. Report ignoré pour les cycles *One Time*.
+- **Marquage par critère au lieu de DELETE** : `_sm_markEntriesAsBilled()` pose
+  `billed=1` + `invoiceid` + `billed_at` (colonnes ajoutées, avec chemin d'upgrade
+  automatique du schéma) au lieu d'effacer les lignes — traçabilité facture ↔ usage.
+- **Reprise après échec** : `_sm_finalizeAndGetBillable()` sélectionne désormais
+  `period_start <=` la période courante (+ `ORDER BY ASC`), donc les lignes non
+  marquées après un échec `UpdateInvoice` sont reprises au cycle suivant au lieu
+  d'être perdues.
+- **Hook `InvoiceCancelled`** : l'annulation d'une facture rend ses lignes de nouveau
+  facturables (`billed=0`, `invoiceid=NULL`) — plus de suppléments « avalés » par une
+  facture annulée.
+- **Correction d'une double-facturation possible** : la déduplication Phase 1/Phase 2
+  comparait une clé e-mail brute (API) à des e-mails stockés en minuscules → ratée
+  pour toute casse mixte. Dédup désormais par `strtolower(email)` + protocole.
+- **Événements re-ciblés sur la « ligne vivante »** (activation/désactivation d'un
+  protocole après facturation dans la même période) pour éviter un événement perdu
+  ou une violation de contrainte d'unicité.
+- **Purge différée** `_sm_purgeBilledProtoUsage(90 j)` au cron dominical (rétention
+  des lignes facturées à des fins d'audit avant nettoyage).
+
+### Corrigé — transport API résilient (`SmarterMailApi`)
+
+- **Retries avec backoff + jitter** sur les échecs transitoires (code réseau `0`,
+  HTTP 5xx) pour les requêtes idempotentes (GET/DELETE) — 3 tentatives. Une panne
+  réseau momentanée ne fait plus échouer une facturation ou une collecte de métriques.
+- **`logModuleCall()` sur échec** (tokens et mots de passe masqués) : les appels API
+  ratés sont désormais tracés dans le journal des modules WHMCS (auparavant : aucune
+  trace).
+- **Cache de token SysAdmin** (90 s, par serveur + identifiants) : évite de se
+  ré-authentifier à chaque itération de la boucle `InvoiceCreation` et à chaque
+  chargement de page client. TTL court → jamais de réutilisation d'un JWT expiré.
+- **Délais configurables** (`setTimeouts()`), séparant connexion et opération.
+
+### Corrigé — vérifications DNS fiables
+
+- **Échec de résolution ≠ absence d'enregistrement.** Un `dns_get_record()` qui
+  renvoie `false` (timeout, SERVFAIL, résolveur du serveur WHMCS en panne) n'est plus
+  **mis en cache** : la vérification se retente au prochain affichage (auto-guérison)
+  au lieu d'afficher un faux « rouge » (« enregistrements manquants ») figé 4 h.
+- **Conversion IDN → punycode** (`idn_to_ascii`) : un domaine accentué (« café.ca »)
+  est désormais interrogé en `xn--…`, sinon la vérification restait rouge en permanence.
+- **Détection des NS via le cache** au lieu d'un lookup DNS *live* à chaque rendu du
+  tableau de bord (qui pouvait bloquer la page si le résolveur était lent).
+- **Cooldown anti-martèlement** sur `refreshdns` : un rafraîchissement forcé est limité
+  à 1 / 20 s / service (au-delà, lecture cache) pour éviter la saturation des workers PHP.
+- **`AbortController`** (timeout 20 s) sur les requêtes `refreshdns`/`checkdns` côté
+  client : plus de bouton figé en « vérification… » si le serveur ne répond pas.
+
+### Corrigé — résiliation & usage robustes
+
+- **`TerminateAccount` traite un `404` comme un succès idempotent** : une résiliation
+  ne reste plus bloquée si le domaine a déjà été supprimé côté SmarterMail. La purge de
+  `mod_sm_proto_usage` se fait directement par `serviceid` (l'ancien filtre par statut
+  était un no-op qui laissait des lignes orphelines).
+- **`UsageUpdate` ne persiste plus `0.0` silencieusement** en cas d'erreur de lecture
+  disque (`getDomainDiskUsageGB` renvoie `-1.0` → l'appelant retourne `['error']`),
+  évitant une désynchronisation SmarterMail ↔ WHMCS.
+
+### Corrigé — politique de mot de passe unifiée
+
+- **Complexité vérifiée côté serveur** pour les boîtes (`createuser`/`savepassword`/
+  `saveuser`) via un cœur de validation partagé (`_sm_validateMailboxPassword`).
+  Auparavant `saveuser` ne validait que la longueur → un mot de passe faible était
+  acceptable par POST direct. Correction aussi du `(int)'' = 0` (longueur minimale
+  jamais nulle).
+
 ## [1.2.3] - 2026-07-02
 
 ### Corrigé — intégrité de la facturation (Phase 0 de la remédiation d'audit)
