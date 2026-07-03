@@ -551,6 +551,9 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         // et non avant : un échec de l'appel ne doit plus effacer/verrouiller ces
         // lignes sans qu'aucune ligne de facture n'existe (perte de revenu définitive).
         $billableByEmail    = [];
+        // Période de facturation courante — hissée pour le marquage + le rollover
+        // (P1.1) dans la branche de succès de UpdateInvoice. Réassignée en Phase 1.
+        $period             = ['start' => null, 'end' => null];
 
         // ════════════════════════════════════════════════════════════════════
         //  PHASE 1 — SUIVI D'UTILISATION (mod_sm_proto_usage)
@@ -611,7 +614,11 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                             $mapiEmails[] = $fmtEmail($protoEmail, 'mapi');
                         }
 
-                        $billedByProtoUsage[$protoEmail] = true;
+                        // (P1.1) Dédup PAR PROTOCOLE (pas par adresse) : sinon une
+                        // adresse facturée pour un seul protocole en Phase 1 masquerait
+                        // l'autre protocole en Phase 2 (perte du supplément).
+                        if ($hasEAS)  { $billedByProtoUsage[$protoEmail]['eas']  = true; }
+                        if ($hasMAPI) { $billedByProtoUsage[$protoEmail]['mapi'] = true; }
                     }
 
                     // ── Insérer UNE ligne par type, toutes adresses dans la description ──
@@ -692,9 +699,14 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                 ));
 
                 foreach ($allLiveEmails as $liveEmail) {
-                    if (isset($billedByProtoUsage[$liveEmail])) continue;
-                    $hasEAS  = isset($easMailboxes[$liveEmail]);
-                    $hasMAPI = isset($mapiMailboxes[$liveEmail]);
+                    // (P1.1) Normaliser en minuscules : la table proto_usage stocke en
+                    // minuscules alors que l'API peut renvoyer une casse mixte — la
+                    // comparaison sensible à la casse ratait la dédup (double facturation).
+                    $lcEmail = strtolower($liveEmail);
+                    // Ne facturer en live QUE les protocoles NON déjà facturés en Phase 1.
+                    $hasEAS  = isset($easMailboxes[$liveEmail])  && empty($billedByProtoUsage[$lcEmail]['eas']);
+                    $hasMAPI = isset($mapiMailboxes[$liveEmail]) && empty($billedByProtoUsage[$lcEmail]['mapi']);
+                    if (!$hasEAS && !$hasMAPI) continue;
                     // Préfixe de puce depuis le fichier de langue ('- ' par défaut)
                     $prefix  = $hookLang['inv_entry_prefix'] ?? '- ';
                     if ($hasEAS && $hasMAPI)  $liveCombined[]  = $prefix . $liveEmail;
@@ -776,8 +788,32 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                 // d'échec (else) ou d'admin absent, rien n'est marqué : les lignes
                 // restent billed=0 (reprise couverte par la Phase 1.1 — rollover +
                 // filtre period_start <=).
-                if (!empty($billableByEmail)) {
-                    _sm_markEntriesAsBilled($billableByEmail);
+                // (P1.1) Marquage + rollover dans UNE transaction : un crash entre
+                // les deux ne peut pas laisser des lignes billed=1 sans descendance
+                // pour la période suivante. Le rollover reporte les lignes
+                // grace/active à period_end (billed=0) → la Phase 1 (DB) couvre les
+                // renouvellements sans dépendre de l'API live.
+                if (!empty($billableByEmail) && $period['start']) {
+                    // Pas de rollover pour les cycles non renouvelables (One Time) :
+                    // les lignes reportées ne seraient jamais facturées.
+                    $cycle      = strtolower(trim((string) (Capsule::table('tblhosting')
+                        ->where('id', $serviceId)->value('billingcycle') ?? '')));
+                    $doRollover = !empty($period['end'])
+                        && !in_array($cycle, ['one time', 'onetime', 'free account'], true);
+                    try {
+                        Capsule::connection()->transaction(
+                            function () use ($serviceId, $billableByEmail, $invoiceId, $period, $doRollover) {
+                                _sm_markEntriesAsBilled($billableByEmail, $invoiceId, $period['start']);
+                                if ($doRollover) {
+                                    _sm_rolloverProtoUsage($serviceId, $billableByEmail, $period['end']);
+                                }
+                            }
+                        );
+                    } catch (\Throwable $e) {
+                        logActivity('SmarterMail InvoiceCreation [mark+rollover] EXCEPTION '
+                            . '(facture #' . $invoiceId . ', service #' . $serviceId . '): '
+                            . $e->getMessage());
+                    }
                 }
             } else {
                 logActivity('SmarterMail InvoiceCreation [UpdateInvoice] ÉCHEC '
@@ -795,6 +831,47 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                 . ' — ' . $e->getFile() . ':' . $e->getLine());
       }
     } // fin foreach $items
+});
+
+
+// =============================================================================
+//  HOOK : InvoiceCancelled — Rendre les suppléments EAS/MAPI à nouveau facturables
+// =============================================================================
+//
+//  (P1.1) Quand une facture est annulée, les lignes mod_sm_proto_usage qu'elle avait
+//  réglées (billed=1 + invoiceid) sont remises facturables (billed=0). Grâce au
+//  filtre period_start <= de _sm_finalizeAndGetBillable, elles seront reprises sur la
+//  facture régénérée (ou la suivante), dates de désactivation comprises. Les lignes
+//  reportées à la période suivante (rollover) ne sont PAS touchées : elles tracent
+//  un usage réel en cours.
+//
+//  Ce hook n'écrit QUE dans mod_sm_proto_usage (aucune écriture tblinvoice*) →
+//  compatible avec l'immutabilité des factures WHMCS 9.
+// =============================================================================
+add_hook('InvoiceCancelled', 1, function (array $vars) {
+    $invoiceId = (int) ($vars['invoiceid'] ?? 0);
+    if (!$invoiceId) return;
+
+    _sm_ensureProtoUsageTable();
+    try {
+        $n = Capsule::table('mod_sm_proto_usage')
+            ->where('invoiceid', $invoiceId)
+            ->update([
+                'billed'    => 0,
+                'invoiceid' => null,
+                'billed_at' => null,
+            ]);
+        if ($n > 0) {
+            logActivity(sprintf(
+                'SmarterMail [InvoiceCancelled] Facture #%d annulée : %d ligne(s) EAS/MAPI '
+                . 'remise(s) en facturable — reprise sur la prochaine facture du service.',
+                $invoiceId, $n
+            ));
+        }
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [InvoiceCancelled] EXCEPTION (facture #' . $invoiceId
+            . ') : ' . $e->getMessage());
+    }
 });
 
 
@@ -875,6 +952,23 @@ add_hook('DailyCronJob', 1, function (array $params) {
             }
         } catch (\Throwable $e) {
             logActivity('SmarterMail DailyCronJob [cleanProtoUsage] EXCEPTION: ' . $e->getMessage());
+        }
+
+        // ── (P1.1) Purge différée des lignes proto_usage facturées trop vieilles ──
+        // Le rollover fait croître la table d'un jeu de lignes par période ; on
+        // supprime les lignes billed=1 des périodes passées après ~90 jours (fenêtre
+        // d'annulation de facture préservée, affichage de la période courante intact).
+        try {
+            $purgedProto = _sm_purgeBilledProtoUsage(90);
+            if ($purgedProto > 0) {
+                logActivity(sprintf(
+                    'SmarterMail DailyCronJob [purgeBilledProtoUsage] %d ligne(s) proto_usage '
+                    . 'facturée(s) et ancienne(s) purgée(s).',
+                    $purgedProto
+                ));
+            }
+        } catch (\Throwable $e) {
+            logActivity('SmarterMail DailyCronJob [purgeBilledProtoUsage] EXCEPTION: ' . $e->getMessage());
         }
 
         // ── Nettoyage du cache DNS — Phase 1 : par service inactif ────────

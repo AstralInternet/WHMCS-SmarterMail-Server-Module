@@ -891,20 +891,60 @@ function _sm_randomPassword(int $length = 24): string
  */
 function _sm_validateAdminPassword(string $password, string $username, string $domain, array $params): ?string
 {
-    // ── Lecture des critères depuis les configoptions ──────────────────────
-    $minLen         = max(8, (int) ($params['configoption9']  ?? 8));   // minimum absolu : 8
+    // Compte admin secret : plancher absolu de 8 caractères (protège le compte de
+    // service utilisé par le module pour l'impersonification).
+    return _sm_validatePasswordCore(
+        $password, $username, $domain, $params,
+        max(8, (int) ($params['configoption9'] ?? 8))
+    );
+}
+
+/**
+ * (P1.5) Validation des mots de passe de BOÎTE (createuser / savepassword / saveuser).
+ *
+ * Applique EXACTEMENT la même politique que l'admin (longueur + majuscule + chiffre
+ * + spécial + username + domaine, selon configoption9-12), mais la longueur minimale
+ * suit configoption9 telle qu'affichée au client (plancher 1, défaut 8).
+ *
+ * Avant ce correctif, les trois chemins de boîte étaient divergents : défaut 6,
+ * complexité (majuscule/chiffre/spécial) NON vérifiée côté serveur, et saveuser ne
+ * vérifiait QUE la longueur — la politique affichée au client (validée seulement en
+ * JavaScript) était donc contournable par un POST direct. Le `max(1, …)` corrige
+ * aussi le cas configoption9='' → (int)'' = 0 (qui supprimait toute longueur minimale).
+ *
+ * @param string $password Mot de passe à valider
+ * @param string $username Nom d'utilisateur (mdp ne doit pas le contenir)
+ * @param string $domain   Domaine (mdp ne doit pas le contenir)
+ * @param array  $params   Paramètres WHMCS (configoptions)
+ * @return string|null     null si valide, message d'erreur localisé sinon
+ */
+function _sm_validateMailboxPassword(string $password, string $username, string $domain, array $params): ?string
+{
+    return _sm_validatePasswordCore(
+        $password, $username, $domain, $params,
+        max(1, (int) ($params['configoption9'] ?? 8))
+    );
+}
+
+/**
+ * Cœur de validation partagé entre _sm_validateAdminPassword et
+ * _sm_validateMailboxPassword (P1.5) — la seule différence entre les deux est le
+ * plancher de longueur minimale ($minLen).
+ *
+ * @param int $minLen Longueur minimale exigée
+ * @return string|null null si valide, message d'erreur localisé sinon
+ */
+function _sm_validatePasswordCore(string $password, string $username, string $domain, array $params, int $minLen): ?string
+{
     $requireUpper   = ($params['configoption10'] ?? 'on') === 'on';
     $requireNumber  = ($params['configoption11'] ?? 'on') === 'on';
     $requireSpecial = ($params['configoption12'] ?? 'on') === 'on';
 
     // Chargement du tableau de langue une seule fois pour cette validation.
-    // Toutes les erreurs de ce bloc utilisent _sm_lang() — plus de chaînes
-    // codées en dur, conformément à la politique de localisation du module.
     $l = _sm_lang($params);
 
     // ── Longueur minimale ──────────────────────────────────────────────────
     if (strlen($password) < $minLen) {
-        // %d = longueur minimale requise (configoption9, min 8)
         return sprintf($l['err_pwd_min_length'] ?? 'Le mot de passe doit contenir au moins %d caractères.', $minLen);
     }
 
@@ -924,22 +964,16 @@ function _sm_validateAdminPassword(string $password, string $username, string $d
     }
 
     // ── Ne doit pas contenir le nom d'utilisateur ──────────────────────────
-    // Vérifié insensible à la casse — "Patate" est refusé si username = "patate"
     if ($username !== '' && stripos($password, $username) !== false) {
-        // %s = nom d'utilisateur incriminé (pour aider l'admin à corriger)
         return sprintf($l['err_pwd_has_user'] ?? 'Le mot de passe ne doit pas contenir le nom d\'utilisateur (%s).', $username);
     }
 
     // ── Ne doit pas contenir le domaine ───────────────────────────────────
-    // Vérifie le domaine complet ET la partie principale (avant le premier point).
-    // Ex: "example.com" et "example" sont tous les deux vérifiés.
     $domainBase = strstr($domain, '.', true) ?: $domain;
     if ($domain !== '' && stripos($password, $domain) !== false) {
-        // %s = nom de domaine complet (ex : example.com)
         return sprintf($l['err_pwd_has_domain'] ?? 'Le mot de passe ne doit pas contenir le nom de domaine (%s).', $domain);
     }
     if (strlen($domainBase) >= 4 && stripos($password, $domainBase) !== false) {
-        // %s = partie principale du domaine (ex : "example" de "example.com")
         return sprintf($l['err_pwd_has_domain'] ?? 'Le mot de passe ne doit pas contenir le nom de domaine (%s).', $domainBase);
     }
 
@@ -1720,18 +1754,37 @@ function smartermail_TerminateAccount(array $params): string
 
     $resp = $init['api']->deleteDomain($params['domain'], $deleteData, $init['token']);
 
+    // (P1.4) Idempotence : un domaine déjà ABSENT de SmarterMail (HTTP 404) ne doit
+    // pas bloquer la résiliation WHMCS (cas : suppression manuelle côté serveur, ou
+    // résiliation précédente partiellement aboutie). On poursuit alors les nettoyages.
+    // Toute autre erreur (réseau, permissions…) reste bloquante pour permettre un essai.
     if (!$resp['success']) {
-        // err_terminate : %s = message d'erreur brut de l'API SmarterMail
-        return sprintf(
-            _sm_lang($params)['err_terminate'] ?? 'Erreur lors de la résiliation : %s',
-            _sm_apiError($resp)
-        );
+        if ((int) ($resp['code'] ?? 0) === 404) {
+            logActivity('SmarterMail [TerminateAccount] Domaine « ' . $params['domain']
+                . ' » déjà absent de SmarterMail (404) — résiliation traitée comme idempotente.');
+        } else {
+            // err_terminate : %s = message d'erreur brut de l'API SmarterMail
+            return sprintf(
+                _sm_lang($params)['err_terminate'] ?? 'Erreur lors de la résiliation : %s',
+                _sm_apiError($resp)
+            );
+        }
     }
 
-    // ── Nettoyage des enregistrements EAS/MAPI dans mod_sm_proto_usage ───
-    // Le service est résilié → les enregistrements de suivi ne serviront plus.
-    // On purge immédiatement plutôt qu'attendre le nettoyage hebdomadaire.
-    _sm_cleanProtoUsage((int) $params['serviceid']);
+    // ── (P1.4) Purge DIRECTE des enregistrements EAS/MAPI de ce service ──────
+    // _sm_cleanProtoUsage() filtre sur domainstatus IN (Cancelled/Fraud/Terminated),
+    // or WHMCS ne bascule le statut à Terminated qu'APRÈS le retour de cette fonction
+    // → l'appel filtré était un no-op. On supprime donc directement par serviceid
+    // (le contexte de résiliation fait autorité).
+    try {
+        _sm_ensureProtoUsageTable();
+        Capsule::table('mod_sm_proto_usage')
+            ->where('serviceid', (int) $params['serviceid'])
+            ->delete();
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [TerminateAccount] purge proto_usage service #'
+            . ($params['serviceid'] ?? '?') . ' : ' . $e->getMessage());
+    }
 
     // ── Nettoyage du cache DNS pour ce domaine ───────────────────────────
     // Évite de garder des entrées orphelines qui ne seront plus jamais
@@ -1901,6 +1954,18 @@ function smartermail_UsageUpdate(array $params): array
     }
 
     $usageGB = $init['api']->getDomainDiskUsageGB($domain, $init['token']);
+
+    // (P1.4) usageGB < 0 = données domaine indisponibles (404 domaine absent côté
+    // SmarterMail, ou API injoignable). On retourne ['error'] : WHMCS conserve alors
+    // la dernière valeur diskusage connue au lieu d'écrire 0 (évite la sous-facturation
+    // d'affichage et signale une désynchronisation SM↔WHMCS que l'admin peut traiter).
+    if ($usageGB < 0) {
+        logActivity('SmarterMail UsageUpdate : données disque indisponibles pour « '
+            . $domain . ' » (service #' . ($params['serviceid'] ?? '?')
+            . ') — dernière valeur conservée. Domaine absent de SmarterMail ou API injoignable ?');
+        return ['error' => 'Données disque indisponibles pour ' . $domain];
+    }
+
     $usageMB = round($usageGB * 1024, 2);
 
     return [
@@ -3676,25 +3741,12 @@ function smartermail_createuser(array $params): string
     if ($password === '') {
         $l = _sm_lang($params); return $l['err_pwd_required'] ?? 'Le mot de passe est requis.';
     }
-    $minLen = (int) ($params['configoption9'] ?? 6);
-    if (strlen($password) < $minLen) {
-        $l = _sm_lang($params);
-        // %d = longueur minimale configurée
-        return sprintf($l['err_pwd_min_length'] ?? 'Le mot de passe doit contenir au moins %d caractères.', $minLen);
-    }
-    if (stripos($password, $username) !== false) {
-        $l = _sm_lang($params);
-        // %s = nom d'utilisateur détecté dans le mot de passe
-        return sprintf($l['err_pwd_has_user'] ?? 'Le mot de passe ne doit pas contenir le nom d\'utilisateur (%s).', $username);
-    }
-    $domainBase = strstr($domain, '.', true) ?: $domain;
-    if (stripos($password, $domain) !== false) {
-        $l = _sm_lang($params);
-        return sprintf($l['err_pwd_has_domain'] ?? 'Le mot de passe ne doit pas contenir le nom de domaine (%s).', $domain);
-    }
-    if (strlen($domainBase) >= 4 && stripos($password, $domainBase) !== false) {
-        $l = _sm_lang($params);
-        return sprintf($l['err_pwd_has_domain'] ?? 'Le mot de passe ne doit pas contenir le nom de domaine (%s).', $domainBase);
+    // (P1.5) Politique de mot de passe unifiée : longueur (configoption9) + complexité
+    // (configoption10-12) + ne doit pas contenir username/domaine. Non contournable
+    // par un POST direct (avant : longueur seule, défaut 6, complexité non vérifiée).
+    $pwdErr = _sm_validateMailboxPassword($password, $username, $domain, $params);
+    if ($pwdErr !== null) {
+        return $pwdErr;
     }
 
     // Validation optionnelle de la redirection
@@ -3972,36 +4024,12 @@ function smartermail_savepassword(array $params): string
     if ($password === '') {
         $l = _sm_lang($params); return $l['err_pwd_required'] ?? 'Le mot de passe est requis.';
     }
-    $minLen  = (int) ($params['configoption9'] ?? 6);
-    $domain  = $params['domain'];
+    $domain = $params['domain'];
 
-    if (strlen($password) < $minLen) {
-        $l = _sm_lang($params);
-        // %d = longueur minimale requise (configoption9)
-        return sprintf($l['err_pwd_min_length'] ?? 'Le mot de passe doit contenir au moins %d caractères.', $minLen);
-    }
-
-    // ── Règle : ne doit pas contenir le nom d'utilisateur ─────────────────
-    // Vérifié de façon insensible à la casse, n'importe où dans le mot de passe.
-    if (stripos($password, $username) !== false) {
-        $l = _sm_lang($params);
-        // %s = nom d'utilisateur incriminé
-        return sprintf($l['err_pwd_has_user'] ?? 'Le mot de passe ne doit pas contenir le nom d\'utilisateur (%s).', $username);
-    }
-
-    // ── Règle : ne doit pas contenir le nom de domaine ───────────────────
-    // On vérifie le domaine complet (ex: example.com) et la partie principale
-    // avant le premier point (ex: "example") pour attraper les deux cas.
-    $domainBase = strstr($domain, '.', true) ?: $domain; // "example" de "example.com"
-    if (stripos($password, $domain) !== false) {
-        $l = _sm_lang($params);
-        // %s = nom de domaine complet
-        return sprintf($l['err_pwd_has_domain'] ?? 'Le mot de passe ne doit pas contenir le nom de domaine (%s).', $domain);
-    }
-    if (strlen($domainBase) >= 4 && stripos($password, $domainBase) !== false) {
-        $l = _sm_lang($params);
-        // %s = partie principale du domaine (avant le premier point)
-        return sprintf($l['err_pwd_has_domain'] ?? 'Le mot de passe ne doit pas contenir le nom de domaine (%s).', $domainBase);
+    // (P1.5) Politique de mot de passe unifiée (longueur + complexité + username + domaine).
+    $pwdErr = _sm_validateMailboxPassword($password, $username, $domain, $params);
+    if ($pwdErr !== null) {
+        return $pwdErr;
     }
 
     $api     = $init['api'];
@@ -4058,9 +4086,11 @@ function smartermail_saveuser(array $params): string
     // _sm_decodePassword : empêche & → &amp; (ou autres entités) côté serveur
     $newPassword = _sm_decodePassword((string) ($_POST['password'] ?? ''));
     if ($newPassword !== '') {
-        if (strlen($newPassword) < (int) ($params['configoption9'] ?? 6)) {
-            // Vérification rapide de longueur — sans sprintf car configoption9 non chargé ici
-            return _sm_lang($params)['err_pwd_too_short'] ?? 'Le mot de passe est trop court.';
+        // (P1.5) Politique complète (avant : longueur seule, contournable) — mêmes
+        // règles que createuser/savepassword. $username/$domain = service authentifié.
+        $pwdErr = _sm_validateMailboxPassword($newPassword, $username, $domain, $params);
+        if ($pwdErr !== null) {
+            return $pwdErr;
         }
         $userData['password'] = $newPassword;
     }

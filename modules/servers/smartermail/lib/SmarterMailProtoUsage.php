@@ -53,8 +53,18 @@
  *  activated_at    DATETIME      — moment de l'activation
  *  deleted_at      DATETIME NULL — moment de la désactivation (status=deleted)
  *  billed          TINYINT(1)    — 1 après ajout sur une facture
+ *  invoiceid       INT NULL      — facture ayant réglé la ligne (pour InvoiceCancelled)
+ *  billed_at       DATETIME NULL — horodatage du marquage (pour la purge différée)
  *
  *  UNIQUE (serviceid, email, protocol, period_start)
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  ROLLOVER (P1.1) — report des lignes actives à la période suivante
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  Après une facture RÉUSSIE, les lignes grace/active facturées sont reportées
+ *  à la période suivante (period_start = period_end, billed=0) pour que la
+ *  facturation récurrente EAS/MAPI ne dépende plus de l'API live. Voir
+ *  _sm_rolloverProtoUsage() et le hook InvoiceCreation.
  */
 
 if (!defined('WHMCS')) {
@@ -79,47 +89,64 @@ function _sm_ensureProtoUsageTable(): void
     $checked = true;
 
     try {
-        if (Capsule::schema()->hasTable('mod_sm_proto_usage')) return;
+        if (!Capsule::schema()->hasTable('mod_sm_proto_usage')) {
+            Capsule::schema()->create('mod_sm_proto_usage', function ($table) {
+                $table->increments('id');
 
-        Capsule::schema()->create('mod_sm_proto_usage', function ($table) {
-            $table->increments('id');
+                // ── Identité ──────────────────────────────────────────────────
+                $table->integer('serviceid')->unsigned();
+                $table->string('email', 255);                     // Toujours en minuscules
+                $table->enum('protocol', ['eas', 'mapi']);
 
-            // ── Identité ──────────────────────────────────────────────────
-            $table->integer('serviceid')->unsigned();
-            $table->string('email', 255);                     // Toujours en minuscules
-            $table->enum('protocol', ['eas', 'mapi']);
+                // ── État de la machine d'états ────────────────────────────────
+                $table->enum('status', ['grace', 'active', 'deleted'])->default('grace');
 
-            // ── État de la machine d'états ────────────────────────────────
-            $table->enum('status', ['grace', 'active', 'deleted'])->default('grace');
+                // ── Période de facturation ────────────────────────────────────
+                // Calculée depuis nextduedate + billingcycle au moment de l'activation.
+                $table->date('period_start');
 
-            // ── Période de facturation ────────────────────────────────────
-            // Calculée depuis nextduedate + billingcycle au moment de l'activation.
-            $table->date('period_start');
+                // ── Configuration (snapshot au moment de l'activation) ────────
+                // On stocke le seuil au moment de la création pour que la logique
+                // de facturation ne dépende pas de la config produit courante.
+                $table->integer('threshold_hours')->unsigned()->default(24); // 1 jour = 24h
 
-            // ── Configuration (snapshot au moment de l'activation) ────────
-            // On stocke le seuil au moment de la création pour que la logique
-            // de facturation ne dépende pas de la config produit courante.
-            $table->integer('threshold_hours')->unsigned()->default(24); // 1 jour = 24h
+                // ── Chronologie ───────────────────────────────────────────────
+                $table->dateTime('activated_at');                 // Début de la période active
+                $table->dateTime('deleted_at')->nullable();       // Moment de désactivation (status=deleted)
 
-            // ── Chronologie ───────────────────────────────────────────────
-            $table->dateTime('activated_at');                 // Début de la période active
-            $table->dateTime('deleted_at')->nullable();       // Moment de désactivation (status=deleted)
+                // ── Facturation ───────────────────────────────────────────────
+                $table->tinyInteger('billed')->default(0);        // 1 = déjà sur une facture
+                // (P1.1) Traçabilité pour InvoiceCancelled + purge différée.
+                $table->integer('invoiceid')->unsigned()->nullable()->default(null);
+                $table->dateTime('billed_at')->nullable()->default(null);
 
-            // ── Facturation ───────────────────────────────────────────────
-            $table->tinyInteger('billed')->default(0);        // 1 = déjà sur une facture
+                // ── Contrainte d'unicité ──────────────────────────────────────
+                // Une seule entrée par adresse/protocole/période de facturation.
+                $table->unique(
+                    ['serviceid', 'email', 'protocol', 'period_start'],
+                    'uq_sm_proto_period'
+                );
+                $table->index('invoiceid', 'idx_sm_proto_invoiceid');
+            });
 
-            // ── Contrainte d'unicité ──────────────────────────────────────
-            // Une seule entrée par adresse/protocole/période de facturation.
-            $table->unique(
-                ['serviceid', 'email', 'protocol', 'period_start'],
-                'uq_sm_proto_period'
-            );
-        });
+            logActivity('SmarterMail [proto-usage] Table mod_sm_proto_usage créée.');
+            return;
+        }
 
-        logActivity('SmarterMail [proto-usage] Table mod_sm_proto_usage créée.');
+        // ── (P1.1) Chemin d'upgrade pour les installations existantes ──────────
+        // Ajoute invoiceid + billed_at si absents. Idempotent : la garde statique
+        // $checked plus haut limite ce test à une fois par exécution PHP.
+        if (!Capsule::schema()->hasColumn('mod_sm_proto_usage', 'invoiceid')) {
+            Capsule::schema()->table('mod_sm_proto_usage', function ($table) {
+                $table->integer('invoiceid')->unsigned()->nullable()->default(null);
+                $table->dateTime('billed_at')->nullable()->default(null);
+                $table->index('invoiceid', 'idx_sm_proto_invoiceid');
+            });
+            logActivity('SmarterMail [proto-usage] Migration : colonnes invoiceid/billed_at ajoutées.');
+        }
 
     } catch (\Throwable $e) {
-        logActivity('SmarterMail [proto-usage] Erreur création table : ' . $e->getMessage());
+        logActivity('SmarterMail [proto-usage] Erreur création/migration table : ' . $e->getMessage());
     }
 }
 
@@ -211,41 +238,70 @@ function _sm_recordProtoActivation(
     $email = strtolower($email);
 
     try {
-        $existing = Capsule::table('mod_sm_proto_usage')
+        // (P1.1) 1) Chercher la ligne VIVANTE (billed=0) la plus récente, tous
+        //           statuts confondus (inclut une éventuelle ligne reportée).
+        $living = Capsule::table('mod_sm_proto_usage')
+            ->where('serviceid', $serviceid)
+            ->where('email',     $email)
+            ->where('protocol',  $protocol)
+            ->where('billed',    0)
+            ->orderBy('period_start', 'desc')
+            ->first();
+
+        if ($living) {
+            if ($living->status === 'deleted') {
+                // Désactivé puis réactivé avant facture → recycler la ligne en grace.
+                Capsule::table('mod_sm_proto_usage')
+                    ->where('id', $living->id)
+                    ->update([
+                        'status'       => 'grace',
+                        'activated_at' => $now,
+                        'deleted_at'   => null,
+                    ]);
+            }
+            // grace ou active vivant → déjà tracké, rien à faire (idempotent).
+            return;
+        }
+
+        // (P1.1) 2) Aucune ligne vivante. Déterminer la période d'insertion : si la
+        //           période COURANTE porte déjà une ligne billed=1 (réactivation
+        //           APRÈS facturation), insérer sur la période SUIVANTE — sinon
+        //           l'INSERT violerait uq_sm_proto_period et l'événement serait perdu.
+        $insertPeriod  = $period['start'];
+        $billedCurrent = Capsule::table('mod_sm_proto_usage')
             ->where('serviceid',    $serviceid)
             ->where('email',        $email)
             ->where('protocol',     $protocol)
             ->where('period_start', $period['start'])
-            ->first();
+            ->where('billed',       1)
+            ->exists();
+        if ($billedCurrent && $period['end']) {
+            $insertPeriod = $period['end'];
+        }
 
-        if (!$existing) {
-            // ── Première activation de la période → grace ─────────────────
+        // (P1.1) 3) Insérer la nouvelle ligne grace. exists() + contrainte d'unicité
+        //           servent de filet contre les courses (crons concurrents).
+        $already = Capsule::table('mod_sm_proto_usage')
+            ->where('serviceid',    $serviceid)
+            ->where('email',        $email)
+            ->where('protocol',     $protocol)
+            ->where('period_start', $insertPeriod)
+            ->exists();
+        if (!$already) {
             Capsule::table('mod_sm_proto_usage')->insert([
                 'serviceid'       => $serviceid,
                 'email'           => $email,
                 'protocol'        => $protocol,
                 'status'          => 'grace',
-                'period_start'    => $period['start'],
+                'period_start'    => $insertPeriod,
                 'threshold_hours' => max(1, $thresholdHours),
                 'activated_at'    => $now,
                 'deleted_at'      => null,
                 'billed'          => 0,
+                'invoiceid'       => null,
+                'billed_at'       => null,
             ]);
-
-        } elseif ($existing->status === 'deleted' && !$existing->billed) {
-            // ── Réactivation après désactivation, pas encore facturé ───────
-            // On repart en grace — la ligne deleted non facturée est recyclée.
-            // Cas rare : désactivé puis réactivé dans la même période avant la facture.
-            Capsule::table('mod_sm_proto_usage')
-                ->where('id', $existing->id)
-                ->update([
-                    'status'       => 'grace',
-                    'activated_at' => $now,
-                    'deleted_at'   => null,
-                    'billed'       => 0,
-                ]);
         }
-        // grace ou active existant → déjà tracké, rien à faire
 
     } catch (\Throwable $e) {
         logActivity('SmarterMail [proto-usage] recordActivation error ('
@@ -281,22 +337,35 @@ function _sm_recordProtoDeactivation(
 ): void {
     _sm_ensureProtoUsageTable();
 
-    $period = _sm_getBillingPeriod($serviceid);
-    if (!$period['start']) return;
-
     $now   = date('Y-m-d H:i:s');
+    $today = date('Y-m-d');
     $email = strtolower($email);
 
     try {
+        // (P1.1) Cibler la LIGNE VIVANTE = la ligne billed=0 grace/active la plus
+        // récente pour ce (service, email, protocole), SANS filtre de période :
+        // après rollover c'est la ligne reportée, et pendant la fenêtre
+        // génération→paiement c'est la ligne N+1 (alors que _sm_getBillingPeriod
+        // renverrait encore N — cause du bug historique du filtre de période).
         $existing = Capsule::table('mod_sm_proto_usage')
-            ->where('serviceid',    $serviceid)
-            ->where('email',        $email)
-            ->where('protocol',     $protocol)
-            ->where('period_start', $period['start'])
+            ->where('serviceid', $serviceid)
+            ->where('email',     $email)
+            ->where('protocol',  $protocol)
+            ->where('billed',    0)
+            ->whereIn('status',  ['grace', 'active'])
+            ->orderBy('period_start', 'desc')
             ->first();
 
-        // Rien à faire si pas de ligne, déjà deleted, ou déjà facturé
-        if (!$existing || $existing->status === 'deleted' || $existing->billed) {
+        if (!$existing) {
+            return; // rien de vivant (déjà deleted, déjà facturé, ou jamais tracké)
+        }
+
+        // (P1.1) Ligne reportée dont la période n'a pas encore commencé
+        // (désactivation pendant la fenêtre pré-paiement) : l'usage a déjà été payé
+        // sur la période précédente ; la période reportée n'a jamais vu le protocole
+        // actif → on efface, on ne facture pas.
+        if ($existing->period_start > $today) {
+            Capsule::table('mod_sm_proto_usage')->where('id', $existing->id)->delete();
             return;
         }
 
@@ -357,22 +426,28 @@ function _sm_markMailboxProtoDeleted(
 ): void {
     _sm_ensureProtoUsageTable();
 
-    $period = _sm_getBillingPeriod($serviceid);
-    if (!$period['start']) return;
-
     $now   = date('Y-m-d H:i:s');
+    $today = date('Y-m-d');
     $email = strtolower($email);
 
     try {
+        // (P1.1) Toutes les lignes VIVANTES (billed=0) de cette adresse, toutes
+        // périodes confondues (pas de filtre de période) — inclut la ligne reportée.
         $entries = Capsule::table('mod_sm_proto_usage')
-            ->where('serviceid',    $serviceid)
-            ->where('email',        $email)
-            ->where('period_start', $period['start'])
-            ->where('billed',       0)
+            ->where('serviceid', $serviceid)
+            ->where('email',     $email)
+            ->where('billed',    0)
             ->get();
 
         foreach ($entries as $entry) {
             if ($entry->status === 'deleted') continue; // Déjà traité
+
+            // (P1.1) Ligne reportée dont la période n'a pas commencé → effacer
+            // (usage déjà payé, période jamais entamée).
+            if ($entry->period_start > $today) {
+                Capsule::table('mod_sm_proto_usage')->where('id', $entry->id)->delete();
+                continue;
+            }
 
             // Calculer le temps écoulé depuis l'activation (arrondi à l'heure)
             $activatedAt  = new DateTime($entry->activated_at);
@@ -472,13 +547,18 @@ function _sm_finalizeAndGetBillable(int $serviceid, string $periodStart): array
     _sm_ensureProtoUsageTable();
 
     try {
-        // Toutes les lignes non encore facturées pour cette période
-        // (grace + active + deleted)
+        // Toutes les lignes non encore facturées jusqu'à cette période INCLUSE.
+        // (P1.1) period_start <= au lieu de = strict : rattrape les lignes restées
+        // billed=0 après un échec d'UpdateInvoice au(x) cycle(s) précédent(s), et
+        // les activations tombées dans la fenêtre génération→paiement. ORDER BY ASC
+        // + l'écrasement $result[email][protocol]=$row ci-dessous ⇒ c'est la ligne
+        // de la période la PLUS RÉCENTE (statut le plus pertinent) qui est facturée.
         $rows = Capsule::table('mod_sm_proto_usage')
             ->where('serviceid',    $serviceid)
-            ->where('period_start', $periodStart)
+            ->where('period_start', '<=', $periodStart)
             ->where('billed',       0)
             ->whereIn('status',     ['grace', 'active', 'deleted'])
+            ->orderBy('period_start', 'asc')
             ->get();
 
         // Structurer par email → protocole
@@ -497,35 +577,172 @@ function _sm_finalizeAndGetBillable(int $serviceid, string $periodStart): array
 }
 
 /**
- * Marque les entrées comme facturées et nettoie les lignes deleted.
+ * Marque les entrées comme facturées (P1.1 — sans plus rien supprimer).
  *
- * Appelé dans le hook InvoiceCreated après avoir ajouté les lignes de facture.
+ * Appelé dans le hook InvoiceCreation APRÈS le succès de UpdateInvoice.
  *
- *   grace/active → billed = 1 (reste en DB pour la période, sera recalculé)
- *   deleted      → DELETE de la DB (dette réglée, ne pas facturer à nouveau)
+ * Marquage PAR CRITÈRE : pour chaque (service, email, protocole) facturé, on pose
+ * billed=1 + invoiceid + billed_at sur TOUTES les lignes billed=0 dont
+ * period_start <= la période facturée. Cela absorbe les lignes plus anciennes
+ * restées billed=0 (échec de facture antérieur) et reprises par le filtre <=.
  *
- * @param array $billableByEmail Retourné par _sm_finalizeAndGetBillable()
+ * Les lignes status='deleted' NE SONT PLUS SUPPRIMÉES : elles restent billed=1
+ * avec leur invoiceid (purge différée par _sm_purgeBilledProtoUsage), ce qui
+ * permet à InvoiceCancelled de les rendre à nouveau facturables si la facture
+ * est annulée.
+ *
+ * @param array  $billableByEmail Retourné par _sm_finalizeAndGetBillable()
+ * @param int    $invoiceId       Facture qui règle ces lignes
+ * @param string $periodStart     Période facturée (borne <= pour le marquage)
  */
-function _sm_markEntriesAsBilled(array $billableByEmail): void
+function _sm_markEntriesAsBilled(array $billableByEmail, int $invoiceId, string $periodStart): void
 {
+    $now = date('Y-m-d H:i:s');
+
     foreach ($billableByEmail as $email => $protocols) {
         foreach ($protocols as $protocol => $row) {
             try {
-                if ($row->status === 'deleted') {
-                    // Facturé avec date de suppression → effacer de la DB
-                    Capsule::table('mod_sm_proto_usage')->where('id', $row->id)->delete();
-                } else {
-                    // grace ou active → marquer billed=1 (reste actif pour la période)
-                    Capsule::table('mod_sm_proto_usage')
-                        ->where('id', $row->id)
-                        ->update(['billed' => 1]);
-                }
+                Capsule::table('mod_sm_proto_usage')
+                    ->where('serviceid',    $row->serviceid)
+                    ->where('email',        $email)
+                    ->where('protocol',     $protocol)
+                    ->where('billed',       0)
+                    ->where('period_start', '<=', $periodStart)
+                    ->update([
+                        'billed'    => 1,
+                        'invoiceid' => $invoiceId,
+                        'billed_at' => $now,
+                    ]);
             } catch (\Throwable $e) {
-                logActivity('SmarterMail [proto-usage] markAsBilled error (id='
-                    . $row->id . '): ' . $e->getMessage());
+                logActivity('SmarterMail [proto-usage] markAsBilled error ('
+                    . $email . '/' . $protocol . '): ' . $e->getMessage());
             }
         }
     }
+}
+
+
+/**
+ * (P1.1) Reporte les lignes grace/active facturées à la période SUIVANTE.
+ *
+ * Appelé dans la branche de succès de UpdateInvoice, dans la même transaction que
+ * _sm_markEntriesAsBilled. Pour chaque (service, email, protocole) facturé dont le
+ * statut est grace ou active, insère une nouvelle ligne pour la période suivante
+ * (period_start = $nextPeriodStart, billed=0, statut et activated_at conservés,
+ * deleted_at=NULL, invoiceid=NULL). Ainsi la facturation récurrente EAS/MAPI ne
+ * dépend plus de l'API live : la Phase 1 (DB) couvre les renouvellements.
+ *
+ * Les lignes 'deleted' ne sont JAMAIS reportées (la dette est réglée).
+ *
+ * IDEMPOTENCE : la source est $billableByEmail (déjà facturé) ; chaque insertion
+ * est précédée d'un exists() et bornée par la contrainte uq_sm_proto_period (une
+ * violation éventuelle — deux crons concurrents — est absorbée en no-op).
+ *
+ * @param  int    $serviceid
+ * @param  array  $billableByEmail Retourné par _sm_finalizeAndGetBillable()
+ * @param  string $nextPeriodStart period_end de la période facturée (Y-m-d)
+ * @return int    Nombre de lignes reportées
+ */
+function _sm_rolloverProtoUsage(int $serviceid, array $billableByEmail, string $nextPeriodStart): int
+{
+    $reported = 0;
+
+    foreach ($billableByEmail as $email => $protocols) {
+        foreach ($protocols as $protocol => $row) {
+            // Seules les lignes grace/active en cours d'usage sont reportées.
+            if (!in_array($row->status, ['grace', 'active'], true)) {
+                continue;
+            }
+
+            try {
+                $already = Capsule::table('mod_sm_proto_usage')
+                    ->where('serviceid',    $serviceid)
+                    ->where('email',        $email)
+                    ->where('protocol',     $protocol)
+                    ->where('period_start', $nextPeriodStart)
+                    ->exists();
+                if ($already) {
+                    continue; // ligne de la période suivante déjà présente
+                }
+
+                Capsule::table('mod_sm_proto_usage')->insert([
+                    'serviceid'       => $serviceid,
+                    'email'           => $email,
+                    'protocol'        => $protocol,
+                    'status'          => $row->status,        // grace ou active conservé
+                    'period_start'    => $nextPeriodStart,
+                    'threshold_hours' => (int) $row->threshold_hours,
+                    'activated_at'    => $row->activated_at,  // activation d'origine conservée
+                    'deleted_at'      => null,
+                    'billed'          => 0,
+                    'invoiceid'       => null,
+                    'billed_at'       => null,
+                ]);
+                $reported++;
+
+            } catch (\Throwable $e) {
+                // Violation d'unicité (course) ou autre : non fatal, on continue.
+                logActivity('SmarterMail [proto-usage] rollover error ('
+                    . $email . '/' . $protocol . '): ' . $e->getMessage());
+            }
+        }
+    }
+
+    return $reported;
+}
+
+
+/**
+ * (P1.1) Purge différée des lignes déjà facturées (billed=1) trop anciennes.
+ *
+ * Appelée hebdomadairement par le DailyCronJob. Supprime les lignes billed=1 dont
+ * la période est antérieure à la période courante du service ET dont le marquage
+ * (billed_at) remonte à plus de $retentionDays jours. La double condition :
+ *   - préserve l'affichage de la période courante (cycles annuels+) ;
+ *   - garde une fenêtre d'annulation de facture d'au moins $retentionDays jours
+ *     (InvoiceCancelled peut rendre ces lignes à nouveau facturables).
+ *
+ * @param  int $retentionDays Rétention minimale (défaut 90 jours)
+ * @return int Nombre de lignes purgées
+ */
+function _sm_purgeBilledProtoUsage(int $retentionDays = 90): int
+{
+    _sm_ensureProtoUsageTable();
+
+    $purged = 0;
+    try {
+        $cutoff = date('Y-m-d H:i:s', time() - max(1, $retentionDays) * 86400);
+
+        // Services ayant des lignes billed=1 anciennes (billed_at < cutoff).
+        $serviceIds = Capsule::table('mod_sm_proto_usage')
+            ->where('billed', 1)
+            ->where(function ($q) use ($cutoff) {
+                $q->whereNull('billed_at')->orWhere('billed_at', '<', $cutoff);
+            })
+            ->distinct()
+            ->pluck('serviceid')
+            ->toArray();
+
+        foreach ($serviceIds as $sid) {
+            $period = _sm_getBillingPeriod((int) $sid);
+            if (!$period['start']) {
+                continue; // pas de période courante fiable → on ne purge pas
+            }
+            $purged += Capsule::table('mod_sm_proto_usage')
+                ->where('serviceid',    $sid)
+                ->where('billed',       1)
+                ->where('period_start', '<', $period['start'])
+                ->where(function ($q) use ($cutoff) {
+                    $q->whereNull('billed_at')->orWhere('billed_at', '<', $cutoff);
+                })
+                ->delete();
+        }
+
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [proto-usage] purgeBilled error : ' . $e->getMessage());
+    }
+
+    return $purged;
 }
 
 

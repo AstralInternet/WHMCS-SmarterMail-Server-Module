@@ -951,7 +951,14 @@ class SmarterMailApi
      */
     public function getDomainDiskUsageGB(string $domain, string $saToken): float
     {
-        $info  = $this->getDomainInfo($domain, $saToken);
+        $info = $this->getDomainInfo($domain, $saToken);
+        // (P1.4) getDomainInfo() renvoie [] sur TOUTE erreur (404 domaine absent,
+        // timeout, auth…). On distingue « erreur » d'un vrai 0 en renvoyant -1.0,
+        // pour que UsageUpdate ne remplace PAS l'utilisation disque par 0 sur une
+        // panne (sous-facturation / désynchronisation silencieuse SM↔WHMCS).
+        if (empty($info)) {
+            return -1.0;
+        }
         $bytes = $info['domainData']['diskUsage'] ?? 0;
         // 1024^3 = 1 073 741 824 bytes par gigaoctet (gibibyte)
         return round($bytes / (1024 ** 3), 4);
