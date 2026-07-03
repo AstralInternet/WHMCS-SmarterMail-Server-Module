@@ -14,6 +14,7 @@
 3. [Partie II — Flexibilité multi-entreprise](#3-partie-ii--flexibilité-multi-entreprise)
 4. [Partie III — Fluidité client, CSS et GUI](#4-partie-iii--fluidité-client-css-et-gui)
 5. [Plan d'action global priorisé](#5-plan-daction-global-priorisé)
+6. [Fonctionnalité — Répondeur automatique (FEATURE_REQUEST)](#6-fonctionnalité--répondeur-automatique-feature_request)
 
 ---
 
@@ -97,6 +98,24 @@ L'en-tête du wrapper (lignes 89-91) avertit que l'API peut répondre `200` avec
 | Info | Docblocks de `usage()`/`tenantUsage()` contredisent le code (username vs domain) — piège pour un futur mainteneur | SmarterMailMetricsProvider.php:179-187 |
 
 *\* rétrogradé Faible par les vérificateurs : cosmétique (les montants restent exacts), mais visible sur chaque facture.*
+
+#### Conception validée du rollover proto_usage (design détaillé, pré-implémentation)
+
+**Principe.** Après un `localAPI('UpdateInvoice')` réussi ([hooks.php:726](modules/servers/smartermail/hooks.php#L726) — le correctif P0 n°1 y a déjà déplacé le marquage), et dans une transaction unique : (1) `_sm_markEntriesAsBilled(billable, invoiceid, periodStart)` pose `billed=1` + `invoiceid` + `billed_at` **par critère** (`serviceid+email+protocol, billed=0, period_start <= courant`) et **ne supprime plus** les lignes `deleted` ; (2) une nouvelle `_sm_rolloverProtoUsage(serviceid, billable, nextPeriodStart)` réinsère chaque ligne `grace`/`active` facturée avec `period_start = $period['end']` ([hooks.php:539](modules/servers/smartermail/hooks.php#L539)), `billed=0`, statut et `activated_at` conservés, `deleted_at=NULL`. Les lignes `deleted` ne sont jamais reportées. Rollover sauté pour les cycles One Time. En cas d'échec `UpdateInvoice` ou d'absence d'admin ([hooks.php:721](modules/servers/smartermail/hooks.php#L721)) : ni marquage ni report — reprise au cycle suivant.
+
+**Sélection Phase 1 élargie.** `_sm_finalizeAndGetBillable` ([SmarterMailProtoUsage.php:477-481](modules/servers/smartermail/lib/SmarterMailProtoUsage.php#L477)) passe de `period_start = courant` à `period_start <= courant` (+ `ORDER BY period_start ASC`, l'écrasement existant gardant la ligne la plus récente par email+protocole). Ce changement est une **condition de validité du correctif P0 n°1** : sans lui, les lignes non marquées après un échec `UpdateInvoice` ne seraient jamais reprises (le filtre strict de la période suivante ne les matcherait pas). Il rattrape aussi les activations survenues dans la fenêtre génération→paiement (`nextduedate` n'avance qu'au paiement, cf. §2.9).
+
+**Idempotence.** Le rollover itère uniquement `$billableByEmail` (déjà `billed=0`) → un rejeu du hook (facture régénérée) ne retourne rien et ne reporte rien. Chaque INSERT est protégé par un `exists()` préalable (pattern de `syncprotousage`, [smartermail.php:4444](modules/servers/smartermail/smartermail.php#L4444)) puis par la contrainte `uq_sm_proto_period` ([SmarterMailProtoUsage.php:113](modules/servers/smartermail/lib/SmarterMailProtoUsage.php#L113)) avec catch SQLSTATE 23000 traité en no-op. Une 2ᵉ facture Hosting dans le même cycle ne re-marque ni ne re-reporte rien (lignes N `billed=1`, lignes N+1 à `period_start` futur, jamais matchées par `<=`).
+
+**Schéma.** Deux colonnes ajoutées à `mod_sm_proto_usage` via le chemin d'upgrade de `_sm_ensureProtoUsageTable` (`hasColumn` sous la garde statique existante) : `invoiceid INT UNSIGNED NULL` (+ index) et `billed_at DATETIME NULL`. Purge différée hebdomadaire `_sm_purgeBilledProtoUsage(90)` (DailyCronJob, [hooks.php:815](modules/servers/smartermail/hooks.php#L815)) : `billed=1 AND period_start < période courante du service AND billed_at < NOW()-90j` — préserve l'affichage des cycles longs et une fenêtre d'annulation de 90 jours.
+
+**Dédup email+protocole.** `$billedByProtoUsage[$email]` ([hooks.php:586](modules/servers/smartermail/hooks.php#L586)) devient `$billedByProtoUsage[$email]['eas'|'mapi']` ; la Phase 2 ([hooks.php:660](modules/servers/smartermail/hooks.php#L660)) filtre par protocole restant au lieu de sauter l'adresse entière, **en normalisant la clé en minuscules** (la comparaison actuelle est sensible à la casse alors que la DB stocke en minuscules — double facturation possible dès aujourd'hui). Limite assumée : un bundle à cheval sur les deux phases est facturé eas+mapi au lieu du tarif combiné (cas legacy transitoire, éteint par le rollover + `syncprotousage`).
+
+**Hook `InvoiceCancelled`.** `UPDATE mod_sm_proto_usage SET billed=0, invoiceid=NULL, billed_at=NULL WHERE invoiceid=?` — silencieux si 0 ligne (le hook reçoit toutes les factures WHMCS), log explicite sinon. Les lignes reportées N+1 ne sont pas touchées (usage réel en cours) ; la refacturation re-tente le report et la collision est absorbée par la garde d'unicité. Aucune écriture `tblinvoice*` → compatible immutabilité WHMCS 9.
+
+**Événements re-ciblés sur la « ligne vivante ».** `_sm_recordProtoDeactivation` ([SmarterMailProtoUsage.php:291-296](modules/servers/smartermail/lib/SmarterMailProtoUsage.php#L291)) et `_sm_markMailboxProtoDeleted` (:367-371) ciblent désormais la ligne `billed=0` la plus récente (sans filtre de période), avec une règle nouvelle : désactivation avant le début de la période reportée (`NOW() < period_start`) → ligne effacée (période jamais entamée, usage déjà payé). `_sm_recordProtoActivation` (:214-248) recycle toute ligne `deleted billed=0` et, si la période courante porte déjà une ligne `billed=1` (réactivation post-facturation), insère sur la période suivante — aujourd'hui ce cas viole l'unicité et l'événement est perdu.
+
+**Risque nouveau à surveiller.** La récurrence ne s'autorégulant plus par l'API live, une boîte supprimée directement dans SmarterMail continuerait d'être facturée par la Phase 1 : journaliser un avertissement de réconciliation quand le token DA est disponible, mais n'auto-basculer en `deleted` qu'après le correctif « jamais de 0/[] facturable sur erreur » (§2.3), sans quoi un `[]` d'erreur effacerait le suivi.
 
 ## 2.3 Wrapper API — robustesse du transport (5 constats élevés, tous confirmés ×2)
 
@@ -195,6 +214,22 @@ C'est le point clé pour votre question « forfaits avec X d'espace maximal » :
 | **4. Adoption de domaines existants** | Moyen | **Bloquant commercial n°1** pour tout acheteur déjà équipé : CreateAccount refuse tout domaine existant (smartermail.php:1389). Mode « adopter » : créer/réutiliser l'admin secret sans setDomainSettings destructif + bouton admin + outil de rapprochement en masse (domaines SM orphelins ↔ services WHMCS) + `syncprotousage` existant pour amorcer la facturation. |
 | **5. Modèles de facturation sélectionnables** | Moyen | `billing_model` ∈ flat / tiers (actuel) / per_mailbox / hybrid (Go+boîtes inclus, excédents facturés). Le hook branche après lecture du service ; miroir obligatoire dans l'estimé du dashboard. Prérequis : corriger `currency=1` en dur. |
 | **6. Neutraliser la marque Astral** | Trivial-moyen | Exemples → `votre-serveur.com` ; NS→onglets configurables (3 configoptions CSV ou JSON, onglet masqué si vide) ; onglet portail renommé/configurable ; overrides `lang/overrides/{lang}.php` fusionnés par `array_merge`. |
+
+### Conception d'interaction — quota bloquant × modèles de facturation (chantiers n°1, 2 et 5)
+
+Les chantiers n°1 (quota) et n°5 (modèles) modifient tous deux le hook `InvoiceCreation` : ils doivent être conçus comme **une base et un modificateur**, pas comme deux branches. `billing_model` définit le calcul de la ligne de base ; `quota_gb`+`overage_mode` modifient le seul volet disque (`block` plafonne, `bill` ajoute une ligne d'excédent, `notify` n'affecte pas la facture). Seul le mode `tiers` (actuel) réécrit le montant de la ligne Hosting ([hooks.php:435-437](modules/servers/smartermail/hooks.php#L435)) ; flat/per_mailbox/hybrid la laissent intacte et passent par les lignes `newitem*` du payload UpdateInvoice existant ([hooks.php:512-516](modules/servers/smartermail/hooks.php#L512)) — surface de régression minimale pour l'existant.
+
+**Table `mod_sm_product_settings`** (les 23/24 configoptions consommées imposent la voie table, §3.2) — auto-créée selon le pattern de [SmarterMailProtoUsage.php:75-84](modules/servers/smartermail/lib/SmarterMailProtoUsage.php#L75) : `product_id` (PK = tblproducts.id), `billing_model` ('tiers' défaut), `quota_gb` (0 = illimité), `overage_mode` ('notify' défaut — le plus sûr), `overage_price` (le prix d'une tranche excédentaire, distinct du prix produit qui devient prix de forfait), `per_mailbox_price`, `included_gb`, `included_mailboxes`, `notify_threshold_pct`. Lecture par helper `_sm_getProductSettings()` (requête séparée + cache statique + repli défauts sur toute erreur) — **pas** de leftJoin dans la requête du hook ([hooks.php:317-341](modules/servers/smartermail/hooks.php#L317)) : une table absente ferait sauter la facturation du service via le catch global.
+
+**Contrat quota↔serveur** : `maxSize = quota_gb×1024³` n'est poussé **que si `overage_mode='block'`** (en `bill`/`notify`, le serveur ne doit pas bloquer ce qu'on veut facturer/notifier) — à la création (remplace le littéral `maxSize=0`, [smartermail.php:1476](modules/servers/smartermail/smartermail.php#L1476)) et dans la nouvelle `smartermail_ChangePackage` via `setDomainSettings` (merge partiel, [SmarterMailApi.php:803](modules/servers/smartermail/lib/SmarterMailApi.php#L803)), qui refuse un passage à un quota block inférieur à l'usage courant. En facture, mode block ⇒ `tiers = min(tiers, ceil(quota/gbPerTier))` : jamais facturé au-delà du plafond.
+
+**Comptage per_mailbox** : `getDomainData→userCount` ([SmarterMailApi.php:977](modules/servers/smartermail/lib/SmarterMailApi.php#L977), token DA déjà établi par le hook) → repli `getUsersQuick` → repli métrique `email_accounts` de tbltenant_stats ([SmarterMailMetricsProvider.php:394](modules/servers/smartermail/lib/SmarterMailMetricsProvider.php#L394)) avec contrôle de fraîcheur < 48 h **mais pas de rejet du zéro** (0 boîte est légitime, contrairement à `disk_gb`) → sinon ligne de base seule + alerte admin (pas de rattrapage automatique d'un instantané manqué). Aucun état persistant : le comptage est recalculé à chaque facture — le rollover proto_usage (P1) ne concerne pas ce volet.
+
+**Ordonnancement avec P0/P1 (dépendances dures)** : (1) P0-3 d'abord — le dispatch consomme le helper `_sm_getDiskMetric()` (rejet nul/périmé), appelé *seulement* si le modèle consomme le disque : une panne de collecte disque n'affecte ni n'alerte un produit per_mailbox/flat ; et le repli `email_accounts` exige que le MetricsProvider cesse d'émettre des zéros sur échec ([SmarterMailMetricsProvider.php:333-350](modules/servers/smartermail/lib/SmarterMailMetricsProvider.php#L333)). (2) P0-1 + P1-6 ensuite : bloc unique post-succès d'UpdateInvoice (marquage billed, rollover, invoiceid) — le dispatch s'y insère sans le modifier. Séquence finale du hook : fetch+settings → API → métrique conditionnelle → dispatch → Phase 1 (sans marquage) → Phase 2 → UpdateInvoice → si succès : marquage+rollover.
+
+**Miroir client obligatoire** : extraire une fonction pure `_sm_computeBaseCharge()` partagée hook/dashboard — l'estimé ([smartermail.php:2325-2328](modules/servers/smartermail/smartermail.php#L2325), [:2729](modules/servers/smartermail/smartermail.php#L2729)) duplique aujourd'hui la formule des tranches ; avec 4 modèles, la duplication garantirait la divergence. Le dashboard fournit l'usage live et `count($users)` déjà calculés. Prérequis inchangé : corriger `tblpricing currency=1`/`monthly` figés ([smartermail.php:2302-2307](modules/servers/smartermail/smartermail.php#L2302)). `UsageUpdate` retourne `disklimit = quota_gb×1024` (MB) au lieu de 0 ([smartermail.php:1906-1912](modules/servers/smartermail/smartermail.php#L1906)) → jauge WHMCS native, dans les trois modes.
+
+**Rétro-compatibilité** : absence de ligne product_settings ≡ tiers + quota 0 ⇒ calcul, arrondis et libellés strictement identiques à l'actuel — Astral n'insère rien et ne voit aucun changement (hormis P0-3, déjà acté). Migration d'un parc existant vers un quota : bouton addon « Appliquer les limites aux services actifs du produit » (sans lui, seuls les nouveaux comptes et les ChangePackage reçoivent `maxSize`). Pièges documentés : produit à 0 $ en per_mailbox (aucune facture ⇒ hook jamais déclenché — le récurrent doit rester > 0) ; `bill` sans `overage_price` ⇒ pas de ligne (garde > 0) ; changement de mode en cours de cycle ⇒ appliqué à la facture suivante, sans proratisation.
 
 ### Priorité MOYENNE
 
@@ -315,4 +350,56 @@ C'est le point clé pour votre question « forfaits avec X d'espace maximal » :
 
 ---
 
-*Rapport généré par audit multi-agents (67 agents, 8 dimensions, contre-vérification adversariale à 2 vérificateurs par défaut majeur). Chaque constat cité a été vérifié dans le code à la ligne près ; le seul constat non confirmé a été retiré et documenté en §2.9. Les audits précédents (sécurité v1.2.2) restent valides et ne sont pas dupliqués ici.*
+# 6. Fonctionnalité — Répondeur automatique (FEATURE_REQUEST)
+
+> **Demande :** gestion du répondeur automatique (réponse d'absence) par boîte depuis l'espace client — `FEATURE_REQUEST.md`. Endpoints SmarterMail : `GET api/v1/settings/auto-responder/{wantHtml?}` et `POST api/v1/settings/auto-responder`, tous deux **« limited to Users »** (token utilisateur requis, pas Domain Admin).
+
+## 6.1 Décision d'architecture — endpoint dédié + impersonification utilisateur (VALIDÉE)
+
+Deux voies existaient ; la première est retenue, la seconde rejetée :
+
+| Voie | Verdict | Motif vérifié dans le code |
+|---|---|---|
+| **Endpoint dédié + `loginUser()`** | ✅ Retenue | Le patron « obtenir un token utilisateur pour un endpoint user-scoped » existe déjà et tourne en production : [SmarterMailApi.php:1326](modules/servers/smartermail/lib/SmarterMailApi.php#L1326) (`getMailboxForwardList` → fallback `loginUser` → `GET settings/mailbox-forward-list`). `loginUser()` ([:1218-1252](modules/servers/smartermail/lib/SmarterMailApi.php#L1218)) essaie 3 endpoints SA puis 2 DA et retourne `null` en échec. Seul l'endpoint dédié documente les 10 champs demandés (dates UTC, `isHTML`, `externalAudience`, `externalReply`…). La **lecture** (pré-remplissage du formulaire) n'a de toute façon aucun équivalent Domain Admin — le token utilisateur est incontournable ; l'utiliser aussi en écriture donne une sémantique unique. Coût : +1 impersonification par affichage d'edituser et par sauvegarde — acceptable en page unitaire, **interdit en boucle** (le N+1 du dashboard est déjà le constat §2.3). |
+| Champ `autoResponder` de `updateUser` (token DA) | ❌ Rejetée | Le champ figure dans les whitelists ([SmarterMailApi.php:1596](modules/servers/smartermail/lib/SmarterMailApi.php#L1596), [:1644](modules/servers/smartermail/lib/SmarterMailApi.php#L1644)) mais n'est documenté dans le module que pour `forwardingAddress` (:1566-1568) et **n'est envoyé par aucun appelant** (0 occurrence dans smartermail.php). Rien ne prouve que `domain/post-user` accepte/persiste les 10 champs — risque de « 200 sans effet », pattern déjà attesté en production (workaround DKIM, smartermail.php:1217-1229). Et il ne résout pas la lecture. |
+
+**Robustesse si `loginUser()` échoue** (version SM / permissions) : dégradation propre, jamais d'écriture aveugle. Lecture → `null` → carte « indisponible » sans formulaire (empêche de sauvegarder un état vide par-dessus une config invisible) ; écriture → `USER_TOKEN_UNAVAILABLE` → message localisé `ar_err_token` + `logActivity`.
+
+## 6.2 Wrapper API (2 méthodes + 3 constantes, après getMailboxForwardList ~:1336)
+
+- `getAutoResponder(string $daToken, string $username, ?string $domain = null, ?string $saToken = null, bool $wantHtml = false): ?array` — `loginUser` puis `GET api/v1/settings/auto-responder/false` (paramètre toujours explicite, même précaution que `verifyDkimRollover` :1184). Retourne l'objet `autoResponderSettings` ou **`null`** (échec token, HTTP, ou `success:false` métier — la garde « erreur métier sous HTTP 200 » du §2.2 n°5 est embarquée localement en attendant le correctif global P0.2).
+- `setAutoResponder(string $daToken, string $username, array $settings, ?string $domain = null, ?string $saToken = null): array` — `loginUser` (1 seul), whitelist stricte des 10 champs documentés + normalisation de types, **merge best-effort** avec le GET courant (préserve les champs non documentés de versions SM futures), `POST` avec `{'autoResponderSettings' => …}`, contrat de retour standard.
+- Constantes `AR_AUDIENCE_NONE=0 / AR_AUDIENCE_CONTACTS=1 / AR_AUDIENCE_ALL=2` : le champ porte le nom exact de l'enum OOF Exchange/EWS (`None/Known/All` = 0/1/2, Microsoft Learn) et l'UI SmarterMail expose 3 audiences « Send To » (*Domain Users Only / Domain Users and Contacts Only / Everyone*) avec `body` = réponse interne et `externalReply` = réponse externe distincte. ⚠️ Mapping déduit — **à confirmer sur serveur de test** (poser les 3 valeurs au webmail, relire au GET) avant release ; les constantes centralisent la correction.
+- **Dates** : envoi `gmdate('Y-m-d\TH:i:s\Z')` (ISO 8601 UTC) ; lecture tolérante (`DateTimeImmutable` → UTC) avec sentinelles .NET (`0001-01-01`, epoch) traitées comme « non défini ».
+- **`isHTML`** : stratégie texte brut — lecture `wantHtml=false`, écriture `isHTML=false` (cycle stable, zéro rendu HTML côté client donc zéro surface XSS) ; avertissement UI si le message existant était HTML.
+
+## 6.3 Dispatcher et action PHP
+
+- `saveautoresponder` ajouté à `$allowedActions` ([smartermail.php:2041-2064](modules/servers/smartermail/smartermail.php#L2041)), `$actions` (:2117-2132 — hérite du CSRF :2145 et du PRG :2164) et `ClientAreaAllowedFunctions` (:3162-3176). Redirection post-succès : étendre le cas `savepassword` (:2171-2173) → retour `edituserpage` (contexte d'édition conservé).
+- **Action séparée de `saveuser`** : chaîne d'auth différente (utilisateur vs DA — les échecs ne doivent pas se contaminer), `saveuser` fait déjà ~8 opérations sur 234 lignes (§2.6), et le répondeur se modifie isolément. Patron identique à `savepassword` (:3951) : modale à formulaire POST autonome.
+- `smartermail_saveautoresponder(array $params): string` — validations serveur non contournables : username regex (identique :4024), sujet assaini comme fullName (:4040-4047) borné 200, corps/réponse externe bornés 20 000, `audience ∈ {0,1,2}` sinon rejet, sujet **et** corps requis si `enabled`, dates ISO UTC strictes (`_sm_arParseUtc`) avec `start < end` si `useActiveDateRange`. Si `externalReply` vide avec audience > 0 → copie du corps (comportement prévisible). Échec API → `logActivity` + message localisé (jamais l'erreur brute).
+- Lecture dans `smartermail_edituserpage` (après le bloc forwarding :3887-3891) : `getAutoResponder(..., $init['saToken'])` → vars `arAvailable` + `ar[...]` normalisé pour le template. Noter que le forwarding actuel omet `$saToken` (:3887) — ne pas répéter pour l'AR.
+
+## 6.4 UI (edituser.tpl) — carte + modale, alignées sur le chantier P3
+
+- **Carte « Répondeur automatique »** pleine largeur entre Paramètres (:296) et la barre d'actions (:298) : badge d'état (Activé/Programmé/Désactivé), aperçu (sujet + extrait 120 car. échappé + plage en heure locale via JS), bouton → `smOpen('sm-ar-modal')`. Mode dégradé si `!$arAvailable` (message, pas de modale rendue).
+- **Modale `sm-ar-modal`** sur le patron `sm-pwd-modal` (:469-525 — formulaire POST propre, CSRF, pas de fermeture clic-fond) : toggle `ar_enabled`, sujet, corps (textarea texte), bloc dates conditionnel (2 × `datetime-local` saisis en fuseau navigateur, convertis en ISO UTC dans des champs cachés à la soumission + note de fuseau), case « courriels directs seulement », sélecteur d'audience 0/1/2 avec textarea externe repliée, avertissement HTML conditionnel.
+- **Conformité kit Phase 3 (§4.2)** : classes du kit modal existant uniquement (`.sm-overlay/.sm-mbox/...`), variante de largeur `--lg` prévue par le chantier CSS n°1, aucun helper JS recopié (compatible remplacement par `_sm_common.js`), et conforme d'emblée à la passe accessibilité P3 (`role="dialog"`, `aria-modal`, labels associés).
+
+## 6.5 i18n
+
+31 clés `ar_*` FR/EN (titre/états/champs/aides/erreurs — liste dans la conception détaillée), parité stricte à maintenir (§2.1 : 521/521).
+
+## 6.6 Risques identifiés
+
+1. Token utilisateur JWT courte durée : obtenu et consommé dans la même requête PHP, jamais stocké ni journalisé.
+2. `loginUser` version-dépendant (5 endpoints tentés) : dégradation propre systématique ; jamais d'appel en boucle (dashboard).
+3. `externalAudience` : mapping 0/1/2 déduit (EWS + UI SM) — validation en environnement de test **bloquante avant release**.
+4. Fuseau : saisie/affichage navigateur ↔ stockage UTC (conversion JS) ; sentinelles .NET ignorées à la lecture.
+5. Messages HTML existants convertis en texte à la sauvegarde → avertissement `ar_html_warning` obligatoire.
+6. Erreur métier sous HTTP 200 : garde locale dans les 2 méthodes tant que P0.2 n'est pas fait.
+7. Perte de saisie sur erreur serveur (constat 🔴 §4.3) : atténuée par la validation JS ; l'action doit être incluse au chantier P3 (préservation `old=$_POST`).
+
+---
+
+*Rapport généré par audit multi-agents (67 agents, 8 dimensions, contre-vérification adversariale à 2 vérificateurs par défaut majeur). Chaque constat cité a été vérifié dans le code à la ligne près ; le seul constat non confirmé a été retiré et documenté en §2.9. Les audits précédents (sécurité v1.2.2) restent valides et ne sont pas dupliqués ici. Sections 2.2 (rollover), 3.3 (quota × facturation) et 6 (répondeur automatique) enrichies par une passe de conception pré-implémentation (validation Fable).*
