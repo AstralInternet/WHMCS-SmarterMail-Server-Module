@@ -362,13 +362,34 @@ class SmarterMailApi
 
         // Succès = tout code HTTP entre 200 et 299 inclus
         $success = ($httpCode >= 200 && $httpCode < 300);
+        $error   = null;
+
+        if (!$success) {
+            $error = $decoded['message'] ?? 'Erreur HTTP ' . $httpCode;
+        } elseif (!empty($result) && $decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+            // (P0.2) HTTP 2xx mais corps NON-JSON : page HTML d'un proxy/WAF, portail
+            // d'authentification, page de maintenance IIS… À traiter comme un échec,
+            // sinon les getters simplifiés retournent [] et propagent un faux succès.
+            $success = false;
+            $error   = 'Réponse non-JSON (HTTP ' . $httpCode . ')';
+        } elseif (is_array($decoded) && array_key_exists('success', $decoded)
+                  && $decoded['success'] === false) {
+            // (P0.2) L'API SmarterMail peut répondre HTTP 200 avec
+            // { "success": false, "message": "..." } — contrat documenté en tête de
+            // ce fichier mais jamais honoré jusqu'ici : un échec métier passait pour
+            // un succès (createUser, deleteUser, setActiveSyncEnabled/setMapiEnabled…).
+            // On le détecte UNE FOIS ICI pour corriger TOUS les appelants d'un coup.
+            // (Ne se déclenche que si la clé 'success' vaut explicitement false ; les
+            // réponses sans clé 'success' — ex. login — ne sont pas affectées.)
+            $success = false;
+            $error   = (string) ($decoded['message'] ?? 'Erreur métier API (success=false)');
+        }
 
         return [
             'success' => $success,
             'code'    => $httpCode,
             'data'    => $decoded,
-            // Message d'erreur : priorité au message de l'API, sinon message générique
-            'error'   => $success ? null : ($decoded['message'] ?? 'Erreur HTTP ' . $httpCode),
+            'error'   => $error,
         ];
     }
 

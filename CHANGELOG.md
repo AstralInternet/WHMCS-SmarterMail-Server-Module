@@ -10,6 +10,54 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.2.3] - 2026-07-02
+
+### Corrigé — intégrité de la facturation (Phase 0 de la remédiation d'audit)
+
+Correctifs des fuites de revenus identifiées par l'audit complet
+(`AUDIT_COMPLET_smartermail.md`).
+
+- **Marquage « facturé » déplacé APRÈS le succès d'`UpdateInvoice`** (`hooks.php`).
+  Auparavant `_sm_markEntriesAsBilled()` s'exécutait en Phase 1, AVANT l'appel
+  `localAPI('UpdateInvoice')` : il pose `billed=1` et efface les lignes
+  `status='deleted'`. Un échec de l'appel faisait alors disparaître les suppléments
+  EAS/MAPI de la période sans qu'aucune ligne de facture n'existe — perte de revenu
+  irréversible et quasi silencieuse. Le marquage n'a désormais lieu que dans la
+  branche de succès confirmé ; en cas d'échec, rien n'est marqué (suppléments
+  préservés) et un avertissement est journalisé.
+- **Détection des erreurs métier sous HTTP 200** (`SmarterMailApi::request()`).
+  L'API SmarterMail peut répondre `HTTP 200` avec `{ success:false, message:… }` ;
+  le contrat était documenté en tête de fichier mais jamais vérifié → un échec
+  métier passait pour un succès. `request()` l'honore désormais pour tous les
+  appelants, et détecte aussi une réponse 2xx non-JSON (proxy/WAF). En conséquence,
+  `createuser`/`saveuser` ne facturent plus un protocole EAS/MAPI dont l'activation
+  n'a pas été **confirmée** par l'API.
+- **Plus de `disk_gb=0` facturable** (`SmarterMailMetricsProvider` + hook). Le
+  provider n'émet plus de métriques à zéro en cas d'échec API (le tenant est omis
+  → WHMCS conserve sa dernière valeur). Le hook lit désormais la dernière valeur
+  `disk_gb` **non nulle** et journalise un avertissement s'il n'en existe aucune —
+  évite la sous-facturation massive (« 1 tranche pour tout le monde ») après une
+  panne du cron de métriques.
+- **Interrupteur de verbosité du journal** (`SMARTERMAIL_DEBUG`). Les ~2 lignes de
+  succès par domaine et par collecte du MetricsProvider (qui noyaient les messages
+  financiers critiques) sont désormais conditionnées à
+  `define('SMARTERMAIL_DEBUG', true)`. Par défaut, seuls les échecs restent visibles.
+
+### Corrigé — interface client
+
+- **Bouton « Générer » de la modale mot de passe** (`edituser.tpl`) : la fonction
+  remplit désormais aussi le champ de confirmation, sinon le bouton de soumission
+  restait bloqué et le client devait recopier le mot de passe à la main.
+
+### Documentation
+
+- `AUDIT_COMPLET_smartermail.md` enrichi de 3 sections de conception
+  pré-implémentation (validation Fable) : rollover `proto_usage` (§2.2), quota ×
+  modèles de facturation (§3.3), et fonctionnalité répondeur automatique (nouvelle
+  section 6).
+
+---
+
 ## [1.2.2] - 2026-06-09
 
 ### Sécurité

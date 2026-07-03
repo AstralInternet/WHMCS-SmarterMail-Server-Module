@@ -413,9 +413,18 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                 ->first();
 
             if ($tenantRow) {
+                // (P0.3) Lire la dernière métrique disk_gb NON NULLE. On ignore
+                // volontairement les zéros : ils sont typiquement écrits par une
+                // panne de l'API SmarterMail pendant le cron de métriques
+                // (impersonification DA échouée → disk_gb=0). Facturer un gros
+                // compte au tarif minimum (1 tranche) sur un 0 transitoire serait
+                // une sous-facturation massive et silencieuse. Un domaine réellement
+                // vide donne de toute façon 1 tranche (max(1, ceil(0/gb))=1), donc
+                // ignorer le 0 est sans effet négatif dans ce cas.
                 $metricRow = Capsule::table('tbltenant_stats')
                     ->where('tenant_id', $tenantRow->id)
                     ->where('metric',    'disk_gb')
+                    ->where('value',     '>', 0)
                     ->orderBy('id', 'desc')
                     ->first();
 
@@ -424,8 +433,22 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                 }
             }
         } catch (\Exception $e) {
-            logActivity('SmarterMail InvoiceCreated [disk] EXCEPTION '
+            logActivity('SmarterMail InvoiceCreation [disque] EXCEPTION '
                 . '(service #' . $serviceId . '): ' . $e->getMessage());
+        }
+
+        // (P0.3) Si aucune valeur disque fiable (> 0) n'est disponible, on facture
+        // au minimum (1 tranche) mais on le SIGNALE : soit le domaine est réellement
+        // vide, soit la collecte de métriques est en panne — dans ce dernier cas
+        // l'admin doit intervenir (facture immuable en WHMCS 9).
+        if ($usageGB <= 0) {
+            logActivity(sprintf(
+                'SmarterMail InvoiceCreation [disque] AVERTISSEMENT : aucune métrique '
+                . 'disk_gb fiable (> 0) pour service #%d (domaine %s) — ligne disque '
+                . 'facturée au minimum (1 tranche). Vérifiez la collecte de métriques '
+                . '/ la connexion SmarterMail si le domaine n\'est pas réellement vide.',
+                $serviceId, $service->domain ?? ''
+            ));
         }
 
         // ── Calcul des tranches et mise à jour de la ligne principale ─────────
@@ -523,6 +546,11 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         // en fin de boucle — point de sortie unique du traitement du service.
         $doEasMapi          = ($easPrice > 0 || $mapiPrice > 0);
         $billedByProtoUsage = [];  // emails déjà facturés via Phase 1 (anti double-billing)
+        // Lignes proto_usage sélectionnées en Phase 1 — hissées ici pour être
+        // marquées « facturées » APRÈS le succès de UpdateInvoice (correctif P0.1),
+        // et non avant : un échec de l'appel ne doit plus effacer/verrouiller ces
+        // lignes sans qu'aucune ligne de facture n'existe (perte de revenu définitive).
+        $billableByEmail    = [];
 
         // ════════════════════════════════════════════════════════════════════
         //  PHASE 1 — SUIVI D'UTILISATION (mod_sm_proto_usage)
@@ -622,11 +650,18 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                         );
                     }
 
-                    _sm_markEntriesAsBilled($billableByEmail);
+                    // NOTE (P0.1) : le marquage « facturé » n'est PLUS fait ici.
+                    // Il est déplacé APRÈS le succès de l'appel UpdateInvoice
+                    // (plus bas), pour ne jamais marquer/effacer des lignes si la
+                    // facture n'a finalement pas été modifiée.
                 }
 
             } catch (\Throwable $e) {
-                logActivity('SmarterMail InvoiceCreated [Phase 1 proto-usage] EXCEPTION '
+                // Une exception à mi-construction ne doit ni marquer ni facturer
+                // des lignes qui ne figureront pas sur la facture (P0.1) : on remet
+                // $billableByEmail à vide pour que le marquage post-succès soit sauté.
+                $billableByEmail = [];
+                logActivity('SmarterMail InvoiceCreation [Phase 1 proto-usage] EXCEPTION '
                     . '(service #' . $serviceId . '): ' . $e->getMessage());
             }
         }
@@ -730,10 +765,26 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                         . 'service #%d — ligne disque mise à jour + %d ligne(s) EAS/MAPI ajoutée(s).',
                     $invoiceId, $serviceId, $nbNew
                 ));
+
+                // ── P0.1 — Marquage « facturé » APRÈS confirmation du succès ─────
+                // Avant ce correctif, _sm_markEntriesAsBilled() était appelé en
+                // Phase 1 AVANT UpdateInvoice : il pose billed=1 et EFFACE les lignes
+                // status='deleted'. Si l'appel échouait ensuite, les suppléments
+                // EAS/MAPI de la période disparaissaient sans qu'aucune ligne de
+                // facture n'existe (perte de revenu irréversible et quasi silencieuse).
+                // On ne marque donc QUE dans cette branche de succès confirmé. En cas
+                // d'échec (else) ou d'admin absent, rien n'est marqué : les lignes
+                // restent billed=0 (reprise couverte par la Phase 1.1 — rollover +
+                // filtre period_start <=).
+                if (!empty($billableByEmail)) {
+                    _sm_markEntriesAsBilled($billableByEmail);
+                }
             } else {
                 logActivity('SmarterMail InvoiceCreation [UpdateInvoice] ÉCHEC '
                     . '(facture #' . $invoiceId . ', service #' . $serviceId . ') : '
-                    . ($apiRes['message'] ?? json_encode($apiRes)));
+                    . ($apiRes['message'] ?? json_encode($apiRes))
+                    . ' — AUCUN marquage proto_usage effectué (suppléments non perdus, '
+                    . 'à reprendre au prochain cycle). ⚠ Vérification admin recommandée.');
             }
         }
 

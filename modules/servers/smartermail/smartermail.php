@@ -134,7 +134,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.2.2',
+        'MODVersion' => '1.2.3',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -3770,12 +3770,17 @@ function smartermail_createuser(array $params): string
                 $api->setDomainSettings($domain, ['enableActiveSyncAccountManagement' => true], $saToken);
             }
         }
-        $api->setActiveSyncEnabled($email, true, $daToken);
+        $easResp = $api->setActiveSyncEnabled($email, true, $daToken);
 
-        // ── Enregistrer l'activation pour la facturation basée sur l'utilisation ──
+        // ── Enregistrer l'activation pour la facturation SEULEMENT si l'API a
+        //    confirmé l'activation (P0.2). Ne jamais facturer un protocole que
+        //    SmarterMail n'a pas réellement activé (échec réseau ou 200+success:false).
         $thresholdHours = max(1, (int) ($params['configoption16'] ?? 1)) * 24; // Jours → heures
-        if ($thresholdHours > 0) {
+        if (($easResp['success'] ?? false) && $thresholdHours > 0) {
             _sm_recordProtoActivation((int) $params['serviceid'], $email, 'eas', $thresholdHours);
+        } elseif (!($easResp['success'] ?? false)) {
+            logActivity('SmarterMail [createuser] Activation EAS NON confirmée pour ' . $email
+                . ' — non facturée : ' . _sm_apiError($easResp));
         }
     }
 
@@ -3788,12 +3793,15 @@ function smartermail_createuser(array $params): string
                 $api->setDomainSettings($domain, ['enableMapiEwsAccountManagement' => true], $saToken);
             }
         }
-        $api->setMapiEnabled($email, true, $daToken);
+        $mapiResp = $api->setMapiEnabled($email, true, $daToken);
 
-        // ── Enregistrer l'activation MAPI ─────────────────────────────────
+        // ── Enregistrer l'activation MAPI SEULEMENT si l'API l'a confirmée (P0.2) ──
         $thresholdHours = $thresholdHours ?? (max(1, (int) ($params['configoption16'] ?? 1)) * 24);
-        if ($thresholdHours > 0) {
+        if (($mapiResp['success'] ?? false) && $thresholdHours > 0) {
             _sm_recordProtoActivation((int) $params['serviceid'], $email, 'mapi', $thresholdHours);
+        } elseif (!($mapiResp['success'] ?? false)) {
+            logActivity('SmarterMail [createuser] Activation MAPI NON confirmée pour ' . $email
+                . ' — non facturée : ' . _sm_apiError($mapiResp));
         }
     }
 
@@ -4103,10 +4111,13 @@ function smartermail_saveuser(array $params): string
             }
         }
 
-        $api->setActiveSyncEnabled($email, $easWanted, $daToken);
+        $easResp = $api->setActiveSyncEnabled($email, $easWanted, $daToken);
 
-        // ── Suivi d'utilisation : enregistrer activation / désactivation ──
-        if ($thresholdHours > 0) {
+        // ── Suivi d'utilisation : n'enregistrer le changement d'état QUE si l'API
+        //    l'a confirmé (P0.2). Ainsi on ne facture pas une activation qui a
+        //    échoué, et on ne stoppe pas la facturation sur une désactivation qui
+        //    a échoué (le protocole serait resté actif côté serveur).
+        if (($easResp['success'] ?? false) && $thresholdHours > 0) {
             if ($easWanted && !$wasEas) {
                 // OFF → ON : début d'une nouvelle session
                 _sm_recordProtoActivation((int) $params['serviceid'], $email, 'eas', $thresholdHours);
@@ -4115,6 +4126,9 @@ function smartermail_saveuser(array $params): string
                 _sm_recordProtoDeactivation((int) $params['serviceid'], $email, 'eas');
             }
             // État inchangé → rien à enregistrer
+        } elseif (!($easResp['success'] ?? false)) {
+            logActivity('SmarterMail [saveuser] Changement EAS NON confirmé pour ' . $email
+                . ' — suivi de facturation inchangé : ' . _sm_apiError($easResp));
         }
     }
 
@@ -4131,15 +4145,19 @@ function smartermail_saveuser(array $params): string
             }
         }
 
-        $api->setMapiEnabled($email, $mapiWanted, $daToken);
+        $mapiResp = $api->setMapiEnabled($email, $mapiWanted, $daToken);
 
-        // ── Suivi d'utilisation MAPI ──────────────────────────────────────
-        if ($thresholdHours > 0) {
+        // ── Suivi d'utilisation MAPI : idem EAS, enregistrer seulement si l'API
+        //    a confirmé le changement (P0.2).
+        if (($mapiResp['success'] ?? false) && $thresholdHours > 0) {
             if ($mapiWanted && !$wasMapiPrev) {
                 _sm_recordProtoActivation((int) $params['serviceid'], $email, 'mapi', $thresholdHours);
             } elseif (!$mapiWanted && $wasMapiPrev) {
                 _sm_recordProtoDeactivation((int) $params['serviceid'], $email, 'mapi');
             }
+        } elseif (!($mapiResp['success'] ?? false)) {
+            logActivity('SmarterMail [saveuser] Changement MAPI NON confirmé pour ' . $email
+                . ' — suivi de facturation inchangé : ' . _sm_apiError($mapiResp));
         }
     }
 

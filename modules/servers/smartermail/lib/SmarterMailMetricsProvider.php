@@ -207,7 +207,13 @@ class SmarterMailMetricsProvider implements ProviderInterface
 
         $usage = [];
         foreach ($services as $svc) {
-            $usage[$svc->domain] = $this->collectStats($svc->domain, $saToken);
+            // (P0.3) collectStats() renvoie null en cas d'échec dur (API injoignable) :
+            // on OMET alors le tenant pour que WHMCS ne remplace pas sa dernière
+            // valeur connue par des zéros (protège la facturation à la tranche).
+            $stats = $this->collectStats($svc->domain, $saToken);
+            if ($stats !== null) {
+                $usage[$svc->domain] = $stats;
+            }
         }
 
         return $usage;
@@ -254,7 +260,7 @@ class SmarterMailMetricsProvider implements ProviderInterface
 
             if ($row) {
                 $domain = $row->domain;
-                logActivity('SmarterMail MetricProvider [tenantUsage] étape 2 OK (par domain) : '
+                $this->logDebug('SmarterMail MetricProvider [tenantUsage] étape 2 OK (par domain) : '
                     . 'tenant=' . $tenant . ' domain=' . $domain . ' serverid=' . $serverId);
             }
 
@@ -268,7 +274,7 @@ class SmarterMailMetricsProvider implements ProviderInterface
 
                 if ($row) {
                     $domain = $row->domain;
-                    logActivity('SmarterMail MetricProvider [tenantUsage] étape 2 OK (fallback par username) : '
+                    $this->logDebug('SmarterMail MetricProvider [tenantUsage] étape 2 OK (fallback par username) : '
                         . 'tenant=' . $tenant . ' domain=' . $domain . ' serverid=' . $serverId);
                 }
             }
@@ -286,7 +292,10 @@ class SmarterMailMetricsProvider implements ProviderInterface
             return $this->emptyMetrics();
         }
 
-        return $this->collectStats($domain, $saToken);
+        // (P0.3) Sur échec (null), retourner des métriques vides plutôt que null :
+        // l'interface exige un tableau. Le rafraîchissement manuel admin est rare et
+        // le hook de facturation ignore de toute façon une valeur disque nulle/à 0.
+        return $this->collectStats($domain, $saToken) ?? $this->emptyMetrics();
     }
 
 
@@ -314,9 +323,10 @@ class SmarterMailMetricsProvider implements ProviderInterface
      *
      * @param string $domain  Nom de domaine (ex: "client.com")
      * @param string $saToken Token SysAdmin valide (pour l'impersonification DA)
-     * @return MetricInterface[]
+     * @return MetricInterface[]|null  null si la collecte échoue (P0.3) — le tenant
+     *                                 est alors omis pour préserver sa dernière valeur.
      */
-    private function collectStats(string $domain, string $saToken): array
+    private function collectStats(string $domain, string $saToken): ?array
     {
         $api = $this->api();
 
@@ -333,30 +343,38 @@ class SmarterMailMetricsProvider implements ProviderInterface
             if (!$daToken) {
                 logActivity('SmarterMail MetricProvider [collectStats] FAIL étape 3 : '
                     . 'DA impersonification échouée pour domain=' . $domain);
-                // Retourner des métriques à 0 plutôt que de planter
-                return $this->buildMetrics(0.0, 0, 0, 0, 0);
+                // (P0.3) NE PAS émettre de métriques à 0 : renvoyer null pour que
+                // usage() OMETTE ce tenant → WHMCS conserve sa dernière valeur connue.
+                // Écrire disk_gb=0 sur une panne d'API faisait facturer 1 tranche à
+                // TOUS les clients du serveur au cycle suivant (sous-facturation massive).
+                return null;
             }
 
             // ── Étape 4 : getDomainData (disk + users + aliases) ──────────
             $domainData = $api->getDomainData($daToken);
 
             if (empty($domainData)) {
-                logActivity('SmarterMail MetricProvider [collectStats] AVIS étape 4 : '
+                // getDomainData retourne [] sur TOUTE erreur (timeout, 4xx…). Un
+                // domaine réellement vide renvoie un objet non vide, pas [] : on
+                // traite donc [] comme un échec et on n'écrase pas la métrique (P0.3).
+                logActivity('SmarterMail MetricProvider [collectStats] FAIL étape 4 : '
                     . 'getDomainData vide pour domain=' . $domain
-                    . ' — disk sera 0, userCount/aliasCount seront 0');
-            } else {
-                $sizeMb     = (float) ($domainData['sizeMb'] ?? 0);
-                $diskGB     = round($sizeMb / 1024, 4);
-                $emailCount = (int) ($domainData['userCount']  ?? 0);
-                $aliasCount = (int) ($domainData['aliasCount'] ?? 0);
-
-                logActivity('SmarterMail MetricProvider [collectStats] étape 4 OK : '
-                    . 'domain=' . $domain
-                    . ' sizeMb=' . $sizeMb
-                    . ' diskGB=' . $diskGB
-                    . ' userCount=' . $emailCount
-                    . ' aliasCount=' . $aliasCount);
+                    . ' (API injoignable ?) — tenant omis, dernière valeur conservée.');
+                return null;
             }
+
+            $sizeMb     = (float) ($domainData['sizeMb'] ?? 0);
+            $diskGB     = round($sizeMb / 1024, 4);
+            $emailCount = (int) ($domainData['userCount']  ?? 0);
+            $aliasCount = (int) ($domainData['aliasCount'] ?? 0);
+
+            // (P0.4) Log de SUCCÈS conditionné au mode debug — voir logDebug().
+            $this->logDebug('SmarterMail MetricProvider [collectStats] étape 4 OK : '
+                . 'domain=' . $domain
+                . ' sizeMb=' . $sizeMb
+                . ' diskGB=' . $diskGB
+                . ' userCount=' . $emailCount
+                . ' aliasCount=' . $aliasCount);
 
             // ── Étape 5 : EAS ─────────────────────────────────────────────
             $easMailboxes = $api->getActiveSyncMailboxes($daToken);
@@ -366,7 +384,7 @@ class SmarterMailMetricsProvider implements ProviderInterface
             $mapiMailboxes = $api->getMapiMailboxes($daToken);
             $mapiCount     = count($mapiMailboxes);
 
-            logActivity('SmarterMail MetricProvider [collectStats] étape 5+6 OK : '
+            $this->logDebug('SmarterMail MetricProvider [collectStats] étape 5+6 OK : '
                 . 'domain=' . $domain
                 . ' EAS=' . $easCount
                 . ' MAPI=' . $mapiCount);
@@ -374,9 +392,28 @@ class SmarterMailMetricsProvider implements ProviderInterface
         } catch (\Exception $e) {
             logActivity('SmarterMail MetricProvider [collectStats] EXCEPTION : '
                 . 'domain=' . $domain . ' — ' . $e->getMessage());
+            // (P0.3) Échec dur → ne pas écrire de métriques (garder la dernière valeur).
+            return null;
         }
 
         return $this->buildMetrics($diskGB, $emailCount, $aliasCount, $easCount, $mapiCount);
+    }
+
+    /**
+     * (P0.4) Journalise un message de DIAGNOSTIC uniquement si le mode debug est
+     * actif. Le MetricsProvider écrivait auparavant 2 lignes de SUCCÈS par domaine
+     * à chaque collecte (cron) : sur un serveur de 200 domaines = ~400 lignes/jour
+     * qui noyaient les messages critiques (« UpdateInvoice ÉCHEC », « Token DA
+     * absent »). Activer en posant, p. ex. dans configuration.php :
+     *   define('SMARTERMAIL_DEBUG', true);
+     * Par défaut la constante n'existe pas → les logs de succès sont supprimés,
+     * seuls les échecs/erreurs (logActivity direct) restent visibles.
+     */
+    private function logDebug(string $message): void
+    {
+        if (defined('SMARTERMAIL_DEBUG') && SMARTERMAIL_DEBUG) {
+            logActivity($message);
+        }
     }
 
     /**

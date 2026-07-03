@@ -560,6 +560,10 @@ function smGeneratePwd() {
   var f = document.getElementById('sm-pwd-input');
   f.value = pwd; f.type = 'text';
   document.getElementById('sm-eye-icon').className = 'fa fa-eye-slash';
+  // (P0.5) Remplir aussi le champ de confirmation, sinon okMatch reste faux dans
+  // smCheckPwd() et le bouton de soumission demeure bloqué après « Générer ».
+  var fc = document.getElementById('sm-pwd-confirm');
+  if (fc) { fc.value = pwd; }
   smCheckPwd();
 }
 
