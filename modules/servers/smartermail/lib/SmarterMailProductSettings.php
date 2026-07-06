@@ -177,3 +177,105 @@ function _sm_getProductSettings(int $productId): array
         return $cache[$productId] = $defaults;
     }
 }
+
+
+/**
+ * Calcule la CHARGE DE BASE (volet disque) d'un service selon le modèle de
+ * facturation et le quota du produit. Fonction PURE (aucun accès DB/API, aucune
+ * écriture) — partagée entre le hook InvoiceCreation (facture réelle) et le
+ * tableau de bord client (estimé), pour garantir des calculs IDENTIQUES.
+ *
+ * « BASE + MODIFICATEUR » :
+ *   - billing_model calcule la ligne de base :
+ *       • 'tiers' (défaut historique) : tranches = ceil(usage/gbPerTier) ; la ligne
+ *         Hosting est RÉÉCRITE à tranches × prix_produit.
+ *       • 'flat' : forfait — la ligne Hosting reste au prix produit (non réécrite).
+ *       • 'per_mailbox' / 'hybrid' : comptage de boîtes → étape 2b ; traités ici
+ *         comme 'tiers' en attendant (ne peuvent être définis sans la page addon).
+ *   - quota_gb + overage_mode ne modifient QUE le volet disque :
+ *       • 'block'  : plafonne les tranches facturées au quota (le serveur applique
+ *                    maxSize) — jamais facturé au-delà.
+ *       • 'bill'   : base plafonnée au quota ; l'excédent part sur une ligne séparée
+ *                    au prix d'excédent (overage_price).
+ *       • 'notify' : aucun effet sur la facture (historique) ; sert à l'alerte / la
+ *                    jauge quand l'usage dépasse le seuil.
+ *
+ * RÉTRO-COMPATIBILITÉ : 'tiers' + quota 0 + 'notify' (les défauts) ⇒ baseAmount =
+ * ceil(usage/gbPerTier) × prix, rewriteHosting=true, aucune ligne d'excédent —
+ * STRICTEMENT identique au calcul historique.
+ *
+ * @param  array $settings  Réglages produit (_sm_getProductSettings()).
+ * @param  array $ctx       ['usageGB'=>float, 'gbPerTier'=>int, 'baseUnitPrice'=>float]
+ * @return array {
+ *   rewriteHosting: bool,   baseAmount: float,  billedTiers: int,  billedGB: int,
+ *   overageLine:    ?array (['tiers'=>int,'amount'=>float] ou null),
+ *   quota:          array  (['gb'=>int,'mode'=>string,'usagePct'=>float,'over'=>bool])
+ * }
+ */
+function _sm_computeBaseCharge(array $settings, array $ctx): array
+{
+    $usageGB   = max(0.0, (float) ($ctx['usageGB'] ?? 0));
+    $gbPerTier = max(1,   (int)   ($ctx['gbPerTier'] ?? 10));
+    $unitPrice = max(0.0, (float) ($ctx['baseUnitPrice'] ?? 0));
+
+    $model     = in_array(($settings['billing_model'] ?? 'tiers'), SM_BILLING_MODELS, true)
+        ? $settings['billing_model'] : 'tiers';
+    $quotaGB   = max(0,   (int)   ($settings['quota_gb'] ?? 0));
+    $mode      = in_array(($settings['overage_mode'] ?? 'notify'), SM_OVERAGE_MODES, true)
+        ? $settings['overage_mode'] : 'notify';
+    $overPrice = max(0.0, (float) ($settings['overage_price'] ?? 0));
+
+    // Tranches d'usage réel (min 1, comme l'historique) et tranches couvertes par
+    // le quota (0 = pas de quota / illimité).
+    $rawTiers   = max(1, (int) ceil($usageGB / $gbPerTier));
+    $quotaTiers = $quotaGB > 0 ? max(1, (int) ceil($quotaGB / $gbPerTier)) : 0;
+
+    // Volet quota commun (jauge + alerte).
+    $quota = [
+        'gb'       => $quotaGB,
+        'mode'     => $mode,
+        'usagePct' => $quotaGB > 0 ? round($usageGB / $quotaGB * 100, 1) : 0.0,
+        'over'     => $quotaGB > 0 && $usageGB > $quotaGB,
+    ];
+
+    // ── Modèle 'flat' : la ligne Hosting reste au prix produit ────────────────
+    if ($model === 'flat') {
+        $overageLine = null;
+        if ($mode === 'bill' && $quotaTiers > 0 && $rawTiers > $quotaTiers && $overPrice > 0) {
+            $extra       = $rawTiers - $quotaTiers;
+            $overageLine = ['tiers' => $extra, 'amount' => round($extra * $overPrice, 2)];
+        }
+        return [
+            'rewriteHosting' => false,
+            'baseAmount'     => round($unitPrice, 2),
+            'billedTiers'    => 0,
+            'billedGB'       => $quotaGB,     // « inclus » = quota (affichage)
+            'overageLine'    => $overageLine,
+            'quota'          => $quota,
+        ];
+    }
+
+    // ── Modèle 'tiers' (défaut) + per_mailbox/hybrid (interim → tiers) ─────────
+    $billedTiers = $rawTiers;
+    $overageLine = null;
+
+    if ($mode === 'block' && $quotaTiers > 0) {
+        // Plafond : jamais facturé au-delà du quota (le serveur applique maxSize).
+        $billedTiers = min($rawTiers, $quotaTiers);
+    } elseif ($mode === 'bill' && $quotaTiers > 0 && $rawTiers > $quotaTiers && $overPrice > 0) {
+        // Base plafonnée au quota ; excédent sur une ligne au prix d'excédent.
+        $billedTiers = $quotaTiers;
+        $extra       = $rawTiers - $quotaTiers;
+        $overageLine = ['tiers' => $extra, 'amount' => round($extra * $overPrice, 2)];
+    }
+    // 'notify' : aucun plafond, aucune ligne — historique + alerte éventuelle.
+
+    return [
+        'rewriteHosting' => true,
+        'baseAmount'     => round($billedTiers * $unitPrice, 2),
+        'billedTiers'    => $billedTiers,
+        'billedGB'       => $billedTiers * $gbPerTier,
+        'overageLine'    => $overageLine,
+        'quota'          => $quota,
+    ];
+}

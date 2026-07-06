@@ -2508,9 +2508,18 @@ function smartermail_ClientArea(array $params): array
     $usageGB = round($sizeMb / 1024, 3);
 
     $gbPerTier      = max(1, (int) ($params['configoption1'] ?? 10));
-    $tiers          = max(1, (int) ceil($usageGB > 0 ? $usageGB / $gbPerTier : 0)) ?: 1;
-    $gbBilled       = $tiers * $gbPerTier;
-    $estimatedPrice = round($tiers * $basePrice, 2);
+    // (Étape 2) Estimé calculé par la MÊME fonction pure que le hook de
+    // facturation → l'estimé affiché au client correspond au montant réellement
+    // facturé (modèle + quota). Sans réglage produit : identique à l'historique.
+    $psettings      = _sm_getProductSettings((int) ($params['pid'] ?? 0));
+    $charge         = _sm_computeBaseCharge($psettings, [
+        'usageGB'       => $usageGB,
+        'gbPerTier'     => $gbPerTier,
+        'baseUnitPrice' => $basePrice,
+    ]);
+    $tiers          = max(1, (int) $charge['billedTiers']);
+    $gbBilled       = $charge['billedGB'] ?: $gbPerTier;
+    $estimatedPrice = round($charge['baseAmount'] + (float) ($charge['overageLine']['amount'] ?? 0), 2);
 
     // ── Utilisateurs + alias ──────────────────────────────────────────────
     // getUsers()      → liste complète (aliases, forwarding, etc.)

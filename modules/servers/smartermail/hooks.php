@@ -457,9 +457,21 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         //
         // FORMULE : tiers = ceil(usageGB / gbPerTier), minimum 1
         // Exemple : 31.50 Go, gbPerTier=10 → ceil(3.15) = 4 tranches → 40 Go facturés
-        $tiers         = max(1, (int) ceil($usageGB / $gbPerTier));
-        $baseUnitPrice = (float) $item->amount;  // Prix unitaire par tranche (dans WHMCS)
-        $newAmount     = round($tiers * $baseUnitPrice, 2);
+        // (Étape 2) Charge de base via _sm_computeBaseCharge() — fonction PURE
+        // partagée avec le tableau de bord client (mêmes chiffres des deux côtés).
+        // Sans réglage produit (mod_sm_product_settings), le modèle 'tiers' par
+        // défaut reproduit EXACTEMENT le calcul historique : tranches × prix,
+        // ligne Hosting réécrite. Un quota/overage ne s'active que si une ligne
+        // de réglage existe pour le produit (posée par la page addon, étape 5).
+        $baseUnitPrice = (float) $item->amount;  // Prix produit (= prix/tranche ou forfait)
+        $psettings     = _sm_getProductSettings((int) $service->packageid);
+        $charge        = _sm_computeBaseCharge($psettings, [
+            'usageGB'       => $usageGB,
+            'gbPerTier'     => $gbPerTier,
+            'baseUnitPrice' => $baseUnitPrice,
+        ]);
+        $tiers         = (int) $charge['billedTiers'];   // pour le libellé d'utilisation
+        $newAmount     = $charge['baseAmount'];
 
         // Description : format "{X.XX Go utilisé · N Tranche(s) × Y Go × $Z.ZZ}"
         // Cohérent avec l'affichage dans l'espace client.
@@ -524,21 +536,56 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         // newitem* = tableaux numériques (une entrée par ligne EAS/MAPI ajoutée).
         $update = [
             'invoiceid'          => $invoiceId,
-            'itemdescription'    => [(int) $item->id => $updatedDescription],
-            'itemamount'         => [(int) $item->id => $newAmount],
-            'itemtaxed'          => [(int) $item->id => $itemTaxed],
             'newitemdescription' => [],
             'newitemamount'      => [],
             'newitemtaxed'       => [],
         ];
 
-        // Helper : empile une ligne EAS/MAPI dans le payload newitem*.
+        // (Étape 2) Ligne Hosting RÉÉCRITE en place UNIQUEMENT pour le modèle
+        // 'tiers' (montant = tranches × prix + détail d'utilisation). Le modèle
+        // 'flat' (et per_mailbox/hybrid à venir) laisse la ligne Hosting au prix
+        // produit ($item->amount inchangé) — surface de régression minimale.
+        if ($charge['rewriteHosting']) {
+            $update['itemdescription'] = [(int) $item->id => $updatedDescription];
+            $update['itemamount']      = [(int) $item->id => $newAmount];
+            $update['itemtaxed']       = [(int) $item->id => $itemTaxed];
+        }
+
+        // Helper : empile une ligne dans le payload newitem* (excédent quota, EAS/MAPI).
         // (Remplace les anciens Capsule::table('tblinvoiceitems')->insert().)
         $addLine = function (string $desc, float $amount) use (&$update, $itemTaxed): void {
             $update['newitemdescription'][] = $desc;
             $update['newitemamount'][]      = round($amount, 2);
             $update['newitemtaxed'][]       = $itemTaxed;
         };
+
+        // ── (Étape 2) Ligne d'excédent de quota — mode 'bill' ─────────────────
+        // La base est plafonnée au quota ; l'usage au-delà est facturé ici au
+        // prix d'excédent (overage_price), via le payload newitem* (jamais en SQL brut).
+        if (!empty($charge['overageLine'])) {
+            $ov = $charge['overageLine'];
+            $addLine(
+                sprintf(
+                    $hookLang['inv_overage_label'] ?? 'Dépassement de quota : %1$d tranche(s) × $%2$s',
+                    (int) $ov['tiers'],
+                    number_format((float) ($psettings['overage_price'] ?? 0), 2)
+                ),
+                (float) $ov['amount']
+            );
+        }
+
+        // ── (Étape 2) Alerte quota — usage réel au-dessus du quota ────────────
+        // Journalisée dans tous les modes (block/bill/notify) pour l'admin. La
+        // bannière/jauge côté client viendra à l'étape 4.
+        if (!empty($charge['quota']['gb']) && !empty($charge['quota']['over'])) {
+            logActivity(sprintf(
+                'SmarterMail InvoiceCreation [quota] service #%d (%s) : usage %.2f Go > quota %d Go '
+                    . '(%.1f%%, mode %s).',
+                $serviceId, $service->domain ?? '', $usageGB,
+                (int) $charge['quota']['gb'], (float) $charge['quota']['usagePct'],
+                (string) $charge['quota']['mode']
+            ));
+        }
 
         // ── Facturation EAS/MAPI ─────────────────────────────────────────────
         // $doEasMapi : un prix EAS ou MAPI est-il configuré ? Si non, aucune ligne
@@ -782,10 +829,18 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         // résultat (succès ET échec) : aucune défaillance silencieuse possible —
         // contrairement à l'écriture SQL brute, on saura toujours si la facture a
         // bien été modifiée (vérifiable dans Configuration → Journal d'activité).
-        $nbNew     = count($update['newitemdescription']);
-        $adminUser = _sm_getAdminUsername();
+        $nbNew      = count($update['newitemdescription']);
+        // (Étape 2) Y a-t-il quelque chose à appliquer ? La ligne Hosting n'est
+        // réécrite que pour le modèle 'tiers' (clé item*). Un produit 'flat' sans
+        // supplément ni excédent ne modifie aucune ligne → inutile d'appeler
+        // UpdateInvoice (et éviter un appel API à vide).
+        $hasChanges = isset($update['itemamount']) || $nbNew > 0;
+        $adminUser  = _sm_getAdminUsername();
 
-        if ($adminUser === '') {
+        if (!$hasChanges) {
+            // Rien à modifier (modèle 'flat' sans EAS/MAPI ni excédent) : la ligne
+            // Hosting reste au prix produit. Aucun appel API nécessaire.
+        } elseif ($adminUser === '') {
             logActivity('SmarterMail InvoiceCreation [UpdateInvoice] ABANDON : '
                 . 'aucun administrateur actif trouvé pour exécuter localAPI '
                 . '(facture #' . $invoiceId . ', service #' . $serviceId . ').');

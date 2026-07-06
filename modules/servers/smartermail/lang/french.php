@@ -643,6 +643,8 @@ $_lang = [
     //   inv_mapi_hdr      : en-tête pour les lignes MAPI/Exchange uniquement
     'inv_usage_label'  => '%1$s Go utilisé · %2$d Tranche(s) de %3$d Go × $%4$s',
     'inv_usage_prefix' => '» ',
+    // Ligne d'excédent de quota (mode 'bill') : %1$d = tranches excédentaires, %2$s = prix d'excédent
+    'inv_overage_label'=> 'Dépassement de quota : %1$d tranche(s) excédentaire(s) × $%2$s',
     'inv_disabled_on'  => '(Désactivé le %s)',
     'inv_entry_prefix' => '- ',
     'inv_combined_hdr' => 'EAS + MAPI/Exchange :',

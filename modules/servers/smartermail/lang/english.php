@@ -640,6 +640,8 @@ $_lang = [
     //   inv_mapi_hdr      : header for MAPI/Exchange-only invoice lines
     'inv_usage_label'  => '%1$s GB used · %2$d Tier(s) of %3$d GB × $%4$s',
     'inv_usage_prefix' => '» ',
+    // Quota overage line (mode 'bill'): %1$d = extra tiers, %2$s = overage price
+    'inv_overage_label'=> 'Quota overage: %1$d extra tier(s) × $%2$s',
     'inv_disabled_on'  => '(Disabled on %s)',
     'inv_entry_prefix' => '- ',
     'inv_combined_hdr' => 'EAS + MAPI/Exchange:',
