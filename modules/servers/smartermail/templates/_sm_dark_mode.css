@@ -52,10 +52,6 @@ html.lagom-dark-mode .sm-header{background:linear-gradient(135deg,#1a2733 0%,#2c
 html.lagom-dark-mode .sm-card code,
 html.lagom-dark-mode .sm-mbox code{background:#1c1f24;color:#80cbc4;border-color:#3a3d44}
 
-/* ── Bouton webmail ───────────────────────────────────────────────── */
-html.lagom-dark-mode .sm-webmail-btn{background:#3949ab;color:#fff !important}
-html.lagom-dark-mode .sm-webmail-btn:hover{background:#5c6bc0}
-
 /* ── Lignes stats / infos (dashboard) ─────────────────────────────── */
 html.lagom-dark-mode .sm-stat-row,
 html.lagom-dark-mode .sm-info-row{border-bottom-color:#3a3d44}

@@ -113,13 +113,6 @@
    à l'origine — on le force pour pouvoir y appliquer flex-start. */
 .sm-info-row{justify-content:flex-start}
 .sm-info-value{display:flex;justify-content:flex-start;align-items:flex-start;flex-wrap:wrap}
-/* ── Bouton « Ouvrir le webmail » ─────────────────────────────────────
-   Lien pleine largeur placé sous le bloc Statistiques. Stylé comme un
-   bouton mais sémantiquement un <a> (navigation vers le webmail).
-   Couleur cohérente avec le thème de l'en-tête domaine (#2c3e50). */
-.sm-webmail-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:10px 16px;background:#0080c4;color:#fff !important;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;transition:background .15s,box-shadow .15s;margin-bottom:18px;box-sizing:border-box}
-.sm-webmail-btn:hover{background:#0091de;box-shadow:0 2px 8px rgba(0,0,0,.15);text-decoration:none}
-.sm-webmail-btn i{font-size:14px}
 .sm-domain-header{background:linear-gradient(135deg,#2c3e50 0%,#3d5166 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .sm-domain-name{font-size:18px;font-weight:700;letter-spacing:.3px}
 .sm-domain-name i{margin-right:8px;opacity:.8}
@@ -681,36 +674,6 @@
 
       </div>
     </div>
-
-    {*
-     * ── Bouton « Ouvrir le webmail » (auto-login SSO) ─────────────────────
-     *
-     * Ouvre le webmail SmarterMail en CONNECTANT automatiquement le client
-     * (auto-login par token à usage unique), sans ressaisie d'identifiants.
-     * Placé juste sous le bloc Statistiques, dans la même colonne (col-md-7).
-     *
-     * FONCTIONNEMENT :
-     *   - Le lien pointe vers customAction=webmailsso : le module génère un
-     *     token d'auto-login côté serveur puis redirige (302) vers SmarterMail.
-     *   - Si l'auto-login échoue, le module retombe gracieusement sur la page
-     *     de connexion manuelle — le bouton reste toujours fonctionnel.
-     *
-     * SÉCURITÉ :
-     *   - L'URL ne contient que le serviceid (validé par WHMCS contre la
-     *     session client) ; le token d'auto-login n'apparaît jamais côté page.
-     *   - target="_blank" + rel="noopener noreferrer" : prévention tabnabbing.
-     *
-     * ACCESSIBILITÉ :
-     *   - <a> stylé en bouton pour conserver la sémantique de navigation.
-     *   - Le title reprend le libellé traduit pour les lecteurs d'écran.
-     *}
-    <a href="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=webmailsso"
-       target="_blank"
-       rel="noopener noreferrer"
-       class="sm-webmail-btn"
-       title="{$lang.btn_open_webmail|escape}">
-      <i class="fa fa-external-link"></i> {$lang.btn_open_webmail}
-    </a>
 
   </div>
 
@@ -1562,23 +1525,24 @@
 
           {*
            * Colonne type : icône visuelle distinguant boîte et redirection.
-           * - Boîte courriel : l'icône fa-inbox est un LIEN vers le webmail
-           *   SmarterMail ($webmailUrl). Ouvre dans un nouvel onglet (target=_blank)
-           *   avec rel="noopener noreferrer" pour la sécurité (empêche window.opener).
-           *   Le title affiche un libellé traduit invitant à se connecter au webmail.
+           * - Boîte courriel : l'icône fa-inbox est un LIEN d'AUTO-LOGIN vers le
+           *   webmail de CETTE boîte (customAction=webmailsso&ssouser=<local>).
+           *   Le module génère un token à usage unique et redirige (302) vers
+           *   SmarterMail ; repli gracieux vers la connexion manuelle si échec.
+           *   Ouvre dans un nouvel onglet (target=_blank + rel=noopener).
            * - Redirection : icône fa-share simple (pas de lien — pas de boîte).
            *
-           * SÉCURITÉ : $webmailUrl est construit côté PHP à partir de
-           * tblservers.hostname (admin-only). |escape dans l'attribut href
-           * neutralise toute valeur inattendue (XSS via hostname corrompu).
+           * SÉCURITÉ : l'URL ne porte que le serviceid (validé par WHMCS contre
+           * la session) et la partie locale du username (re-validée côté serveur) ;
+           * le token d'auto-login n'apparaît jamais côté page.
            *}
           <div class="sm-col-type">
             {if $user._isRedirectOnly}
               <i class="fa fa-share sm-icon-redirect"
                  title="{$lang.list_type_redirect|escape}"></i>
             {else}
-              {* Lien webmail : l'icône de boîte courriel pointe vers le webmail *}
-              <a href="{$webmailUrl|escape}"
+              {* Auto-login webmail : l'icône de boîte ouvre le webmail de cette boîte *}
+              <a href="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=webmailsso&ssouser={$user.userName|escape:'url'}"
                  target="_blank"
                  rel="noopener noreferrer"
                  class="sm-webmail-link"

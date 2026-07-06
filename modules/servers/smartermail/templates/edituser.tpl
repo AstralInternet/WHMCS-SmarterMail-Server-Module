@@ -21,6 +21,10 @@ var SM_LANG_FWD_EMPTY     = '{$lang.js_fwd_empty|escape:"javascript"}';
 .sm-header-email{font-size:16px;font-weight:700;margin-bottom:8px}
 .sm-header-email i{margin-right:8px;opacity:.8}
 .sm-header-storage{font-size:12px;color:rgba(255,255,255,.75);margin-bottom:6px}
+.sm-header-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.sm-header-top .sm-header-email{margin-bottom:0}
+.sm-header-webmail{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);padding:7px 14px;border-radius:4px;font-size:13px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s}
+.sm-header-webmail:hover{background:rgba(255,255,255,.3);color:#fff;text-decoration:none}
 .sm-progress{height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
 .sm-progress-bar{height:100%;border-radius:4px;transition:width .4s}
 .sm-progress-bar.low{background:#27ae60}.sm-progress-bar.mid{background:#f39c12}.sm-progress-bar.high{background:#e74c3c}
@@ -149,7 +153,17 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
 
 {* ── En-tête ─────────────────────────────────────────────────────────── *}
 <div class="sm-header">
-  <div class="sm-header-email"><i class="fa fa-envelope-o"></i>{$email|escape}</div>
+  <div class="sm-header-top">
+    <div class="sm-header-email"><i class="fa fa-envelope-o"></i>{$email|escape}</div>
+    {* Auto-login vers le webmail de CETTE boîte (customAction=webmailsso&ssouser). *}
+    <a href="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=webmailsso&ssouser={$username|escape:'url'}"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="sm-header-webmail"
+       title="{$lang.btn_open_webmail|escape}">
+      <i class="fa fa-external-link"></i> {$lang.btn_open_webmail}
+    </a>
+  </div>
   {if $maxBytes > 0}
     {if $usagePct > 85}{assign var="barCls" value="high"}
     {elseif $usagePct > 55}{assign var="barCls" value="mid"}

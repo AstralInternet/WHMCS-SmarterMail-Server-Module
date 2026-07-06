@@ -12,32 +12,41 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 
 ## [1.4.0] - 2026-07-06
 
-### Ajouté — connexion automatique au webmail (SSO)
+### Ajouté — connexion automatique au webmail (SSO) par boîte courriel
 
-- **Auto-login webmail par jeton à usage unique.** Le bouton « Ouvrir le webmail »
-  du tableau de bord client connecte désormais le client directement dans le
-  webmail SmarterMail, **sans ressaisie d'identifiants**. Le module demande au
-  SysAdmin un jeton d'auto-login (endpoint `retrieve-login-token`, via
-  `getAutoLoginUrl()` — jusqu'ici présent dans le wrapper mais **jamais branché**)
-  puis redirige le navigateur (302) vers l'URL de connexion automatique. La
-  connexion se fait au nom de l'admin du domaine (compte du service).
-- **Fonction WHMCS native `smartermail_ServiceSingleSignOn()`** : la métadonnée
-  `ServiceSingleSignOnLabel` (« Accéder au Webmail »), déclarée mais sans fonction
-  associée (métadonnée morte signalée par l'audit), est enfin fonctionnelle.
+- **Auto-login webmail par boîte, par jeton à usage unique.** Le client ouvre le
+  webmail d'une adresse **sans ressaisir ses identifiants** : le module demande au
+  SysAdmin un jeton d'auto-login pour la boîte visée (endpoint
+  `retrieve-login-token`, via `getAutoLoginUrl()` — jusqu'ici présent dans le
+  wrapper mais **jamais branché**) puis redirige le navigateur (302) vers l'URL de
+  connexion automatique. L'auto-login cible la **boîte demandée** (partie locale du
+  username + domaine du service), et non plus l'admin du domaine.
+- **Deux points d'entrée**, tous deux par boîte :
+  - le bouton « Ouvrir le webmail » ajouté dans l'en-tête de la **page d'édition
+    d'un compte** (ouvre le webmail de la boîte en cours de modification) ;
+  - l'icône « boîte de réception » de chaque ligne de la **grille des comptes**
+    (ouvre le webmail de cette boîte-là).
 - **Repli gracieux** : si l'auto-login échoue (SysAdmin injoignable, domaine non
-  encore provisionné…), le bouton retombe sur la page de connexion manuelle du
-  webmail — il reste donc toujours utilisable. L'échec technique est journalisé
-  pour l'administrateur ; le client, lui, n'est jamais bloqué.
+  provisionné, boîte inexistante, version SmarterMail sans l'endpoint…), le lien
+  retombe sur la **page de connexion manuelle** du webmail — il reste donc toujours
+  utilisable. L'échec technique est journalisé pour l'administrateur ; le client,
+  lui, n'est jamais bloqué.
 
 Notes de sécurité : le jeton d'auto-login est à usage unique, expire en quelques
-secondes et n'est **jamais exposé au JavaScript de la page** (redirection côté
-serveur). Le domaine et le compte ciblés proviennent exclusivement du service
-WHMCS authentifié — aucun accès possible à un domaine tiers.
+secondes et n'est **jamais exposé au JavaScript de la page** (redirection 302 côté
+serveur). Le domaine provient exclusivement du service WHMCS authentifié et le
+username de boîte est re-validé côté serveur (partie locale) — le SysAdmin ne peut
+connecter que des comptes **du domaine du service**, jamais d'un domaine tiers.
 
-> Les icônes « boîte de réception » par mailbox de la grille des comptes pointent
-> encore vers la page de connexion manuelle : l'auto-login **par boîte** est prévu
-> comme incrément suivant (nécessite de confirmer le format exact du username de
-> mailbox attendu par SmarterMail sur un serveur de test).
+### Retiré
+
+- **Bouton « Ouvrir le webmail » du tableau de bord principal** (remplacé par
+  l'auto-login **par boîte** : le bouton de dashboard, niveau domaine, n'avait plus
+  de sens).
+- **SSO natif WHMCS niveau domaine** (`smartermail_ServiceSingleSignOn()` +
+  métadonnée `ServiceSingleSignOnLabel`) : le SSO est désormais **exclusivement par
+  boîte**. Un SSO admin niveau domaine pourra être réintroduit séparément via
+  `AdminSingleSignOn` si besoin (réutiliserait le même helper).
 
 ## [1.3.0] - 2026-07-03
 

@@ -146,9 +146,6 @@ function smartermail_MetaData(): array
         // Ports par défaut suggérés dans la configuration du serveur WHMCS
         'DefaultNonSSLPort' => '9998',  // Port HTTP par défaut de SmarterMail
         'DefaultSSLPort'    => '443',   // Port HTTPS standard
-
-        // Libellé du lien SSO dans l'espace client (connexion directe au webmail)
-        'ServiceSingleSignOnLabel' => 'Accéder au Webmail',
     ];
 }
 
@@ -1169,23 +1166,22 @@ function _sm_initDomainAdmin(array $params): array
 
 
 // =============================================================================
-//  AUTO-LOGIN WEBMAIL (SSO) — CÔTÉ CLIENT
+//  AUTO-LOGIN WEBMAIL (SSO) — PAR BOÎTE COURRIEL
 // =============================================================================
 //
-// Le client accède à son webmail SmarterMail sans ressaisir ses identifiants :
-// le module demande au SysAdmin un token d'auto-login à usage unique, puis
-// redirige le navigateur vers l'URL de connexion automatique de SmarterMail.
+// Le client accède au webmail d'une boîte SANS ressaisir ses identifiants : le
+// module demande au SysAdmin un token d'auto-login à usage unique pour la boîte
+// visée, puis redirige le navigateur vers l'URL de connexion automatique.
 //
-// Deux points d'entrée partagent le MÊME helper (_sm_buildWebmailSsoUrl) :
-//   - smartermail_ServiceSingleSignOn() : bouton SSO natif WHMCS — rend enfin
-//     vivante la métadonnée ServiceSingleSignOnLabel « Accéder au Webmail ».
-//   - customAction=webmailsso            : bouton « Ouvrir le webmail » du
-//     tableau de bord personnalisé, avec repli gracieux vers la page de
-//     connexion manuelle si l'auto-login échoue.
+// Point d'entrée unique : customAction=webmailsso&ssouser=<boîte>, câblé sur le
+// bouton « Ouvrir le webmail » de la page d'édition d'un compte ET sur l'icône
+// de boîte de la grille des comptes. Repli gracieux vers la page de connexion
+// manuelle si l'auto-login échoue.
 //
 // SÉCURITÉ :
-//   - Le domaine et le username ciblés proviennent du service WHMCS authentifié
-//     ($params), jamais d'une entrée client → aucun accès à un domaine tiers.
+//   - Le domaine provient du service WHMCS authentifié ($params) ; le username
+//     de boîte est validé (partie locale). Aucun accès à un domaine tiers : le
+//     SysAdmin ne peut connecter que des comptes DU domaine du service.
 //   - Le token d'auto-login est à usage unique, expire en quelques secondes et
 //     n'est JAMAIS exposé au JS de la page (redirection 302 côté serveur).
 // =============================================================================
@@ -1236,25 +1232,6 @@ function _sm_buildWebmailSsoUrl(array $params, string $targetUser = '', string $
     }
 
     return ['url' => $url];
-}
-
-/**
- * SSO natif WHMCS — bouton « Accéder au Webmail » (ServiceSingleSignOnLabel).
- *
- * Déclenché par WHMCS quand le SSO du service est demandé (côté client, et,
- * si le thème l'expose, côté admin). Format de retour attendu par WHMCS :
- *   ['success' => true,  'redirectTo' => <url>]
- *   ['success' => false, 'errorMsg'   => <message localisé>]
- *
- * Réf. : https://developers.whmcs.com/provisioning-modules/sso/
- */
-function smartermail_ServiceSingleSignOn(array $params): array
-{
-    $sso = _sm_buildWebmailSsoUrl($params);
-    if (isset($sso['error'])) {
-        return ['success' => false, 'errorMsg' => $sso['error']];
-    }
-    return ['success' => true, 'redirectTo' => $sso['url']];
 }
 
 
@@ -2276,21 +2253,28 @@ function smartermail_ClientArea(array $params): array
         return _sm_handleDnsAjax($params, $customAction === 'refreshdns');
     }
 
-    // ── Auto-login webmail (SSO) ──────────────────────────────────────────
-    // Génère un token d'auto-login à usage unique et redirige (302) le
-    // navigateur vers le webmail SmarterMail. Ouvre dans un nouvel onglet
-    // (target="_blank" côté template).
+    // ── Auto-login webmail (SSO) par boîte ────────────────────────────────
+    // Génère un token d'auto-login à usage unique pour la boîte demandée
+    // (?ssouser=<partie locale>) et redirige (302) le navigateur vers son
+    // webmail SmarterMail. Ouvre dans un nouvel onglet (target="_blank").
     //
     // GET sans CSRF, volontairement : l'action ne fait que connecter le client
-    // à SON PROPRE webmail (domaine du service authentifié) ; le token n'est
-    // jamais exposé au JS (redirection 302 côté serveur) et un déclenchement
-    // inter-sites n'apporte rien à un attaquant — la redirection est opaque
-    // dans le navigateur de la victime. En cas d'échec (SA injoignable, domaine
-    // non prêt…), repli GRACIEUX vers la page de connexion manuelle : le client
-    // saisit alors ses identifiants au lieu de voir une page d'erreur.
+    // à une boîte de SON PROPRE domaine (celui du service authentifié) ; le
+    // token n'est jamais exposé au JS (redirection 302 côté serveur) et un
+    // déclenchement inter-sites n'apporte rien à un attaquant — la redirection
+    // est opaque dans le navigateur de la victime. En cas d'échec (SA
+    // injoignable, domaine non prêt, boîte inexistante…), repli GRACIEUX vers la
+    // page de connexion manuelle : le client saisit alors ses identifiants.
     if ($customAction === 'webmailsso') {
-        $sso    = _sm_buildWebmailSsoUrl($params);
-        $target = $sso['url']
+        // ssouser = partie locale du username de boîte (sans @domaine), même
+        // règle que edituserpage. Vide = admin du domaine (chemin résiduel, non
+        // lié dans l'UI) ; malformé = on ne devine pas → connexion manuelle.
+        $ssoUser = trim((string) ($_GET['ssouser'] ?? ''));
+        $ssoOk   = ($ssoUser === '' || preg_match('/^[a-z0-9._\-]+$/i', $ssoUser) === 1);
+        $sso     = $ssoOk
+            ? _sm_buildWebmailSsoUrl($params, $ssoUser)
+            : ['error' => 'ssouser_invalide'];
+        $target  = $sso['url']
             ?? ('https://' . ($params['serverhostname'] ?? '') . '/interface/root#/login');
         header('Location: ' . str_replace(["\r", "\n"], '', $target));
         exit;
@@ -3284,18 +3268,6 @@ function smartermail_ClientArea(array $params): array
             'billingPeriod'  => _sm_getBillingPeriod((int) $params['serviceid']),
             'lockDays'       => max(1, (int) ($params['configoption16'] ?? 1)),
             'error'          => null,
-            // ── URL du webmail SmarterMail ────────────────────────────
-            // Construite à partir du hostname du serveur (tblservers.hostname)
-            // pour permettre un lien direct vers l'interface de connexion.
-            // Le protocole est forcé en HTTPS — les déploiements SmarterMail
-            // modernes exigent TLS. Le chemin /interface/root#/login est le
-            // point d'entrée standard du webmail SmarterMail 100.x.
-            //
-            // SÉCURITÉ : $params['serverhostname'] provient de tblservers,
-            // accessible uniquement aux administrateurs WHMCS. Aucune donnée
-            // utilisateur n'entre dans cette URL. Le template applique |escape
-            // sur la valeur avant injection dans l'attribut href.
-            'webmailUrl'     => 'https://' . ($params['serverhostname'] ?? '') . '/interface/root#/login',
             // Jeton CSRF — injecté par clientarea.tpl dans les formulaires
             // toggledkim / adddomainalias / deletedomainalias pour bloquer
             // les requêtes inter-sites contre la session du client connecté.
