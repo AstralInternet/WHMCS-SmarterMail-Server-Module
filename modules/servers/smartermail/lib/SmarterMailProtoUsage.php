@@ -693,6 +693,113 @@ function _sm_rolloverProtoUsage(int $serviceid, array $billableByEmail, string $
 
 
 /**
+ * (P2-seed) Matérialise dans proto_usage les protocoles EAS/MAPI facturés en
+ * Phase 2 (fallback live) car ABSENTS de la table — typiquement des boîtes
+ * créées directement dans SmarterMail (jamais passées par createuser/saveuser).
+ *
+ * Appelée dans la branche de succès de UpdateInvoice, dans une transaction dédiée
+ * (séparée du marquage Phase 1). Pour chaque (service, email, protocole) facturé
+ * en live, insère DEUX lignes :
+ *   1. Période COURANTE, status='active', billed=1 (+ invoiceid/billed_at) : trace
+ *      la facturation live et rend la ligne annulable par InvoiceCancelled.
+ *   2. Période SUIVANTE, status='active', billed=0 (rollover) : dès le cycle
+ *      suivant, la Phase 1 (DB) facture le renouvellement sans l'API live, puis le
+ *      rollover normal prend le relais.
+ * Statut 'active' (le protocole est facturé → au-delà de toute période de grâce).
+ *
+ * IDEMPOTENCE : chaque insertion est précédée d'un exists() sur
+ * (serviceid,email,protocol,period_start) + bornée par uq_sm_proto_period (une
+ * course entre crons concurrents est absorbée en no-op).
+ *
+ * @param  int         $serviceid
+ * @param  array       $seededByEmail   ['user@dom' => ['eas'=>true,'mapi'=>true], …]
+ * @param  int         $invoiceId       Facture réglant la période courante
+ * @param  string      $periodStart     Période facturée (Y-m-d)
+ * @param  string|null $nextPeriodStart period_end (Y-m-d), ou null si pas de rollover
+ * @param  int         $thresholdHours  Seuil (colonne threshold_hours)
+ * @return int         Nombre de protocoles matérialisés (lignes période courante insérées)
+ */
+function _sm_seedLiveProtoUsage(
+    int     $serviceid,
+    array   $seededByEmail,
+    int     $invoiceId,
+    string  $periodStart,
+    ?string $nextPeriodStart,
+    int     $thresholdHours
+): int {
+    _sm_ensureProtoUsageTable();
+
+    $now    = date('Y-m-d H:i:s');
+    $seeded = 0;
+
+    foreach ($seededByEmail as $email => $protocols) {
+        $email = strtolower((string) $email);
+        foreach ($protocols as $protocol => $on) {
+            if (!$on || !in_array($protocol, ['eas', 'mapi'], true)) {
+                continue;
+            }
+            try {
+                // 1) Ligne période COURANTE (billed=1) — trace de la facturation live.
+                $hasCurrent = Capsule::table('mod_sm_proto_usage')
+                    ->where('serviceid',    $serviceid)
+                    ->where('email',        $email)
+                    ->where('protocol',     $protocol)
+                    ->where('period_start', $periodStart)
+                    ->exists();
+                if (!$hasCurrent) {
+                    Capsule::table('mod_sm_proto_usage')->insert([
+                        'serviceid'       => $serviceid,
+                        'email'           => $email,
+                        'protocol'        => $protocol,
+                        'status'          => 'active',
+                        'period_start'    => $periodStart,
+                        'threshold_hours' => max(1, $thresholdHours),
+                        'activated_at'    => $now,
+                        'deleted_at'      => null,
+                        'billed'          => 1,
+                        'invoiceid'       => $invoiceId,
+                        'billed_at'       => $now,
+                    ]);
+                    $seeded++;
+                }
+
+                // 2) Ligne période SUIVANTE (billed=0) — rollover, si applicable.
+                if ($nextPeriodStart !== null) {
+                    $hasNext = Capsule::table('mod_sm_proto_usage')
+                        ->where('serviceid',    $serviceid)
+                        ->where('email',        $email)
+                        ->where('protocol',     $protocol)
+                        ->where('period_start', $nextPeriodStart)
+                        ->exists();
+                    if (!$hasNext) {
+                        Capsule::table('mod_sm_proto_usage')->insert([
+                            'serviceid'       => $serviceid,
+                            'email'           => $email,
+                            'protocol'        => $protocol,
+                            'status'          => 'active',
+                            'period_start'    => $nextPeriodStart,
+                            'threshold_hours' => max(1, $thresholdHours),
+                            'activated_at'    => $now,
+                            'deleted_at'      => null,
+                            'billed'          => 0,
+                            'invoiceid'       => null,
+                            'billed_at'       => null,
+                        ]);
+                    }
+                }
+
+            } catch (\Throwable $e) {
+                logActivity('SmarterMail [proto-usage] seedLive error ('
+                    . $email . '/' . $protocol . '): ' . $e->getMessage());
+            }
+        }
+    }
+
+    return $seeded;
+}
+
+
+/**
  * (P1.1) Purge différée des lignes déjà facturées (billed=1) trop anciennes.
  *
  * Appelée hebdomadairement par le DailyCronJob. Supprime les lignes billed=1 dont

@@ -134,7 +134,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.4.0',
+        'MODVersion' => '1.4.1',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',

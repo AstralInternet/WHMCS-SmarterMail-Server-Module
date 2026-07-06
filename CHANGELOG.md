@@ -10,6 +10,39 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.4.1] - 2026-07-06
+
+### Corrigé — le rollover couvre désormais les boîtes créées hors module
+
+Le report (« rollover ») introduit en 1.3.0 ne fonctionnait que pour les
+protocoles EAS/MAPI **tracés** dans `mod_sm_proto_usage`, c.-à-d. activés via le
+module (createuser/saveuser). Les boîtes dont EAS/MAPI avait été activé
+**directement dans SmarterMail** (ou avant l'existence du suivi) n'étaient jamais
+inscrites dans la table : elles étaient facturées uniquement par le **fallback
+live (Phase 2)**, sans jamais alimenter le rollover. Résultat : pour ces boîtes,
+la facturation récurrente **continuait de dépendre de l'API live** — exactement ce
+que le rollover devait éliminer.
+
+- **Seeding Phase 2** (`_sm_seedLiveProtoUsage`, `hooks.php` + `SmarterMailProtoUsage.php`).
+  Quand la Phase 2 facture un protocole EAS/MAPI en live, elle **matérialise**
+  désormais ce protocole dans `mod_sm_proto_usage`, après le succès d'`UpdateInvoice` :
+  - une ligne **période courante** `billed=1` (+ `invoiceid`/`billed_at`) — trace la
+    facturation live et la rend annulable par le hook `InvoiceCancelled` ;
+  - une ligne **période suivante** `billed=0` (rollover) — dès le cycle suivant, la
+    Phase 1 (BD) facture le renouvellement **sans l'API live**, puis le rollover
+    normal prend le relais.
+- Transaction **séparée** du marquage Phase 1 : un échec du seeding ne peut pas
+  annuler le marquage déjà appliqué.
+- Seuls les protocoles **réellement facturés** (prix > 0) sont matérialisés, et
+  seulement hors « mode live » (`configoption16 = 0`, où le suivi BD est
+  volontairement désactivé). Insertions **idempotentes** (garde `exists()` +
+  contrainte d'unicité). Journalisé : `[P2-seed] service #N : X protocole(s) …`.
+
+**Effet** : au premier passage de facturation, une boîte non tracée est facturée
+en live **et** inscrite dans la table ; dès la facture suivante, elle est couverte
+par la Phase 1 (BD) + rollover. La dépendance à l'API live au moment de la
+facturation disparaît progressivement pour tout le parc existant.
+
 ## [1.4.0] - 2026-07-06
 
 ### Ajouté — connexion automatique au webmail (SSO) par boîte courriel

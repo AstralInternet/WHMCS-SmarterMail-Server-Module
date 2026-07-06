@@ -554,6 +554,11 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         // Période de facturation courante — hissée pour le marquage + le rollover
         // (P1.1) dans la branche de succès de UpdateInvoice. Réassignée en Phase 1.
         $period             = ['start' => null, 'end' => null];
+        // (P2-seed) Protocoles EAS/MAPI facturés en Phase 2 (live) car ABSENTS de
+        // proto_usage (boîtes créées directement dans SmarterMail). Matérialisés
+        // dans la table après le succès d'UpdateInvoice → le rollover les couvre
+        // dès le cycle suivant (fin de la dépendance à l'API live).
+        $seededByEmail      = [];
 
         // ════════════════════════════════════════════════════════════════════
         //  PHASE 1 — SUIVI D'UTILISATION (mod_sm_proto_usage)
@@ -689,6 +694,12 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                 $liveEasEmails  = [];
                 $liveMapiEmails = [];
                 $liveCombined   = [];
+                // (P2-seed) Emails bruts (minuscules) en parallèle des listes
+                // d'affichage : servent à matérialiser après coup, dans proto_usage,
+                // EXACTEMENT les protocoles réellement facturés (prix > 0).
+                $rawEas      = [];
+                $rawMapi     = [];
+                $rawCombined = [];
 
                 $allLiveEmails = array_unique(array_merge(
                     array_keys($easMailboxes),
@@ -709,22 +720,27 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                     if (!$hasEAS && !$hasMAPI) continue;
                     // Préfixe de puce depuis le fichier de langue ('- ' par défaut)
                     $prefix  = $hookLang['inv_entry_prefix'] ?? '- ';
-                    if ($hasEAS && $hasMAPI)  $liveCombined[]  = $prefix . $liveEmail;
-                    elseif ($hasEAS)          $liveEasEmails[] = $prefix . $liveEmail;
-                    elseif ($hasMAPI)         $liveMapiEmails[] = $prefix . $liveEmail;
+                    if ($hasEAS && $hasMAPI)  { $liveCombined[]  = $prefix . $liveEmail; $rawCombined[] = $lcEmail; }
+                    elseif ($hasEAS)          { $liveEasEmails[] = $prefix . $liveEmail; $rawEas[]      = $lcEmail; }
+                    elseif ($hasMAPI)         { $liveMapiEmails[] = $prefix . $liveEmail; $rawMapi[]     = $lcEmail; }
                 }
 
                 // Une ligne par type (même format que Phase 1)
                 // En-têtes externalisés dans les fichiers de langue (mêmes clés que Phase 1)
+                // (P2-seed) $seededByEmail ne retient QUE les protocoles réellement
+                // facturés (prix > 0) → on matérialise exactement ce qui a été facturé.
                 if (!empty($liveCombined) && $combinedPrice > 0) {
                     $addLine(
                         ($hookLang['inv_combined_hdr'] ?? 'EAS + MAPI/Exchange :')
                             . "\n" . implode("\n", $liveCombined),
                         count($liveCombined) * $combinedPrice
                     );
+                    foreach ($rawCombined as $e) { $seededByEmail[$e]['eas'] = true; $seededByEmail[$e]['mapi'] = true; }
                 } elseif (!empty($liveCombined)) {
                     $liveEasEmails  = array_merge($liveEasEmails,  $liveCombined);
                     $liveMapiEmails = array_merge($liveMapiEmails, $liveCombined);
+                    $rawEas  = array_merge($rawEas,  $rawCombined);
+                    $rawMapi = array_merge($rawMapi, $rawCombined);
                 }
                 if (!empty($liveEasEmails) && $easPrice > 0) {
                     $addLine(
@@ -732,6 +748,7 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                             . "\n" . implode("\n", $liveEasEmails),
                         count($liveEasEmails) * $easPrice
                     );
+                    foreach ($rawEas as $e) { $seededByEmail[$e]['eas'] = true; }
                 }
                 if (!empty($liveMapiEmails) && $mapiPrice > 0) {
                     $addLine(
@@ -739,6 +756,7 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                             . "\n" . implode("\n", $liveMapiEmails),
                         count($liveMapiEmails) * $mapiPrice
                     );
+                    foreach ($rawMapi as $e) { $seededByEmail[$e]['mapi'] = true; }
                 }
 
             } catch (\Exception $e) {
@@ -811,6 +829,50 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                         );
                     } catch (\Throwable $e) {
                         logActivity('SmarterMail InvoiceCreation [mark+rollover] EXCEPTION '
+                            . '(facture #' . $invoiceId . ', service #' . $serviceId . '): '
+                            . $e->getMessage());
+                    }
+                }
+
+                // ── (P2-seed) Matérialisation des protocoles facturés en Phase 2 ──
+                // Les protocoles EAS/MAPI facturés en live (boîtes créées hors module,
+                // absentes de proto_usage) sont inscrits dans la table : ligne période
+                // courante billed=1 (trace + annulable) + ligne période suivante billed=0
+                // (rollover). Dès le prochain cycle, la Phase 1 (DB) les facture sans
+                // l'API live. Transaction SÉPARÉE du marquage Phase 1 ci-dessus : un
+                // échec de seeding ne doit pas annuler le marquage déjà appliqué.
+                // Ne s'exécute que si $period['start'] est connu — donc jamais en
+                // « mode live » (lockDays=0, Phase 1 désactivée), où le suivi DB est
+                // volontairement inactif.
+                if (!empty($seededByEmail) && $period['start']) {
+                    $seedCycle     = strtolower(trim((string) (Capsule::table('tblhosting')
+                        ->where('id', $serviceId)->value('billingcycle') ?? '')));
+                    $seedRollover  = !empty($period['end'])
+                        && !in_array($seedCycle, ['one time', 'onetime', 'free account'], true);
+                    $seedThreshold = max(1, $lockDays) * 24;
+                    try {
+                        $nbSeeded = Capsule::connection()->transaction(
+                            function () use ($serviceId, $seededByEmail, $invoiceId, $period, $seedRollover, $seedThreshold) {
+                                return _sm_seedLiveProtoUsage(
+                                    $serviceId,
+                                    $seededByEmail,
+                                    $invoiceId,
+                                    $period['start'],
+                                    $seedRollover ? $period['end'] : null,
+                                    $seedThreshold
+                                );
+                            }
+                        );
+                        if ($nbSeeded > 0) {
+                            logActivity(sprintf(
+                                'SmarterMail InvoiceCreation [P2-seed] service #%d : %d protocole(s) '
+                                    . 'live matérialisé(s) dans proto_usage — désormais couverts par '
+                                    . 'la Phase 1 (DB) + rollover, sans dépendre de l\'API live.',
+                                $serviceId, $nbSeeded
+                            ));
+                        }
+                    } catch (\Throwable $e) {
+                        logActivity('SmarterMail InvoiceCreation [P2-seed] EXCEPTION '
                             . '(facture #' . $invoiceId . ', service #' . $serviceId . '): '
                             . $e->getMessage());
                     }
