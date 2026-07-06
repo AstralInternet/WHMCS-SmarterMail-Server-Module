@@ -388,6 +388,7 @@ $_lang = [
 
     // ── Connexion / serveur ───────────────────────────────────────────────────
     'err_server_connect'       => 'Le service courriel est temporairement indisponible. Veuillez réessayer plus tard ou contacter le soutien technique si le problème persiste.',
+    'err_webmail_sso'          => 'La connexion automatique au webmail a échoué. Veuillez vous connecter manuellement avec vos identifiants.',
     'err_server_unreachable'   => 'Serveur SmarterMail injoignable — vérifiez le nom d\'hôte et le port.',
     'err_sa_token_invalid'     => 'Jeton SA invalide ou expiré.',
     'err_sa_no_impersonate'    => 'Le compte SA n\'a pas les droits d\'impersonification.',

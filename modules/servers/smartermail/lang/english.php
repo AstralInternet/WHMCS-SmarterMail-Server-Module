@@ -385,6 +385,7 @@ $_lang = [
 
     // ── Connection / server ───────────────────────────────────────────────────
     'err_server_connect'       => 'The email service is temporarily unavailable. Please try again later or contact support if the issue persists.',
+    'err_webmail_sso'          => 'Automatic webmail sign-in failed. Please sign in manually with your credentials.',
     'err_server_unreachable'   => 'SmarterMail server unreachable — please check the hostname and port.',
     'err_sa_token_invalid'     => 'SA token invalid or expired.',
     'err_sa_no_impersonate'    => 'SA account does not have impersonation rights.',

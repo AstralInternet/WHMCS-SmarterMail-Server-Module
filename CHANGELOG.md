@@ -10,6 +10,35 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.4.0] - 2026-07-06
+
+### Ajouté — connexion automatique au webmail (SSO)
+
+- **Auto-login webmail par jeton à usage unique.** Le bouton « Ouvrir le webmail »
+  du tableau de bord client connecte désormais le client directement dans le
+  webmail SmarterMail, **sans ressaisie d'identifiants**. Le module demande au
+  SysAdmin un jeton d'auto-login (endpoint `retrieve-login-token`, via
+  `getAutoLoginUrl()` — jusqu'ici présent dans le wrapper mais **jamais branché**)
+  puis redirige le navigateur (302) vers l'URL de connexion automatique. La
+  connexion se fait au nom de l'admin du domaine (compte du service).
+- **Fonction WHMCS native `smartermail_ServiceSingleSignOn()`** : la métadonnée
+  `ServiceSingleSignOnLabel` (« Accéder au Webmail »), déclarée mais sans fonction
+  associée (métadonnée morte signalée par l'audit), est enfin fonctionnelle.
+- **Repli gracieux** : si l'auto-login échoue (SysAdmin injoignable, domaine non
+  encore provisionné…), le bouton retombe sur la page de connexion manuelle du
+  webmail — il reste donc toujours utilisable. L'échec technique est journalisé
+  pour l'administrateur ; le client, lui, n'est jamais bloqué.
+
+Notes de sécurité : le jeton d'auto-login est à usage unique, expire en quelques
+secondes et n'est **jamais exposé au JavaScript de la page** (redirection côté
+serveur). Le domaine et le compte ciblés proviennent exclusivement du service
+WHMCS authentifié — aucun accès possible à un domaine tiers.
+
+> Les icônes « boîte de réception » par mailbox de la grille des comptes pointent
+> encore vers la page de connexion manuelle : l'auto-login **par boîte** est prévu
+> comme incrément suivant (nécessite de confirmer le format exact du username de
+> mailbox attendu par SmarterMail sur un serveur de test).
+
 ## [1.3.0] - 2026-07-03
 
 Phase 1 de la remédiation d'audit — **robustesse**. Restaure l'intégrité de la

@@ -683,24 +683,28 @@
     </div>
 
     {*
-     * ── Bouton « Ouvrir le webmail » ──────────────────────────────────────
+     * ── Bouton « Ouvrir le webmail » (auto-login SSO) ─────────────────────
      *
-     * Lien direct vers l'interface webmail SmarterMail du serveur.
+     * Ouvre le webmail SmarterMail en CONNECTANT automatiquement le client
+     * (auto-login par token à usage unique), sans ressaisie d'identifiants.
      * Placé juste sous le bloc Statistiques, dans la même colonne (col-md-7).
      *
+     * FONCTIONNEMENT :
+     *   - Le lien pointe vers customAction=webmailsso : le module génère un
+     *     token d'auto-login côté serveur puis redirige (302) vers SmarterMail.
+     *   - Si l'auto-login échoue, le module retombe gracieusement sur la page
+     *     de connexion manuelle — le bouton reste toujours fonctionnel.
+     *
      * SÉCURITÉ :
-     *   - $webmailUrl est construit côté PHP à partir de tblservers.hostname
-     *     (champ accessible uniquement aux administrateurs WHMCS).
-     *   - |escape neutralise toute injection XSS dans l'attribut href.
-     *   - target="_blank" avec rel="noopener noreferrer" empêche l'accès
-     *     à window.opener depuis la page ouverte (prévention tabnabbing).
+     *   - L'URL ne contient que le serviceid (validé par WHMCS contre la
+     *     session client) ; le token d'auto-login n'apparaît jamais côté page.
+     *   - target="_blank" + rel="noopener noreferrer" : prévention tabnabbing.
      *
      * ACCESSIBILITÉ :
-     *   - Le bouton est un <a> stylé en bouton pour conserver la sémantique
-     *     de navigation (pas un <button> qui exigerait du JS).
+     *   - <a> stylé en bouton pour conserver la sémantique de navigation.
      *   - Le title reprend le libellé traduit pour les lecteurs d'écran.
      *}
-    <a href="{$webmailUrl|escape}"
+    <a href="clientarea.php?action=productdetails&id={$serviceid|intval}&customAction=webmailsso"
        target="_blank"
        rel="noopener noreferrer"
        class="sm-webmail-btn"
