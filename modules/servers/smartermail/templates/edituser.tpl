@@ -23,8 +23,12 @@ var SM_LANG_FWD_EMPTY     = '{$lang.js_fwd_empty|escape:"javascript"}';
 .sm-header-storage{font-size:12px;color:rgba(255,255,255,.75);margin-bottom:6px}
 .sm-header-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .sm-header-top .sm-header-email{margin-bottom:0}
-.sm-header-webmail{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);padding:7px 14px;border-radius:4px;font-size:13px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s}
-.sm-header-webmail:hover{background:rgba(255,255,255,.3);color:#fff;text-decoration:none}
+/* color:#fff en !important : le thème clair colore les <a> en orange (couleur
+   d'accent) et gagnerait sur une simple classe — on force le blanc sur l'en-tête
+   foncé, dans tous les états, icône comprise. */
+.sm-header-webmail{background:rgba(255,255,255,.16);color:#fff !important;border:1px solid rgba(255,255,255,.5);padding:7px 14px;border-radius:4px;font-size:13px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s}
+.sm-header-webmail:hover,.sm-header-webmail:focus,.sm-header-webmail:visited{background:rgba(255,255,255,.3);color:#fff !important;text-decoration:none}
+.sm-header-webmail i{color:#fff !important}
 .sm-progress{height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
 .sm-progress-bar{height:100%;border-radius:4px;transition:width .4s}
 .sm-progress-bar.low{background:#27ae60}.sm-progress-bar.mid{background:#f39c12}.sm-progress-bar.high{background:#e74c3c}
