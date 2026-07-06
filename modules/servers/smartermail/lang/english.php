@@ -53,6 +53,12 @@ $_lang = [
     'dash_storage_tiers'   => 'Tier',
     'dash_storage_of'      => 'of',
     'dash_storage_go'      => 'GB',
+    // (Step 4) Disk quota gauge
+    'quota_label'          => 'Disk quota',
+    'quota_near'           => 'You are approaching your disk quota limit.',
+    'quota_over_block'     => 'Disk quota reached — storage beyond it is blocked.',
+    'quota_over_bill'      => 'Disk quota exceeded — the overage is billed.',
+    'quota_over_notify'    => 'Disk quota exceeded.',
     'dash_stats_title'     => 'Statistics',
     'dash_service_title'   => 'Service Information',
     'dash_dkim_title'      => 'DKIM Key',
@@ -386,6 +392,8 @@ $_lang = [
     // ── Connection / server ───────────────────────────────────────────────────
     'err_server_connect'       => 'The email service is temporarily unavailable. Please try again later or contact support if the issue persists.',
     'err_webmail_sso'          => 'Automatic webmail sign-in failed. Please sign in manually with your credentials.',
+    'err_change_package'       => 'Error applying the new package: %s',
+    'err_quota_below_usage'    => 'Change refused: the new package quota (%1$d GB) is below current usage (%2$s GB). Reduce usage or choose a larger package.',
     'err_server_unreachable'   => 'SmarterMail server unreachable — please check the hostname and port.',
     'err_sa_token_invalid'     => 'SA token invalid or expired.',
     'err_sa_no_impersonate'    => 'SA account does not have impersonation rights.',

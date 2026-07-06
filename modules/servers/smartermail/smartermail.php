@@ -136,7 +136,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.4.1',
+        'MODVersion' => '1.5.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -1571,12 +1571,18 @@ function smartermail_CreateAccount(array $params): string
     $maxUsers = max(0, (int) ($params['configoption7'] ?? 0));
     $outIP    = $params['configoption6'] ?? 'default';
 
+    // (Étape 3) Quota disque : en mode 'block', pousser maxSize = quota×1024³ au
+    // serveur (SmarterMail refuse alors le stockage au-delà) ; en 'bill'/'notify',
+    // 0 (illimité côté serveur — la facturation gère l'excédent / l'alerte).
+    $psettings    = _sm_getProductSettings((int) ($params['pid'] ?? 0));
+    $maxSizeBytes = _sm_quotaMaxSizeBytes($psettings);
+
     $domainOptions = [
         // Champs documentés dans domainData (voir doc API domain-put)
         'path'       => rtrim($params['configoption5'] ?? 'C:\\SmarterMail\\Domains\\', '\\') . '\\' . $domain,
         'hostname'   => 'mail.' . $domain,
         'userLimit'  => $maxUsers,
-        'maxSize'    => 0,   // 0 = illimité — notre facturation gère ça
+        'maxSize'    => $maxSizeBytes,   // 0 = illimité ; >0 = plafond (mode block)
         'aliasLimit' => 0,   // Illimité
         'listLimit'  => 0,   // Illimité
         // outgoingIP est appliqué via setDomainSettings() après création (non documenté dans domain-put)
@@ -2001,6 +2007,10 @@ function smartermail_UsageUpdate(array $params): array
     // Correction : on retourne silencieusement 0 MB sans appel API.
     // WHMCS ignorera cette valeur (diskusage = 0) sans bloquer le cron.
     // Un log d'activité est émis pour faciliter le diagnostic admin.
+    // (Étape 3) Limite disque pour la jauge native WHMCS = quota du produit (Mo),
+    // dans tous les modes (block/bill/notify). 0 si aucun quota défini.
+    $diskLimitMB = _sm_quotaDiskLimitMB(_sm_getProductSettings((int) ($params['pid'] ?? 0)));
+
     $domain = trim((string) ($params['domain'] ?? ''));
     if ($domain === '') {
         logActivity(
@@ -2010,7 +2020,7 @@ function smartermail_UsageUpdate(array $params): array
         );
         return [
             'diskusage'  => 0,
-            'disklimit'  => 0,
+            'disklimit'  => $diskLimitMB,
             'bwusage'    => 0,
             'bwlimit'    => 0,
             'carryoveru' => 0,
@@ -2039,11 +2049,101 @@ function smartermail_UsageUpdate(array $params): array
 
     return [
         'diskusage'  => $usageMB,  // En MB → tblhosting.diskusage (facturation)
-        'disklimit'  => 0,
+        'disklimit'  => $diskLimitMB,  // (Étape 3) quota×1024 Mo → jauge WHMCS native
         'bwusage'    => 0,
         'bwlimit'    => 0,
         'carryoveru' => 0,
     ];
+}
+
+
+/**
+ * Change de forfait (upgrade/downgrade WHMCS) — réapplique les limites serveur.
+ *
+ * WHMCS appelle cette fonction quand le produit d'un service change. Sans elle,
+ * un changement de forfait n'avait AUCUN effet côté SmarterMail (limites
+ * inchangées). On re-pousse userLimit / maxSize / outgoingIP via setDomainSettings
+ * (merge partiel). En mode quota 'block', on REFUSE un passage à un quota
+ * inférieur à l'utilisation disque courante (sinon le domaine déborderait).
+ *
+ * @param  array  $params  Paramètres du module (le NOUVEAU produit est déjà lié).
+ * @return string          'success' ou un message d'erreur (affiché par WHMCS).
+ */
+function smartermail_ChangePackage(array $params): string
+{
+    $init = _sm_initDomainAdmin($params);
+    if (isset($init['error'])) {
+        // Domaine pas encore provisionné (service Pending) : rien à appliquer côté
+        // serveur — CreateAccount utilisera les réglages du NOUVEAU produit à la
+        // création. On ne bloque donc pas le changement de forfait.
+        if (!empty($init['domainNotReady'])) {
+            return 'success';
+        }
+        return $init['error'];
+    }
+    $api     = $init['api'];
+    $daToken = $init['token'];
+    $saToken = (string) ($init['saToken'] ?? '');
+    $domain  = strtolower(trim((string) ($params['domain'] ?? '')));
+
+    if ($domain === '' || $saToken === '') {
+        logActivity('SmarterMail [ChangePackage] Contexte insuffisant (domaine/token SA) '
+            . 'pour le service #' . ($params['serviceid'] ?? '?'));
+        return _sm_lang($params)['err_server_connect']
+            ?? 'Le service courriel est temporairement indisponible.';
+    }
+
+    $psettings    = _sm_getProductSettings((int) ($params['pid'] ?? 0));
+    $maxSizeBytes = _sm_quotaMaxSizeBytes($psettings);
+    $maxUsers     = max(0, (int) ($params['configoption7'] ?? 0));
+    $outIP        = $params['configoption6'] ?? 'default';
+    $outIPValue   = ($outIP === 'default' ? '' : $outIP);
+
+    // ── Refus : quota BLOCK inférieur à l'utilisation courante ────────────────
+    // Appliquer un maxSize sous l'usage réel briserait le domaine (stockage plein
+    // instantané). On ne refuse que si on peut LIRE l'usage ; sur erreur de
+    // lecture (getDomainDiskUsageGB < 0), on procède (best-effort) et le serveur
+    // tranchera.
+    if ($maxSizeBytes > 0) {
+        $currentGB = $api->getDomainDiskUsageGB($domain, $daToken);
+        if ($currentGB > (float) $psettings['quota_gb']) {
+            $l = _sm_lang($params);
+            logActivity(sprintf(
+                'SmarterMail [ChangePackage] REFUS service #%s (%s) : quota block %d Go < usage %.2f Go.',
+                $params['serviceid'] ?? '?', $domain, (int) $psettings['quota_gb'], $currentGB
+            ));
+            return sprintf(
+                $l['err_quota_below_usage']
+                    ?? 'Changement refusé : le quota du nouveau forfait (%1$d Go) est inférieur à '
+                        . 'l\'utilisation actuelle (%2$s Go). Réduisez l\'utilisation ou choisissez un '
+                        . 'forfait supérieur.',
+                (int) $psettings['quota_gb'], number_format($currentGB, 2)
+            );
+        }
+    }
+
+    // ── Appliquer les limites au serveur (merge partiel) ──────────────────────
+    $resp = $api->setDomainSettings($domain, [
+        'userLimit'  => $maxUsers,
+        'maxSize'    => $maxSizeBytes,
+        'outgoingIP' => $outIPValue,
+    ], $saToken);
+
+    if (!($resp['success'] ?? false)) {
+        logActivity('SmarterMail [ChangePackage] setDomainSettings échec pour ' . $domain
+            . ' : ' . _sm_apiError($resp));
+        return sprintf(
+            _sm_lang($params)['err_change_package'] ?? 'Erreur lors de l\'application du nouveau forfait : %s',
+            _sm_apiError($resp)
+        );
+    }
+
+    logActivity(sprintf(
+        'SmarterMail [ChangePackage] service #%s (%s) : limites appliquées — userLimit=%d, maxSize=%s.',
+        $params['serviceid'] ?? '?', $domain, $maxUsers,
+        $maxSizeBytes > 0 ? (round($maxSizeBytes / (1024 * 1024 * 1024)) . ' Go (block)') : 'illimité'
+    ));
+    return 'success';
 }
 
 
@@ -3208,6 +3308,12 @@ function smartermail_ClientArea(array $params): array
             'tiers'          => $tiers,
             'basePrice'      => $basePrice,
             'estimatedPrice' => $estimatedPrice,
+            // (Étape 4) Quota disque — jauge + bannière (quotaGb=0 → masqué)
+            'quotaGb'            => (int) $charge['quota']['gb'],
+            'quotaMode'          => (string) $charge['quota']['mode'],
+            'quotaUsagePct'      => (float) $charge['quota']['usagePct'],
+            'quotaOver'          => (bool) $charge['quota']['over'],
+            'notifyThresholdPct' => (int) ($psettings['notify_threshold_pct'] ?? 90),
             'userCount'      => count($users),
             'aliasCount'     => count($aliases),
             'easCount'          => $easCount,

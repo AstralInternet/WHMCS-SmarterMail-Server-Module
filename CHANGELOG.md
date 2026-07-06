@@ -10,6 +10,50 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.5.0] - 2026-07-06
+
+### Ajouté — quota disque bloquant & modèles de facturation (Phase 2, design §3.3)
+
+Nouvelle capacité de « revente » : chaque produit peut porter un **modèle de
+facturation** (forfait fixe ou tranches disque) et un **quota disque** avec trois
+modes de dépassement, configurables via une **page d'administration** dédiée.
+Réglages stockés dans la table `mod_sm_product_settings` (les 23/24 configoptions
+étant consommées). **Strictement rétro-compatible** : un produit sans réglage
+conserve le comportement historique (tranches, aucun quota).
+
+- **Table `mod_sm_product_settings` + `_sm_getProductSettings()`** (nouvelle lib
+  `SmarterMailProductSettings.php`) : requête séparée, cache statique, **repli sur
+  défauts sur toute erreur** — la facturation ne casse jamais. Table auto-créée
+  (provisionnée au `DailyCronJob`).
+- **`_sm_computeBaseCharge()`** — fonction pure « base + modificateur » partagée
+  par le hook de facturation ET l'estimé du tableau de bord (plus de divergence
+  possible) :
+  - modèle `tiers` (défaut) : réécrit la ligne Hosting = tranches × prix ;
+  - modèle `flat` : la ligne Hosting reste au prix produit ;
+  - quota `block` : plafonne les tranches facturées au quota ; `bill` : ligne
+    d'excédent au prix de tranche excédentaire ; `notify` : aucun effet facture,
+    alerte seule.
+- **Quota ↔ serveur** : `CreateAccount` pousse `maxSize = quota×1024³` en mode
+  `block` (le serveur refuse le stockage au-delà) ; `UsageUpdate` renvoie
+  `disklimit` (jauge disque native WHMCS, tous modes) ; nouvelle fonction
+  **`smartermail_ChangePackage()`** qui réapplique `userLimit`/`maxSize`/`outgoingIP`
+  à chaque changement de forfait et **refuse** un quota `block` inférieur à
+  l'utilisation courante (auparavant, un changement de forfait n'avait aucun effet
+  serveur).
+- **Jauge de quota dans l'espace client** : barre colorée (vert < seuil, orange ≥
+  seuil, rouge ≥ 100 %) + message contextuel selon le mode, affichée uniquement si
+  un quota est défini. Mode sombre pris en charge.
+- **Module addon `smartermail_billing`** : page d'administration pour éditer les
+  réglages par produit + bouton « Appliquer aux services actifs » (pousse `maxSize`
+  au parc existant). CSRF par jeton de session.
+- i18n : clés `inv_overage_label`, `err_change_package`, `err_quota_below_usage`,
+  `quota_*` (FR/EN, parité maintenue).
+
+> Les modèles `per_mailbox` et `hybrid` (facturation à la boîte) sont réservés à
+> une étape ultérieure (comptage de boîtes) — traités comme `tiers` en attendant,
+> et non exposés dans la page addon. Le module addon doit être **activé**
+> (Configuration → Modules complémentaires) pour éditer les réglages.
+
 ## [1.4.1] - 2026-07-06
 
 ### Corrigé — le rollover couvre désormais les boîtes créées hors module

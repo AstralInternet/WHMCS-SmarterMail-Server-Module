@@ -121,6 +121,18 @@
 .sm-stat-label{color:#777;width:170px;flex-shrink:0;display:flex;align-items:center;gap:7px}
 .sm-stat-label i{width:14px;text-align:center;color:#aaa}
 .sm-stat-value{color:#222;font-weight:500;flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* (Étape 4) Jauge de quota disque */
+.sm-quota{margin:2px 0 14px}
+.sm-quota-head{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:#777;margin-bottom:4px;gap:8px}
+.sm-quota-nums{font-weight:600;color:#444;white-space:nowrap}
+.sm-quota-bar{height:8px;background:#eee;border-radius:4px;overflow:hidden}
+.sm-quota-fill{height:100%;border-radius:4px;transition:width .3s}
+.sm-quota-fill.ok{background:#27ae60}
+.sm-quota-fill.warn{background:#f39c12}
+.sm-quota-fill.over{background:#e74c3c}
+.sm-quota-msg{margin-top:6px;font-size:12px;padding:6px 10px;border-radius:4px;line-height:1.4}
+.sm-quota-msg.sm-quota-warn{background:#fff8e1;color:#8a6d3b;border:1px solid #f5e0a3}
+.sm-quota-msg.sm-quota-over{background:#fdecea;color:#a94442;border:1px solid #f5c6c2}
 .sm-info-row{display:flex;align-items:flex-start;padding:5px 0;border-bottom:1px solid #f2f2f2;font-size:13px}
 .sm-info-row:last-child{border-bottom:none}
 .sm-info-label{color:#888;width:150px;flex-shrink:0;font-size:12px}
@@ -606,6 +618,34 @@
           </span>
           {/if}
         </div>
+
+        {* ── (Étape 4) Jauge de quota disque ────────────────────────────────
+           Affichée uniquement si un quota produit est défini ($quotaGb > 0).
+           Couleur : vert < seuil d'alerte, orange ≥ seuil, rouge ≥ 100 %.
+           Message contextuel selon le mode (block/bill/notify) au dépassement. *}
+        {if $quotaGb > 0}
+          {if $quotaUsagePct >= 100}{assign var="qCls" value="over"}
+          {elseif $quotaUsagePct >= $notifyThresholdPct}{assign var="qCls" value="warn"}
+          {else}{assign var="qCls" value="ok"}{/if}
+          <div class="sm-quota">
+            <div class="sm-quota-head">
+              <span>{$lang.quota_label}</span>
+              <span class="sm-quota-nums">{$usageGB|number_format:2} / {$quotaGb} {$lang.dash_storage_go} ({$quotaUsagePct|number_format:1}%)</span>
+            </div>
+            <div class="sm-quota-bar">
+              <div class="sm-quota-fill {$qCls}" style="width:{if $quotaUsagePct > 100}100{else}{$quotaUsagePct|number_format:1}{/if}%;"></div>
+            </div>
+            {if $qCls == 'over'}
+              <div class="sm-quota-msg sm-quota-over">
+                {if $quotaMode == 'block'}{$lang.quota_over_block}
+                {elseif $quotaMode == 'bill'}{$lang.quota_over_bill}
+                {else}{$lang.quota_over_notify}{/if}
+              </div>
+            {elseif $qCls == 'warn'}
+              <div class="sm-quota-msg sm-quota-warn">{$lang.quota_near}</div>
+            {/if}
+          </div>
+        {/if}
 
         <div class="sm-stat-row">
           <div class="sm-stat-label"><i class="fa fa-inbox"></i> {$lang.stat_email_accounts}</div>

@@ -279,3 +279,84 @@ function _sm_computeBaseCharge(array $settings, array $ctx): array
         'quota'          => $quota,
     ];
 }
+
+
+/**
+ * Taille max du domaine (en OCTETS) à pousser au serveur SmarterMail via
+ * createDomain / setDomainSettings. Poussée UNIQUEMENT en mode 'block'
+ * (quota_gb × 1024³) : en 'bill'/'notify', le serveur ne doit PAS bloquer ce
+ * qu'on veut facturer/notifier. 0 = illimité côté serveur.
+ *
+ * (64 bits requis pour de très gros quotas ; WHMCS moderne tourne en 64 bits.)
+ *
+ * @param  array $settings  _sm_getProductSettings()
+ * @return int              Octets (0 = illimité)
+ */
+function _sm_quotaMaxSizeBytes(array $settings): int
+{
+    $quotaGB = max(0, (int) ($settings['quota_gb'] ?? 0));
+    $mode    = $settings['overage_mode'] ?? 'notify';
+    return ($quotaGB > 0 && $mode === 'block')
+        ? $quotaGB * 1024 * 1024 * 1024
+        : 0;
+}
+
+/**
+ * Limite disque (en Mo) pour la jauge native WHMCS (tblhosting.disklimit).
+ * Renvoyée dans TOUS les modes dès qu'un quota est défini (block/bill/notify),
+ * pour afficher une jauge cohérente côté client. 0 = pas de limite affichée.
+ *
+ * @param  array $settings  _sm_getProductSettings()
+ * @return int              Mégaoctets (0 = illimité)
+ */
+function _sm_quotaDiskLimitMB(array $settings): int
+{
+    $quotaGB = max(0, (int) ($settings['quota_gb'] ?? 0));
+    return $quotaGB > 0 ? $quotaGB * 1024 : 0;
+}
+
+
+/**
+ * Écrit (upsert) les réglages d'un produit. Utilisé par la page addon d'admin.
+ * Valide/borne toutes les valeurs (enum + min/max) avant écriture. (Dans le flux
+ * addon, la sauvegarde précède la relecture — le cache statique de
+ * _sm_getProductSettings est encore froid pour ce produit, donc la relecture
+ * reflète bien la valeur enregistrée.)
+ *
+ * @param  int   $productId  tblproducts.id
+ * @param  array $data       Données brutes du formulaire (clés = colonnes)
+ * @return bool              true si l'écriture a réussi
+ */
+function _sm_saveProductSettings(int $productId, array $data): bool
+{
+    if ($productId <= 0) {
+        return false;
+    }
+
+    $model = (string) ($data['billing_model'] ?? 'tiers');
+    $mode  = (string) ($data['overage_mode'] ?? 'notify');
+
+    $row = [
+        'billing_model'        => in_array($model, SM_BILLING_MODELS, true) ? $model : 'tiers',
+        'quota_gb'             => max(0, (int) ($data['quota_gb'] ?? 0)),
+        'overage_mode'         => in_array($mode, SM_OVERAGE_MODES, true) ? $mode : 'notify',
+        'overage_price'        => max(0.0, (float) ($data['overage_price'] ?? 0)),
+        'per_mailbox_price'    => max(0.0, (float) ($data['per_mailbox_price'] ?? 0)),
+        'included_gb'          => max(0, (int) ($data['included_gb'] ?? 0)),
+        'included_mailboxes'   => max(0, (int) ($data['included_mailboxes'] ?? 0)),
+        'notify_threshold_pct' => min(100, max(1, (int) ($data['notify_threshold_pct'] ?? 90))),
+    ];
+
+    try {
+        _sm_ensureProductSettingsTable();
+        Capsule::table('mod_sm_product_settings')->updateOrInsert(
+            ['product_id' => $productId],
+            $row
+        );
+        return true;
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [product-settings] écriture échouée (produit #'
+            . $productId . ') : ' . $e->getMessage());
+        return false;
+    }
+}

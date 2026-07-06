@@ -56,6 +56,12 @@ $_lang = [
     'dash_storage_tiers'   => 'Tranche',
     'dash_storage_of'      => 'de',
     'dash_storage_go'      => 'Go',
+    // (Étape 4) Jauge de quota disque
+    'quota_label'          => 'Quota disque',
+    'quota_near'           => 'Vous approchez de la limite de votre quota disque.',
+    'quota_over_block'     => 'Quota disque atteint — le stockage au-delà est bloqué.',
+    'quota_over_bill'      => 'Quota disque dépassé — l\'excédent est facturé.',
+    'quota_over_notify'    => 'Quota disque dépassé.',
     'dash_stats_title'     => 'Statistiques',
     'dash_service_title'   => 'Information du service',
     'dash_dkim_title'      => 'Clé DKIM',
@@ -389,6 +395,8 @@ $_lang = [
     // ── Connexion / serveur ───────────────────────────────────────────────────
     'err_server_connect'       => 'Le service courriel est temporairement indisponible. Veuillez réessayer plus tard ou contacter le soutien technique si le problème persiste.',
     'err_webmail_sso'          => 'La connexion automatique au webmail a échoué. Veuillez vous connecter manuellement avec vos identifiants.',
+    'err_change_package'       => 'Erreur lors de l\'application du nouveau forfait : %s',
+    'err_quota_below_usage'    => 'Changement refusé : le quota du nouveau forfait (%1$d Go) est inférieur à l\'utilisation actuelle (%2$s Go). Réduisez l\'utilisation ou choisissez un forfait supérieur.',
     'err_server_unreachable'   => 'Serveur SmarterMail injoignable — vérifiez le nom d\'hôte et le port.',
     'err_sa_token_invalid'     => 'Jeton SA invalide ou expiré.',
     'err_sa_no_impersonate'    => 'Le compte SA n\'a pas les droits d\'impersonification.',
