@@ -99,6 +99,8 @@ if (!defined('SM_MODULE_LIB')) {
 if (defined('SM_MODULE_LIB')) {
     require_once SM_MODULE_LIB . '/SmarterMailApi.php';
     require_once SM_MODULE_LIB . '/SmarterMailProtoUsage.php';
+    // Réglages de facturation par produit (modèles + quota — table séparée)
+    require_once SM_MODULE_LIB . '/SmarterMailProductSettings.php';
     // Helpers de cache DNS (utilisés par le DailyCronJob pour la purge hebdo)
     require_once SM_MODULE_LIB . '/SmarterMailDnsCheck.php';
 }
@@ -983,6 +985,17 @@ add_hook('InvoiceCancelled', 1, function (array $vars) {
  * @param array $params Paramètres fournis par WHMCS (vide pour DailyCronJob)
  */
 add_hook('DailyCronJob', 1, function (array $params) {
+
+    // ── Provisionnement de la table des réglages produit ──────────────────────
+    // Crée mod_sm_product_settings si absente (idempotent, cache statique). La
+    // table est ainsi prête avant la première facture/édition, sans dépendre
+    // d'une première lecture. Sans réglage, tout produit conserve le comportement
+    // historique (tiers, quota 0).
+    try {
+        _sm_ensureProductSettingsTable();
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail DailyCronJob [ensureProductSettings] EXCEPTION: ' . $e->getMessage());
+    }
 
     // ── Transition grace → active ─────────────────────────────────────────────
     // Parcourt toutes les lignes mod_sm_proto_usage en status=grace et les

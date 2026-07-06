@@ -102,6 +102,8 @@ if (!defined('WHMCS')) {
 require_once __DIR__ . '/lib/SmarterMailApi.php';
 // Bibliothèque partagée de suivi d'utilisation EAS/MAPI (partagée avec hooks.php)
 require_once __DIR__ . '/lib/SmarterMailProtoUsage.php';
+// Réglages de facturation par produit (modèles + quota disque — table séparée)
+require_once __DIR__ . '/lib/SmarterMailProductSettings.php';
 // Vérification DNS unifiée (SPF/DKIM/Autodiscover/DMARC) avec cache 5 min
 require_once __DIR__ . '/lib/SmarterMailDnsCheck.php';
 

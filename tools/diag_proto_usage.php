@@ -130,6 +130,7 @@ $svc = Capsule::table('tblhosting')
     ->where('tblhosting.id', $serviceId)
     ->select(
         'tblhosting.domain', 'tblhosting.domainstatus', 'tblhosting.billingcycle',
+        'tblhosting.packageid',
         'tblproducts.servertype',
         'tblproducts.configoption2', 'tblproducts.configoption3',
         'tblproducts.configoption4', 'tblproducts.configoption16',
@@ -158,6 +159,33 @@ $period = _sm_getBillingPeriod($serviceId);
 $pStart = $period['start'] ?? null;
 $pEnd   = $period['end'] ?? null;
 dline('Période courante', dnull($pStart) . ' → ' . dnull($pEnd));
+
+// ── 4b. Réglages produit (mod_sm_product_settings) — LECTURE DIRECTE ──────
+// On lit la table sans passer par _sm_getProductSettings() (qui créerait la
+// table) pour préserver le caractère 100 % lecture seule du diagnostic.
+$pid = (int) $svc->packageid;
+dhead("Réglages produit #$pid (mod_sm_product_settings)");
+if (!Capsule::schema()->hasTable('mod_sm_product_settings')) {
+    dline('Table', 'absente → tous les produits en défauts (tiers, quota 0). '
+        . 'Sera créée au prochain DailyCronJob / à la 1re lecture.');
+} else {
+    $ps = Capsule::table('mod_sm_product_settings')->where('product_id', $pid)->first();
+    if (!$ps) {
+        dline('Ligne dédiée', 'NON → défauts (comportement historique : tiers, quota 0)');
+    } else {
+        $q = (int) $ps->quota_gb;
+        dline('Modèle de facturation', (string) $ps->billing_model);
+        dline('Quota disque', $q > 0 ? ($q . ' Go (overage=' . $ps->overage_mode . ')') : 'illimité (0)');
+        if ($q > 0) {
+            dline('  prix excédent / seuil alerte', sprintf('%.2f / %d%%',
+                (float) $ps->overage_price, (int) $ps->notify_threshold_pct));
+        }
+        if (in_array($ps->billing_model, ['per_mailbox', 'hybrid'], true)) {
+            dline('  prix/boîte, Go inclus, boîtes incl.', sprintf('%.2f / %d / %d',
+                (float) $ps->per_mailbox_price, (int) $ps->included_gb, (int) $ps->included_mailboxes));
+        }
+    }
+}
 
 // ── 5. Toutes les lignes du service ──────────────────────────────────────
 dhead("Lignes mod_sm_proto_usage — service #$serviceId");
