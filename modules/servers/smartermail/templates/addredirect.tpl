@@ -54,10 +54,8 @@
 .sm-btn-cancel{background:#fff;color:#555;border:1px solid var(--sm-border-input);padding:8px 16px;border-radius:4px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .sm-btn-cancel:hover{background:#f5f5f5;color:var(--sm-text)}
 
-/* En-tête de modale « bandeau plein » (couleur unifiée indigo). Kit modale
-   de base : _sm_styles.css. */
-.sm-mhead.green{background:var(--sm-primary);border-bottom:none}
-.sm-mhead.green h4,.sm-mhead.green .sm-mclose{color:#fff}
+/* La modale utilise la variante d'en-tête partagée .info (indigo) de
+   _sm_styles.css — cohérente en clair ET sombre. */
 {/literal}
 {* Dark mode + fix <code> : injectés via hook (voir hooks.php). *}
 </style>
@@ -184,7 +182,7 @@
  *}
 <div class="sm-overlay" id="sm-target-modal" onclick="smBg(event,'sm-target-modal')">
   <div class="sm-mbox">
-    <div class="sm-mhead green">
+    <div class="sm-mhead info">
       <h4><i class="fa fa-share"></i> {$lang.add_redirect_modal_title}</h4>
       <button type="button" class="sm-mclose" onclick="smClose('sm-target-modal')">&times;</button>
     </div>

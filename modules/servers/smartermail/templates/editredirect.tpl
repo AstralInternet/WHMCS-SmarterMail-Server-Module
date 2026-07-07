@@ -56,15 +56,8 @@
 .sm-btn-delete{background:none;border:1px solid var(--sm-danger);color:var(--sm-danger);padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;margin-left:auto}
 .sm-btn-delete:hover{background:var(--sm-danger-tint)}
 
-/* En-têtes de modale « bandeau plein » (spécifiques aux redirections),
-   couleur unifiée : indigo (ajout/édition) et danger (suppression). Le kit
-   modale de base vient de _sm_styles.css. */
-.sm-mhead.green{background:var(--sm-primary);border-bottom:none}
-.sm-mhead.green h4,.sm-mhead.green .sm-mclose{color:#fff}
-.sm-mhead.red{background:var(--sm-danger-dark);border-bottom:none}
-.sm-mhead.red h4,.sm-mhead.red .sm-mclose{color:#fff}
-.sm-mhead.green .sm-mclose,.sm-mhead.red .sm-mclose{color:rgba(255,255,255,.7)}
-.sm-mhead.green .sm-mclose:hover,.sm-mhead.red .sm-mclose:hover{color:#fff}
+/* Les modales utilisent les variantes d'en-tête partagées .info (indigo) et
+   .del (danger) de _sm_styles.css — cohérentes en clair ET sombre. */
 {/literal}
 {* Dark mode + fix <code> : injectés via hook (voir hooks.php). *}
 </style>
@@ -181,7 +174,7 @@
 {* ── Modale : Ajouter une destination ─────────────────────────────────── *}
 <div class="sm-overlay" id="sm-target-modal" onclick="smBg(event,'sm-target-modal')">
   <div class="sm-mbox">
-    <div class="sm-mhead green">
+    <div class="sm-mhead info">
       <h4><i class="fa fa-share"></i> {$lang.add_redirect_modal_title}</h4>
       <button type="button" class="sm-mclose" onclick="smClose('sm-target-modal')">&times;</button>
     </div>
@@ -214,7 +207,7 @@
  *}
 <div class="sm-overlay" id="sm-del-modal" onclick="smBg(event,'sm-del-modal')">
   <div class="sm-mbox">
-    <div class="sm-mhead red">
+    <div class="sm-mhead del">
       <h4><i class="fa fa-trash-o"></i> {$lang.edit_redirect_del_title}</h4>
       <button type="button" class="sm-mclose" onclick="smClose('sm-del-modal')">&times;</button>
     </div>
