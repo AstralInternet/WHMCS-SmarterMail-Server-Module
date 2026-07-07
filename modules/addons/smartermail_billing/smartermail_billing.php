@@ -219,6 +219,7 @@ function _sm_billing_productForm($product, array $s, int $activeCount, string $c
  */
 function smartermail_billing_output($vars)
 {
+  try {
     require_once __DIR__ . '/../../servers/smartermail/lib/SmarterMailProductSettings.php';
 
     // ── CSRF : jeton auto-géré en session (l'accès admin est déjà restreint,
@@ -269,8 +270,8 @@ function smartermail_billing_output($vars)
         . '</ul>';
 
     if (count($products) === 0) {
-        $html .= _sm_billing_alert('info', 'Aucun produit avec le type de serveur « smartermail » n\'a été trouvé.');
-        return $html;
+        echo $html . _sm_billing_alert('info', 'Aucun produit avec le type de serveur « smartermail » n\'a été trouvé.');
+        return;
     }
 
     foreach ($products as $p) {
@@ -282,5 +283,11 @@ function smartermail_billing_output($vars)
         $html .= _sm_billing_productForm($p, $s, $activeCount, $csrf);
     }
 
-    return $html;
+    echo $html;
+  } catch (\Throwable $e) {
+      logActivity('SmarterMail [billing-addon] output EXCEPTION: ' . $e->getMessage()
+          . ' @ ' . $e->getFile() . ':' . $e->getLine());
+      echo '<div class="alert alert-danger"><strong>Erreur du module SmarterMail Facturation :</strong> '
+          . htmlspecialchars($e->getMessage()) . '</div>';
+  }
 }

@@ -101,52 +101,9 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
 .sm-btn-del:hover{background:#fce4e4}
 @media(max-width:600px){.sm-btn-del{margin-left:0}}
 
-/* ── Overlay + boîte modale générique ──────────────────────────────── */
-.sm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
-.sm-overlay.open{display:flex}
-.sm-mbox{background:#fff;border-radius:8px;width:100%;max-width:420px;margin:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);animation:smFadeIn .18s ease}
-@keyframes smFadeIn{from{transform:translateY(-12px);opacity:0}to{transform:translateY(0);opacity:1}}
-.sm-mhead{padding:13px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
-.sm-mhead h4{margin:0;font-size:14px;font-weight:700;color:#333;display:flex;align-items:center;gap:8px}
-.sm-mclose{background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1;padding:0}
-.sm-mclose:hover{color:#333}
-.sm-mbody{padding:18px}
-.sm-mfoot{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px}
-
-/* Variantes de header de modale */
-.sm-mhead.info{background:#e8eaf6;border-bottom:1px solid #c5cae9}
-.sm-mhead.info h4{color:#3949ab}
-.sm-mhead.pwd{background:#f39c12;border-bottom:none}
-.sm-mhead.pwd h4,.sm-mhead.pwd .sm-mclose{color:#fff}
-.sm-mhead.del{background:#e74c3c;border-bottom:none}
-.sm-mhead.del h4,.sm-mhead.del .sm-mclose{color:#fff}
-
-/* Éléments internes des modales */
-.sm-mlabel{display:block;font-size:12px;color:#666;font-weight:600;margin-bottom:4px}
-.sm-minput-row{display:flex;align-items:center;gap:6px}
-.sm-minput-row input[type="text"]{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px}
-.sm-minput-row input[type="text"]:focus{border-color:#3949ab;outline:none}
-.sm-minput-suffix{font-size:12px;color:#888;white-space:nowrap}
-.sm-minput-full{width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box}
-.sm-minput-full::placeholder,.sm-minput-row input[type="text"]::placeholder,.sm-ig input::placeholder{color:#bbb}
-.sm-minput-full:focus{border-color:#3949ab;outline:none}
-.sm-merr{color:#e74c3c;font-size:12px;margin-top:6px;display:none}
-.sm-mdesc{font-size:13px;color:#555;line-height:1.6;margin:0 0 8px}
-
-/* Groupe input + boutons (mot de passe) */
-.sm-ig{display:flex}
-.sm-ig input{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px 0 0 4px;border-right:none;font-size:13px}
-.sm-ig input:focus{border-color:#3949ab;outline:none}
-.sm-ig-btns{display:flex}
-.sm-ig-btns button{padding:7px 10px;border:1px solid #ddd;background:#f7f8fa;cursor:pointer;font-size:13px;color:#555}
-.sm-ig-btns button:last-child{border-radius:0 4px 4px 0}
-.sm-ig-btns button:hover{background:#eee}
-.sm-pwd-strength{height:4px;background:#eee;border-radius:2px;margin:8px 0 4px}
-.sm-pwd-bar{height:100%;border-radius:2px;transition:width .3s,background .3s}
-.sm-pwd-crit{list-style:none;padding:0;margin:10px 0 0;font-size:12px}
-.sm-pwd-crit li{padding:3px 0;display:flex;align-items:center;gap:6px;color:#aaa}
-.sm-pwd-crit li.ok{color:#27ae60}
-.sm-del-warn{background:#fce4e4;border:1px solid #f5c6cb;border-radius:4px;padding:8px 12px;font-size:12px;color:#721c24;margin-top:12px}
+/* Kit modale + widget mot de passe + del-warn : centralisés dans
+   _sm_styles.css (injecté dans le <head> par le hook ClientAreaHeadOutput).
+   (A2) Ces règles étaient copiées à l'identique dans chaque template. */
 {/literal}
 {* Dark mode + fix <code> : injectés via hook (voir hooks.php). *}
 </style>
@@ -878,6 +835,6 @@ function smUpdatePrice() {
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s){ return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 
-// ── Mot de passe — voir pwdmodal.tpl (smCheckPwd, smTogglePwd, smGeneratePwd, smCrit)
+// ── Mot de passe — fonctions définies ci-dessus (smTogglePwd, smGeneratePwd, smCrit, smCheckPwd)
 {/literal}
 </script>

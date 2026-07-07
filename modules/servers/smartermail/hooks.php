@@ -1296,6 +1296,25 @@ function _sm_loadDarkModeCss(): string
     return $cache;
 }
 
+/**
+ * Charge le CSS partagé du module (_sm_styles.css) — kit modale, widget mot de
+ * passe, etc. — autrefois copié dans chaque bloc <style> de template.
+ */
+function _sm_loadSharedCss(): string
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $path = realpath(__DIR__ . '/templates/_sm_styles.css');
+    if ($path && is_readable($path)) {
+        $cache = (string) file_get_contents($path);
+    } else {
+        $cache = '';
+        logActivity('SmarterMail [css] Fichier partagé introuvable : ' . __DIR__ . '/templates/_sm_styles.css');
+    }
+    return $cache;
+}
+
 add_hook('ClientAreaHeadOutput', 1, function ($vars) {
     // Filtre : on n'agit que sur la page productdetails d'un service.
     // $_GET est utilisé directement car $vars ne contient pas systématiquement
@@ -1318,11 +1337,18 @@ add_hook('ClientAreaHeadOutput', 1, function ($vars) {
         return '';
     }
 
-    $css = _sm_loadDarkModeCss();
-    if ($css === '') return '';
-
-    // L'ID sm-dark-mode-shared permet d'identifier le bloc dans les
-    // devtools et empêche d'éventuelles doubles injections (les hooks
-    // WHMCS sont normalement appelés une seule fois par page).
-    return '<style id="sm-dark-mode-shared">' . $css . '</style>';
+    // Ordre d'injection dans le <head> : styles partagés (base) PUIS dark mode
+    // (surcharges). Le <style> inline de chaque template vient encore après
+    // (dans le <body>) et peut donc surcharger localement (ex. .sm-mbox élargie
+    // du guide DNS dans clientarea). Les IDs facilitent le repérage en devtools.
+    $out    = '';
+    $shared = _sm_loadSharedCss();
+    if ($shared !== '') {
+        $out .= '<style id="sm-shared-styles">' . $shared . '</style>';
+    }
+    $dark = _sm_loadDarkModeCss();
+    if ($dark !== '') {
+        $out .= '<style id="sm-dark-mode-shared">' . $dark . '</style>';
+    }
+    return $out;
 });
