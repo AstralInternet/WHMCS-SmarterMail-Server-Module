@@ -49,8 +49,8 @@
 
 /* Barre d'actions + boutons */
 .sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:var(--sm-surface);border:1px solid var(--sm-border);border-radius:6px}
-.sm-btn-save{color:#fff;background:var(--sm-primary);border:none;padding:8px 20px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
-.sm-btn-save:hover{background:var(--sm-primary-dark)}
+.sm-btn-save{color:#fff;background:var(--sm-success);border:none;padding:8px 20px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.sm-btn-save:hover{background:var(--sm-success-dark)}
 .sm-btn-cancel{background:#fff;color:#555;border:1px solid var(--sm-border-input);padding:8px 16px;border-radius:4px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .sm-btn-cancel:hover{background:#f5f5f5;color:var(--sm-text)}
 .sm-btn-delete{background:none;border:1px solid var(--sm-danger);color:var(--sm-danger);padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;margin-left:auto}

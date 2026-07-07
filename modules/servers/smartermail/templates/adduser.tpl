@@ -13,68 +13,37 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
 </script>
 <style>
 {literal}
-/* ── Layout identique à edituser ──────────────────────────── */
-.sm-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#777;text-decoration:none;margin-bottom:14px}
-.sm-back:hover{color:#3949ab}
-.sm-header{background:linear-gradient(135deg,#2c3e50 0%,#3d5166 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px}
+/* ── En-tête (spécifique adduser) ────────────────────────────── */
+.sm-header{background:linear-gradient(135deg,var(--sm-slate) 0%,var(--sm-slate-2) 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px}
 .sm-header-title{font-size:16px;font-weight:700}
 .sm-header-title i{margin-right:8px;opacity:.8}
-.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:16px;overflow:hidden}
-.sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:9px 14px;font-weight:600;font-size:12px;color:#555;display:flex;align-items:center;gap:7px}
+
+/* ── Cartes (base commune : _sm_styles.css) ─────────────────── */
+.sm-card{background:#fff;border:1px solid var(--sm-border);border-radius:6px;margin-bottom:16px;overflow:hidden}
+.sm-card-header{background:var(--sm-surface);border-bottom:1px solid var(--sm-border);padding:9px 14px;font-weight:600;font-size:12px;color:#555;display:flex;align-items:center;gap:7px}
 .sm-card-body{padding:14px}
-/* ── Grille Alias | Redirection ─────────────────────────────── */
-.sm-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
-@media(max-width:600px){.sm-2col{grid-template-columns:1fr}}
-.sm-2col .sm-card{margin-bottom:0}
-/* ── Pills ──────────────────────────────────────────────────── */
-.sm-pills-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:28px;margin-bottom:10px}
-.sm-pill{display:inline-flex;align-items:center;gap:5px;background:#e8eaf6;color:#3949ab;border-radius:20px;padding:3px 10px 3px 12px;font-size:12px;font-weight:500}
-.sm-pill.fwd{background:#e8f5e9;color:#2e7d32}
-.sm-pill-x{background:none;border:none;cursor:pointer;padding:0;line-height:1;font-size:14px;color:inherit;opacity:.6;display:flex;align-items:center}
-.sm-pill-x:hover{opacity:1}
-.sm-pills-empty{font-size:12px;color:#bbb;font-style:italic;padding:2px 0}
-/* ── Bouton + Ajouter ───────────────────────────────────────── */
-.sm-add-trigger{display:flex;justify-content:flex-end;margin-top:6px}
-.sm-btn-add{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px dashed #3949ab;color:#3949ab;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
-.sm-btn-add:hover{background:#3949ab;color:#fff;border-style:solid}
-/* ── Options ─────────────────────────────────────────────────── */
-.sm-opts-inner{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-@media(max-width:600px){.sm-opts-inner{grid-template-columns:1fr}}
-.sm-form-label{display:block;font-size:12px;color:#666;margin-bottom:4px;font-weight:600}
 .sm-form-hint{color:#aaa;font-weight:400}
-input.sm-number{max-width:160px;width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box}
-input.sm-number:focus{border-color:#3949ab;outline:none}
-.sm-chk-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
-.sm-chk-row label{margin:0;cursor:pointer;font-weight:500;color:#333}
-.sm-info-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:#e8eaf6;color:#3949ab;border-radius:50%;font-size:10px;font-weight:700;cursor:pointer;border:none;line-height:1;flex-shrink:0}
-.sm-info-btn:hover{background:#3949ab;color:#fff}
-/* ── Champ mot de passe readonly ───────────────────────────── */
+.sm-info-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--sm-primary-tint);color:var(--sm-primary);border-radius:50%;font-size:10px;font-weight:700;cursor:pointer;border:none;line-height:1;flex-shrink:0}
+.sm-info-btn:hover{background:var(--sm-primary);color:#fff}
+
+/* ── Champ adresse + mot de passe (spécifique adduser) ──────── */
 .sm-email-row{display:flex;align-items:center;gap:0;max-width:420px}
-.sm-email-row input{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px 0 0 4px;border-right:none;font-size:13px}
-.sm-email-row input:focus{border-color:#3949ab;outline:none}
-.sm-email-suffix{padding:7px 12px;background:#f7f8fa;border:1px solid #ddd;border-radius:0 4px 4px 0;font-size:13px;color:#666;white-space:nowrap}
+.sm-email-row input{flex:1;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px 0 0 4px;border-right:none;font-size:13px}
+.sm-email-row input:focus{border-color:var(--sm-primary);outline:none}
+.sm-email-suffix{padding:7px 12px;background:var(--sm-surface);border:1px solid var(--sm-border-input);border-radius:0 4px 4px 0;font-size:13px;color:var(--sm-text-2);white-space:nowrap}
 .sm-pwd-row{display:flex;align-items:center;gap:10px;margin-top:6px}
-.sm-pwd-status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#f7f8fa;font-size:12px;color:#aaa;min-width:180px}
-.sm-pwd-status.set{color:#27ae60;border-color:#a5d6a7;background:#f1f9f1}
-.sm-btn-setpwd{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;background:#f39c12;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer}
-.sm-btn-setpwd:hover{background:#e67e22}
-.sm-fwd-opts{display:flex;gap:14px;margin-top:8px;font-size:12px;color:#666}
-.sm-fwd-opts label{display:flex;align-items:center;gap:5px;cursor:pointer}
-/* ── Prix ────────────────────────────────────────────────────── */
-.sm-price-box{margin-top:10px;padding:8px 12px;border-radius:4px;font-size:12px;background:#f7f8fa;border:1px solid #e0e0e0;display:none}
-.sm-proto-billing-notice{margin-top:8px;font-size:11px;color:#757575;display:flex;align-items:flex-start;gap:5px;line-height:1.5}
-.sm-proto-billing-notice .fa{color:#f39c12;flex-shrink:0;margin-top:2px}
-.sm-price-box.visible{display:block}
-.sm-price-badge{display:inline-block;background:#e8eaf6;color:#3949ab;border-radius:3px;padding:1px 7px;font-size:11px;margin-left:4px;font-weight:600}
-.sm-price-badge.bundle{background:#e8f5e9;color:#2e7d32}
-.sm-price-badge.save{background:#fff3cd;color:#856404;font-size:10px}
-/* ── Actions ─────────────────────────────────────────────────── */
-.sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:#f7f8fa;border:1px solid #e0e0e0;border-radius:6px}
+.sm-pwd-status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--sm-border-input);border-radius:4px;background:var(--sm-surface);font-size:12px;color:#aaa;min-width:180px}
+.sm-pwd-status.set{color:var(--sm-success);border-color:#a5d6a7;background:#f1f9f1}
+.sm-btn-setpwd{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;background:var(--sm-warning);color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer}
+.sm-btn-setpwd:hover{background:var(--sm-warning-dark)}
+
+/* ── Actions (spécifique adduser) ───────────────────────────── */
+.sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:var(--sm-surface);border:1px solid var(--sm-border);border-radius:6px}
 .sm-btn-create{color:#fff;border:none;padding:8px 20px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;background:#aaa;transition:background .2s}
-.sm-btn-create.ready{background:#27ae60}
-.sm-btn-create.ready:hover{background:#219a52}
-.sm-btn-cancel{background:#fff;color:#555;border:1px solid #ddd;padding:8px 16px;border-radius:4px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
-.sm-btn-cancel:hover{background:#f5f5f5;color:#333}
+.sm-btn-create.ready{background:var(--sm-success)}
+.sm-btn-create.ready:hover{background:var(--sm-success-dark)}
+.sm-btn-cancel{background:#fff;color:#555;border:1px solid var(--sm-border-input);padding:8px 16px;border-radius:4px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.sm-btn-cancel:hover{background:#f5f5f5;color:var(--sm-text)}
 /* ── Modales : kit modale + widget mot de passe centralisés dans _sm_styles.css
    (injecté par le hook ClientAreaHeadOutput). Surcharge locale conservée. ── */
 .sm-mbox.wide{max-width:480px}

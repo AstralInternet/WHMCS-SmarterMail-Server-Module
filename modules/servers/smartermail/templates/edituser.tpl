@@ -12,12 +12,8 @@ var SM_LANG_FWD_EMPTY     = '{$lang.js_fwd_empty|escape:"javascript"}';
 </script>
 <style>
 {literal}
-/* ── Navigation ─────────────────────────────────────────────────────── */
-.sm-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#777;text-decoration:none;margin-bottom:14px}
-.sm-back:hover{color:#3949ab}
-
-/* ── Header : email + stockage ──────────────────────────────────────── */
-.sm-header{background:linear-gradient(135deg,#2c3e50 0%,#3d5166 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px}
+/* ── En-tête : email + stockage (spécifique edituser) ───────────────── */
+.sm-header{background:linear-gradient(135deg,var(--sm-slate) 0%,var(--sm-slate-2) 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px}
 .sm-header-email{font-size:16px;font-weight:700;margin-bottom:8px}
 .sm-header-email i{margin-right:8px;opacity:.8}
 .sm-header-storage{font-size:12px;color:rgba(255,255,255,.75);margin-bottom:6px}
@@ -31,74 +27,30 @@ var SM_LANG_FWD_EMPTY     = '{$lang.js_fwd_empty|escape:"javascript"}';
 .sm-header-webmail i{color:#fff !important}
 .sm-progress{height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
 .sm-progress-bar{height:100%;border-radius:4px;transition:width .4s}
-.sm-progress-bar.low{background:#27ae60}.sm-progress-bar.mid{background:#f39c12}.sm-progress-bar.high{background:#e74c3c}
+.sm-progress-bar.low{background:var(--sm-success)}.sm-progress-bar.mid{background:var(--sm-warning)}.sm-progress-bar.high{background:var(--sm-danger)}
 
-/* ── Cards ──────────────────────────────────────────────────────────── */
-.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:16px;overflow:hidden}
-.sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:9px 14px;font-weight:600;font-size:12px;color:#555;display:flex;align-items:center;gap:7px}
+/* ── Cartes (surcharge locale ; base commune : _sm_styles.css) ──────── */
+.sm-card{background:#fff;border:1px solid var(--sm-border);border-radius:6px;margin-bottom:16px;overflow:hidden}
+.sm-card-header{background:var(--sm-surface);border-bottom:1px solid var(--sm-border);padding:9px 14px;font-weight:600;font-size:12px;color:#555;display:flex;align-items:center;gap:7px}
 .sm-card-body{padding:14px}
 
-/* ── Grille Alias | Redirection ─────────────────────────────────────── */
-.sm-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
-@media(max-width:600px){.sm-2col{grid-template-columns:1fr}}
-.sm-2col .sm-card{margin-bottom:0}
-
-/* ── Pills ──────────────────────────────────────────────────────────── */
-.sm-pills-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:28px;margin-bottom:10px}
-.sm-pill{display:inline-flex;align-items:center;gap:5px;background:#e8eaf6;color:#3949ab;border-radius:20px;padding:3px 10px 3px 12px;font-size:12px;font-weight:500}
-.sm-pill.fwd{background:#e8f5e9;color:#2e7d32}
-.sm-pill-x{background:none;border:none;cursor:pointer;padding:0;line-height:1;font-size:14px;color:inherit;opacity:.6;display:flex;align-items:center}
-.sm-pill-x:hover{opacity:1}
-.sm-pills-empty{font-size:12px;color:#bbb;font-style:italic;padding:2px 0}
-
-/* ── Bouton [+ Ajouter] ─────────────────────────────────────────────── */
-.sm-add-trigger{display:flex;justify-content:flex-end;margin-top:6px}
-.sm-btn-add{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px dashed #3949ab;color:#3949ab;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
-.sm-btn-add:hover{background:#3949ab;color:#fff;border-style:solid}
-
-/* ── Options (2 colonnes internes) ─────────────────────────────────── */
-.sm-opts-inner{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-@media(max-width:600px){.sm-opts-inner{grid-template-columns:1fr}}
-.sm-form-label{display:block;font-size:12px;color:#666;margin-bottom:4px;font-weight:600}
+/* ── Spécifiques : indice de formulaire, bouton info, prix ──────────── */
 .sm-form-hint{color:#aaa;font-weight:400;}
-input.sm-number{width:100%;max-width:160px;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box}
-input.sm-number:focus{border-color:#3949ab;outline:none}
+.sm-info-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--sm-primary-tint);color:var(--sm-primary);border-radius:50%;font-size:10px;font-weight:700;cursor:pointer;border:none;line-height:1;flex-shrink:0;transition:background .15s}
+.sm-info-btn:hover{background:var(--sm-primary);color:#fff}
+.sm-price-bundle{color:var(--sm-success);font-weight:600}
 
-/* ── Lignes de cases à cocher + bouton [i] ──────────────────────────── */
-.sm-chk-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
-.sm-chk-row label{margin:0;cursor:pointer;font-weight:500;color:#333}
-.sm-info-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:#e8eaf6;color:#3949ab;border-radius:50%;font-size:10px;font-weight:700;cursor:pointer;border:none;line-height:1;flex-shrink:0;transition:background .15s}
-.sm-info-btn:hover{background:#3949ab;color:#fff}
-
-/* ── Boîte de prix dynamique ────────────────────────────────────────── */
-.sm-price-box{margin-top:10px;padding:8px 12px;border-radius:4px;font-size:12px;background:#f7f8fa;border:1px solid #e0e0e0;display:none}
-.sm-proto-billing-notice{margin-top:8px;font-size:11px;color:#757575;display:flex;align-items:flex-start;gap:5px;line-height:1.5}
-.sm-proto-billing-notice .fa{color:#f39c12;flex-shrink:0;margin-top:2px}
-.sm-price-box.visible{display:block}
-.sm-price-badge{display:inline-block;background:#e8eaf6;color:#3949ab;border-radius:3px;padding:1px 7px;font-size:11px;margin-left:4px;font-weight:600}
-.sm-price-badge.bundle{background:#e8f5e9;color:#2e7d32}
-.sm-price-badge.save{background:#fff3cd;color:#856404;font-size:10px}
-.sm-price-bundle{color:#27ae60;font-weight:600}
-
-/* ── Options de redirection ─────────────────────────────────────────── */
-.sm-fwd-opts{display:flex;gap:14px;margin-top:8px;font-size:12px;color:#666}
-.sm-fwd-opts label{display:flex;align-items:center;gap:5px;cursor:pointer}
-
-/* ── Barre d'actions ────────────────────────────────────────────────── */
-/* Barre d'actions : Supprimer à gauche seul, Mot de passe + Sauvegarder à droite */
-.sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:#f7f8fa;border:1px solid #e0e0e0;border-radius:6px;justify-content:space-between}
-/* Bouton "Annuler" (lien <a> stylé en bouton) — renvoie au tableau de
-   bord sans soumettre le formulaire d'édition. text-decoration:none
-   neutralise le soulignement par défaut des liens. */
-.sm-btn-cancel{background:#fff;color:#555;border:1px solid #ddd;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
-.sm-btn-cancel:hover{background:#f5f5f5;color:#333;text-decoration:none}
-.sm-btn-pwd{background:#f39c12;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
-.sm-btn-pwd:hover{background:#e67e22}
+/* ── Barre d'actions (spécifique edituser) ──────────────────────────── */
+.sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:var(--sm-surface);border:1px solid var(--sm-border);border-radius:6px;justify-content:space-between}
+.sm-btn-cancel{background:#fff;color:#555;border:1px solid var(--sm-border-input);padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.sm-btn-cancel:hover{background:#f5f5f5;color:var(--sm-text);text-decoration:none}
+.sm-btn-pwd{background:var(--sm-warning);color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.sm-btn-pwd:hover{background:var(--sm-warning-dark)}
 .sm-btn-save{color:#fff;border:none;padding:8px 18px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;background:#aaa;transition:background .2s,box-shadow .2s,transform .15s}
-.sm-btn-save.dirty{background:#27ae60;box-shadow:0 0 0 3px rgba(39,174,96,.35);transform:scale(1.04)}
-.sm-btn-save.dirty:hover{background:#219a52}
-.sm-btn-del{background:#fff;color:#e74c3c;border:1px solid #e74c3c;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
-.sm-btn-del:hover{background:#fce4e4}
+.sm-btn-save.dirty{background:var(--sm-success);box-shadow:0 0 0 3px rgba(39,174,96,.35);transform:scale(1.04)}
+.sm-btn-save.dirty:hover{background:var(--sm-success-dark)}
+.sm-btn-del{background:#fff;color:var(--sm-danger);border:1px solid var(--sm-danger);padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.sm-btn-del:hover{background:var(--sm-danger-tint)}
 @media(max-width:600px){.sm-btn-del{margin-left:0}}
 
 /* Kit modale + widget mot de passe + del-warn : centralisés dans

@@ -21,60 +21,43 @@
 
 <style>
 {literal}
-/* ── Layout général (partagé avec adduser/edituser) ─────────────── */
-.sm-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#777;text-decoration:none;margin-bottom:14px}
-.sm-back:hover{color:#3949ab}
-.sm-header{background:linear-gradient(135deg,#1b5e20 0%,#2e7d32 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px}
+/* ── Spécifique aux redirections ──────────────────────────────────
+   Le reste (kit modale de base, pills, bouton [+ Ajouter], navigation
+   retour, étiquettes) est centralisé dans _sm_styles.css (thème indigo). ── */
+
+/* En-tête — thème ardoise unifié (comme les pages de boîtes) */
+.sm-header{background:linear-gradient(135deg,var(--sm-slate) 0%,var(--sm-slate-2) 100%);color:#fff;border-radius:6px;padding:14px 18px;margin-bottom:16px}
 .sm-header-title{font-size:16px;font-weight:700}
 .sm-header-title i{margin-right:8px;opacity:.8}
-/* Sous-titre descriptif sous le titre principal */
 .sm-header-sub{font-size:12px;opacity:.75;margin-top:4px}
-.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:16px;overflow:hidden}
-.sm-card-header{background:#f7f8fa;border-bottom:1px solid #e0e0e0;padding:9px 14px;font-weight:600;font-size:12px;color:#555;display:flex;align-items:center;gap:7px}
+
+/* Cartes */
+.sm-card{background:#fff;border:1px solid var(--sm-border);border-radius:6px;margin-bottom:16px;overflow:hidden}
+.sm-card-header{background:var(--sm-surface);border-bottom:1px solid var(--sm-border);padding:9px 14px;font-weight:600;font-size:12px;color:#555;display:flex;align-items:center;gap:7px}
 .sm-card-body{padding:14px}
-/* ── Champ adresse source ───────────────────────────────────────── */
+
+/* Champ adresse source (éditable) */
 .sm-email-row{display:flex;align-items:center;gap:0;max-width:420px}
-.sm-email-row input{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px 0 0 4px;border-right:none;font-size:13px}
-.sm-email-row input:focus{border-color:#2e7d32;outline:none}
-.sm-email-suffix{padding:7px 12px;background:#f7f8fa;border:1px solid #ddd;border-radius:0 4px 4px 0;font-size:13px;color:#666;white-space:nowrap}
-.sm-form-label{display:block;font-size:12px;color:#666;margin-bottom:4px;font-weight:600}
-/* ── Destinations (pills) ───────────────────────────────────────── */
-.sm-pills-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:28px;margin-bottom:10px}
-.sm-pill{display:inline-flex;align-items:center;gap:5px;background:#e8f5e9;color:#2e7d32;border-radius:20px;padding:3px 10px 3px 12px;font-size:12px;font-weight:500}
-.sm-pill-x{background:none;border:none;cursor:pointer;padding:0;line-height:1;font-size:14px;color:inherit;opacity:.6;display:flex;align-items:center}
-.sm-pill-x:hover{opacity:1}
-.sm-pills-empty{font-size:12px;color:#bbb;font-style:italic;padding:2px 0}
-/* ── Bouton + Ajouter destination ──────────────────────────────── */
-.sm-add-trigger{display:flex;justify-content:flex-end;margin-top:6px}
-.sm-btn-add{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px dashed #2e7d32;color:#2e7d32;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
-.sm-btn-add:hover{background:#2e7d32;color:#fff;border-style:solid}
-/* ── Bandeau info ───────────────────────────────────────────────── */
-.sm-info-alert{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:4px;padding:8px 12px;font-size:12px;color:#2e7d32;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
+.sm-email-row input{flex:1;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px 0 0 4px;border-right:none;font-size:13px}
+.sm-email-row input:focus{border-color:var(--sm-primary);outline:none}
+.sm-email-suffix{padding:7px 12px;background:var(--sm-surface);border:1px solid var(--sm-border-input);border-radius:0 4px 4px 0;font-size:13px;color:var(--sm-text-2);white-space:nowrap}
+
+/* Bandeau info (thème indigo unifié) */
+.sm-info-alert{background:var(--sm-primary-tint);border:1px solid var(--sm-primary-tint-border);border-radius:4px;padding:8px 12px;font-size:12px;color:var(--sm-primary);margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
 .sm-info-alert i{flex-shrink:0;margin-top:2px}
-/* ── Boutons d'action ───────────────────────────────────────────── */
-.sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:#f7f8fa;border:1px solid #e0e0e0;border-radius:6px}
+
+/* Boutons d'action */
+.sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:var(--sm-surface);border:1px solid var(--sm-border);border-radius:6px}
 .sm-btn-create{color:#fff;border:none;padding:8px 20px;border-radius:4px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;background:#aaa;transition:background .2s}
-.sm-btn-create.ready{background:#2e7d32}
-.sm-btn-create.ready:hover{background:#1b5e20}
-.sm-btn-cancel{background:#fff;color:#555;border:1px solid #ddd;padding:8px 16px;border-radius:4px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
-.sm-btn-cancel:hover{background:#f5f5f5;color:#333}
-/* ── Modale ajout destination ───────────────────────────────────── */
-.sm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
-.sm-overlay.open{display:flex}
-.sm-mbox{background:#fff;border-radius:8px;width:100%;max-width:420px;margin:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);animation:smFadeIn .18s ease}
-@keyframes smFadeIn{from{transform:translateY(-12px);opacity:0}to{transform:translateY(0);opacity:1}}
-.sm-mhead{padding:13px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
-.sm-mhead h4{margin:0;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
-.sm-mhead.green{background:#2e7d32;border-bottom:none}
+.sm-btn-create.ready{background:var(--sm-success)}
+.sm-btn-create.ready:hover{background:var(--sm-success-dark)}
+.sm-btn-cancel{background:#fff;color:#555;border:1px solid var(--sm-border-input);padding:8px 16px;border-radius:4px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.sm-btn-cancel:hover{background:#f5f5f5;color:var(--sm-text)}
+
+/* En-tête de modale « bandeau plein » (couleur unifiée indigo). Kit modale
+   de base : _sm_styles.css. */
+.sm-mhead.green{background:var(--sm-primary);border-bottom:none}
 .sm-mhead.green h4,.sm-mhead.green .sm-mclose{color:#fff}
-.sm-mclose{background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1;padding:0}
-.sm-mclose:hover{color:#333}
-.sm-mbody{padding:18px}
-.sm-mfoot{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px}
-.sm-mlabel{display:block;font-size:12px;color:#666;font-weight:600;margin-bottom:4px}
-.sm-minput-full{width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box}
-.sm-minput-full:focus{border-color:#2e7d32;outline:none}
-.sm-merr{color:#e74c3c;font-size:12px;margin-top:6px;display:none}
 {/literal}
 {* Dark mode + fix <code> : injectés via hook (voir hooks.php). *}
 </style>
