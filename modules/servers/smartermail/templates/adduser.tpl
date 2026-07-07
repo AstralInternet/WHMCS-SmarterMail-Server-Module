@@ -75,46 +75,9 @@ input.sm-number:focus{border-color:#3949ab;outline:none}
 .sm-btn-create.ready:hover{background:#219a52}
 .sm-btn-cancel{background:#fff;color:#555;border:1px solid #ddd;padding:8px 16px;border-radius:4px;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .sm-btn-cancel:hover{background:#f5f5f5;color:#333}
-/* ── Modales ─────────────────────────────────────────────────── */
-.sm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
-.sm-overlay.open{display:flex}
-.sm-mbox{background:#fff;border-radius:8px;width:100%;max-width:420px;margin:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);animation:smFadeIn .18s ease}
+/* ── Modales : kit modale + widget mot de passe centralisés dans _sm_styles.css
+   (injecté par le hook ClientAreaHeadOutput). Surcharge locale conservée. ── */
 .sm-mbox.wide{max-width:480px}
-@keyframes smFadeIn{from{transform:translateY(-12px);opacity:0}to{transform:translateY(0);opacity:1}}
-.sm-mhead{padding:13px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
-.sm-mhead h4{margin:0;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
-.sm-mclose{background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1;padding:0}
-.sm-mclose:hover{color:#333}
-.sm-mbody{padding:18px}
-.sm-mfoot{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px}
-.sm-mhead.pwd{background:#f39c12;border-bottom:none}
-.sm-mhead.pwd h4,.sm-mhead.pwd .sm-mclose{color:#fff}
-.sm-mhead.info{background:#e8eaf6;border-bottom:1px solid #c5cae9}
-.sm-mhead.info h4{color:#3949ab}
-.sm-mlabel{display:block;font-size:12px;color:#666;font-weight:600;margin-bottom:4px}
-.sm-minput-full{width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box;text-decoration:none}
-.sm-minput-full:focus{border-color:#3949ab;outline:none}
-.sm-minput-row{display:flex;align-items:center;gap:6px}
-.sm-minput-row input[type="text"]{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px}
-.sm-minput-row input[type="text"]::placeholder{color:#bbb}
-.sm-minput-row input[type="text"]:focus{border-color:#3949ab;outline:none}
-.sm-minput-suffix{font-size:12px;color:#888;white-space:nowrap}
-.sm-merr{color:#e74c3c;font-size:12px;margin-top:6px;display:none}
-.sm-mdesc{font-size:13px;color:#555;line-height:1.6;margin:0 0 8px}
-/* ── Widget mot de passe ─────────────────────────────────────── */
-.sm-ig{display:flex}
-.sm-ig input{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px 0 0 4px;border-right:none;font-size:13px;text-decoration:none}
-.sm-ig input::placeholder{color:#bbb}
-.sm-ig input:focus{border-color:#3949ab;outline:none}
-.sm-ig-btns{display:flex}
-.sm-ig-btns button{padding:7px 10px;border:1px solid #ddd;background:#f7f8fa;cursor:pointer;font-size:13px;color:#555}
-.sm-ig-btns button:last-child{border-radius:0 4px 4px 0}
-.sm-ig-btns button:hover{background:#eee}
-.sm-pwd-strength{height:4px;background:#eee;border-radius:2px;margin:6px 0 4px}
-.sm-pwd-bar{height:100%;border-radius:2px;transition:width .3s,background .3s}
-.sm-pwd-crit{list-style:none;padding:0;margin:8px 0 0;font-size:12px}
-.sm-pwd-crit li{padding:3px 0;display:flex;align-items:center;gap:6px;color:#aaa}
-.sm-pwd-crit li.ok{color:#27ae60}
 {/literal}
 {* Dark mode + fix <code> : injectés via hook (voir hooks.php). *}
 </style>

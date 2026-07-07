@@ -219,18 +219,9 @@
 .sm-btn-del{background:#fff;color:#e74c3c;border:1px solid #e74c3c;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .sm-btn-del:hover{background:#fce4e4}
 
-/* ── Overlay modale générique ───────────────────────────────────────── */
-.sm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
-.sm-overlay.open{display:flex}
+/* ── Kit modale centralisé dans _sm_styles.css (hook). Surcharges locales ci-dessous. ── */
 .sm-mbox{background:#fff;border-radius:8px;width:100%;max-width:680px;margin:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);animation:smFadeIn .18s ease;overflow:hidden}
 .sm-mbox.sm-mbox-sm{max-width:460px}
-@keyframes smFadeIn{from{transform:translateY(-12px);opacity:0}to{transform:translateY(0);opacity:1}}
-.sm-mhead{padding:13px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
-.sm-mhead h4{margin:0;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
-.sm-mclose{background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1;padding:0}
-.sm-mclose:hover{color:#333}
-.sm-mbody{padding:18px}
-.sm-mfoot{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px}
 .sm-mhead.dark{background:#2c3e50;border-bottom:none}
 .sm-mhead.dark h4,.sm-mhead.dark .sm-mclose{color:#fff}
 .sm-mhead.green{background:#1b5e20;border-bottom:none}
@@ -239,7 +230,6 @@
 .sm-mhead.red h4,.sm-mhead.red .sm-mclose{color:#fff}
 .sm-mhead.orange{background:#e65100;border-bottom:none}
 .sm-mhead.orange h4,.sm-mhead.orange .sm-mclose{color:#fff}
-.sm-mlabel{display:block;font-size:12px;color:#666;font-weight:600;margin-bottom:4px}
 .sm-mfg{margin-bottom:14px}
 .sm-mfg:last-child{margin-bottom:0}
 .sm-record-wrap{display:flex;gap:0}

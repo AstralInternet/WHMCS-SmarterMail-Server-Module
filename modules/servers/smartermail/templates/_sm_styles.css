@@ -7,59 +7,145 @@
  *  add/editredirect).
  *
  *  BUT : centraliser les classes autrefois copiées-collées à l'identique dans
- *  chaque bloc <style> de template (kit modale, widget mot de passe, etc.).
+ *  chaque bloc <style> de template (kit modale, widget mot de passe, etc.) et
+ *  unifier les couleurs via des design tokens --sm-*.
  *
  *  CASCADE : ce fichier est injecté dans le <head> ; le <style> inline d'un
  *  template vient APRÈS (dans le <body>) et peut donc SURCHARGER localement une
- *  règle — ex. clientarea élargit .sm-mbox (max-width:680px) pour le guide DNS.
- *  Le dark mode (_sm_dark_mode.css) est injecté APRÈS ce fichier.
+ *  règle. Le dark mode (_sm_dark_mode.css) est injecté APRÈS ce fichier et
+ *  REDÉFINIT les tokens (pas besoin de surcharger chaque règle).
  * ============================================================================ */
+
+/* ── Design tokens (palette unifiée) ───────────────────────────────── */
+:root{
+  /* Primaire (indigo) — liens, focus, pills, accents, en-têtes d'action */
+  --sm-primary:#3949ab;
+  --sm-primary-dark:#1a237e;
+  --sm-primary-tint:#e8eaf6;
+  --sm-primary-tint-border:#c5cae9;
+  /* Succès (vert unique) — états « prêt/enregistré/valide », jauge OK */
+  --sm-success:#27ae60;
+  --sm-success-dark:#219a52;
+  --sm-success-tint:#e8f5e9;
+  /* Danger (rouge) */
+  --sm-danger:#e74c3c;
+  --sm-danger-dark:#c62828;
+  --sm-danger-tint:#fce4e4;
+  /* Avertissement (orange) */
+  --sm-warning:#f39c12;
+  --sm-warning-dark:#e67e22;
+  /* En-tête domaine (dégradé ardoise) */
+  --sm-slate:#2c3e50;
+  --sm-slate-2:#3d5166;
+  /* Surfaces / bordures / texte */
+  --sm-surface:#f7f8fa;
+  --sm-border:#e0e0e0;
+  --sm-border-input:#ddd;
+  --sm-border-soft:#eee;
+  --sm-text:#333;
+  --sm-text-2:#666;
+  --sm-text-muted:#999;
+}
 
 /* ── Overlay + boîte modale générique ──────────────────────────────── */
 .sm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
 .sm-overlay.open{display:flex}
 .sm-mbox{background:#fff;border-radius:8px;width:100%;max-width:420px;margin:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);animation:smFadeIn .18s ease}
 @keyframes smFadeIn{from{transform:translateY(-12px);opacity:0}to{transform:translateY(0);opacity:1}}
-.sm-mhead{padding:13px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between}
-.sm-mhead h4{margin:0;font-size:14px;font-weight:700;color:#333;display:flex;align-items:center;gap:8px}
-.sm-mclose{background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1;padding:0}
-.sm-mclose:hover{color:#333}
+.sm-mhead{padding:13px 16px;border-bottom:1px solid var(--sm-border-soft);display:flex;align-items:center;justify-content:space-between}
+.sm-mhead h4{margin:0;font-size:14px;font-weight:700;color:var(--sm-text);display:flex;align-items:center;gap:8px}
+.sm-mclose{background:none;border:none;font-size:20px;cursor:pointer;color:var(--sm-text-muted);line-height:1;padding:0}
+.sm-mclose:hover{color:var(--sm-text)}
 .sm-mbody{padding:18px}
-.sm-mfoot{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px}
+.sm-mfoot{padding:12px 16px;border-top:1px solid var(--sm-border-soft);display:flex;justify-content:flex-end;gap:8px}
 
 /* Variantes de header de modale */
-.sm-mhead.info{background:#e8eaf6;border-bottom:1px solid #c5cae9}
-.sm-mhead.info h4{color:#3949ab}
-.sm-mhead.pwd{background:#f39c12;border-bottom:none}
+.sm-mhead.info{background:var(--sm-primary-tint);border-bottom:1px solid var(--sm-primary-tint-border)}
+.sm-mhead.info h4{color:var(--sm-primary)}
+.sm-mhead.pwd{background:var(--sm-warning);border-bottom:none}
 .sm-mhead.pwd h4,.sm-mhead.pwd .sm-mclose{color:#fff}
-.sm-mhead.del{background:#e74c3c;border-bottom:none}
+.sm-mhead.del{background:var(--sm-danger);border-bottom:none}
 .sm-mhead.del h4,.sm-mhead.del .sm-mclose{color:#fff}
 
 /* Éléments internes des modales */
-.sm-mlabel{display:block;font-size:12px;color:#666;font-weight:600;margin-bottom:4px}
+.sm-mlabel{display:block;font-size:12px;color:var(--sm-text-2);font-weight:600;margin-bottom:4px}
 .sm-minput-row{display:flex;align-items:center;gap:6px}
-.sm-minput-row input[type="text"]{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px}
-.sm-minput-row input[type="text"]:focus{border-color:#3949ab;outline:none}
+.sm-minput-row input[type="text"]{flex:1;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px;font-size:13px}
+.sm-minput-row input[type="text"]:focus{border-color:var(--sm-primary);outline:none}
 .sm-minput-suffix{font-size:12px;color:#888;white-space:nowrap}
-.sm-minput-full{width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box}
+.sm-minput-full{width:100%;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px;font-size:13px;box-sizing:border-box}
 .sm-minput-full::placeholder,.sm-minput-row input[type="text"]::placeholder,.sm-ig input::placeholder{color:#bbb}
-.sm-minput-full:focus{border-color:#3949ab;outline:none}
-.sm-merr{color:#e74c3c;font-size:12px;margin-top:6px;display:none}
+.sm-minput-full:focus{border-color:var(--sm-primary);outline:none}
+.sm-merr{color:var(--sm-danger);font-size:12px;margin-top:6px;display:none}
 .sm-mdesc{font-size:13px;color:#555;line-height:1.6;margin:0 0 8px}
 
 /* Groupe input + boutons (widget mot de passe) */
 .sm-ig{display:flex}
-.sm-ig input{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:4px 0 0 4px;border-right:none;font-size:13px}
-.sm-ig input:focus{border-color:#3949ab;outline:none}
+.sm-ig input{flex:1;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px 0 0 4px;border-right:none;font-size:13px}
+.sm-ig input:focus{border-color:var(--sm-primary);outline:none}
 .sm-ig-btns{display:flex}
-.sm-ig-btns button{padding:7px 10px;border:1px solid #ddd;background:#f7f8fa;cursor:pointer;font-size:13px;color:#555}
+.sm-ig-btns button{padding:7px 10px;border:1px solid var(--sm-border-input);background:var(--sm-surface);cursor:pointer;font-size:13px;color:#555}
 .sm-ig-btns button:last-child{border-radius:0 4px 4px 0}
-.sm-ig-btns button:hover{background:#eee}
+.sm-ig-btns button:hover{background:var(--sm-border-soft)}
 
 /* Widget de force du mot de passe */
-.sm-pwd-strength{height:4px;background:#eee;border-radius:2px;margin:8px 0 4px}
+.sm-pwd-strength{height:4px;background:var(--sm-border-soft);border-radius:2px;margin:8px 0 4px}
 .sm-pwd-bar{height:100%;border-radius:2px;transition:width .3s,background .3s}
 .sm-pwd-crit{list-style:none;padding:0;margin:10px 0 0;font-size:12px}
 .sm-pwd-crit li{padding:3px 0;display:flex;align-items:center;gap:6px;color:#aaa}
-.sm-pwd-crit li.ok{color:#27ae60}
-.sm-del-warn{background:#fce4e4;border:1px solid #f5c6cb;border-radius:4px;padding:8px 12px;font-size:12px;color:#721c24;margin-top:12px}
+.sm-pwd-crit li.ok{color:var(--sm-success)}
+.sm-del-warn{background:var(--sm-danger-tint);border:1px solid #f5c6cb;border-radius:4px;padding:8px 12px;font-size:12px;color:#721c24;margin-top:12px}
+
+
+/* ============================================================================
+ *  COMPOSANTS PARTAGÉS (autrefois copiés dans plusieurs templates)
+ *  Couleurs via tokens → palette unifiée (primaire indigo, succès unique). Les
+ *  redirections, qui utilisaient un thème vert, adoptent le primaire indigo une
+ *  fois leur copie locale retirée. Les templates conservent des surcharges
+ *  locales UNIQUEMENT pour leurs vraies différences (dimensions, comportements).
+ * ============================================================================ */
+
+/* Navigation retour */
+.sm-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#777;text-decoration:none;margin-bottom:14px}
+.sm-back:hover{color:var(--sm-primary)}
+
+/* Grilles 2 colonnes */
+.sm-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.sm-2col .sm-card{margin-bottom:0}
+.sm-opts-inner{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+@media(max-width:600px){.sm-2col{grid-template-columns:1fr}.sm-opts-inner{grid-template-columns:1fr}}
+
+/* Pills (alias / redirection) */
+.sm-pills-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:28px;margin-bottom:10px}
+.sm-pill{display:inline-flex;align-items:center;gap:5px;background:var(--sm-primary-tint);color:var(--sm-primary);border-radius:20px;padding:3px 10px 3px 12px;font-size:12px;font-weight:500}
+.sm-pill.fwd{background:var(--sm-success-tint);color:var(--sm-success)}
+.sm-pill-x{background:none;border:none;cursor:pointer;padding:0;line-height:1;font-size:14px;color:inherit;opacity:.6;display:flex;align-items:center}
+.sm-pill-x:hover{opacity:1}
+.sm-pills-empty{font-size:12px;color:#bbb;font-style:italic;padding:2px 0}
+
+/* Bouton [+ Ajouter] */
+.sm-add-trigger{display:flex;justify-content:flex-end;margin-top:6px}
+.sm-btn-add{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px dashed var(--sm-primary);color:var(--sm-primary);border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.sm-btn-add:hover{background:var(--sm-primary);color:#fff;border-style:solid}
+
+/* Étiquettes de formulaire + champ nombre */
+.sm-form-label{display:block;font-size:12px;color:var(--sm-text-2);margin-bottom:4px;font-weight:600}
+input.sm-number{width:100%;max-width:160px;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px;font-size:13px;box-sizing:border-box}
+input.sm-number:focus{border-color:var(--sm-primary);outline:none}
+
+/* Lignes de cases à cocher */
+.sm-chk-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
+.sm-chk-row label{margin:0;cursor:pointer;font-weight:500;color:var(--sm-text)}
+
+/* Options de redirection */
+.sm-fwd-opts{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--sm-text-2)}
+.sm-fwd-opts label{display:flex;align-items:center;gap:5px;cursor:pointer}
+
+/* Boîte de prix dynamique */
+.sm-price-box{margin-top:10px;padding:8px 12px;border-radius:4px;font-size:12px;background:var(--sm-surface);border:1px solid var(--sm-border);display:none}
+.sm-price-box.visible{display:block}
+.sm-proto-billing-notice{margin-top:8px;font-size:11px;color:#757575;display:flex;align-items:flex-start;gap:5px;line-height:1.5}
+.sm-proto-billing-notice .fa{color:var(--sm-warning);flex-shrink:0;margin-top:2px}
+.sm-price-badge{display:inline-block;background:var(--sm-primary-tint);color:var(--sm-primary);border-radius:3px;padding:1px 7px;font-size:11px;margin-left:4px;font-weight:600}
+.sm-price-badge.bundle{background:var(--sm-success-tint);color:var(--sm-success)}
+.sm-price-badge.save{background:#fff3cd;color:#856404;font-size:10px}
