@@ -59,9 +59,11 @@ modifier chaque modale une par une :
   d'édition de boîte (nom d'utilisateur, mot de passe, confirmation, taille) et
   de redirection (nom d'alias) ; `aria-label` ajouté aux nouveaux champs de
   saisie inline (alias / redirections / cibles).
+- **Labels des enregistrements DNS copiables** (DKIM / SPF) et de **tous les
+  champs du générateur DMARC** associés (`for` / `id`) — 14 champs.
 
-*Reste de la passe accessibilité : labels des champs copiables DNS (lecture seule)
-et du générateur DMARC, + revue des contrastes (nécessite un rendu visuel).*
+*Reste de la passe accessibilité : revue des contrastes (clair + sombre) —
+nécessite un rendu visuel de ta part.*
 
 ## [1.12.0] - 2026-07-08
 

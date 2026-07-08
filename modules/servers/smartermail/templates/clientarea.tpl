@@ -2026,7 +2026,7 @@
       {* ── Enregistrement hôte (Host / Name) ──────────────────────────── *}
       {if $dkim.selector}
       <div class="sm-mfg">
-        <label class="sm-mlabel">{$lang.dkim_lbl_host}</label>
+        <label class="sm-mlabel" for="dkim-host">{$lang.dkim_lbl_host}</label>
         <div class="sm-record-wrap">
           <input type="text" id="dkim-host" readonly
                  value="{$dkim.selector|escape}._domainkey.{$domain|escape}">
@@ -2039,7 +2039,7 @@
 
       {* ── Valeur TXT (clé publique DKIM) ─────────────────────────────── *}
       <div class="sm-mfg">
-        <label class="sm-mlabel">{$lang.dkim_lbl_value}</label>
+        <label class="sm-mlabel" for="dkim-value">{$lang.dkim_lbl_value}</label>
         <div class="sm-record-wrap">
           <textarea id="dkim-value" readonly rows="4">{if $dkim.txtRecord}{$dkim.txtRecord|escape}{elseif $dkim.publicKey}v=DKIM1; k=rsa; p={$dkim.publicKey|escape}{/if}</textarea>
           <button type="button" class="sm-copy-btn" onclick="smCopy('dkim-value',this)" title="{$lang.btn_copy}">
@@ -2073,7 +2073,7 @@
           {$lang.spf_valid_desc}
         </p>
         <div class="sm-mfg">
-          <label class="sm-mlabel">{$lang.spf_current_label}</label>
+          <label class="sm-mlabel" for="spf-found">{$lang.spf_current_label}</label>
           <div class="sm-record-wrap">
             <input type="text" id="spf-found" readonly value="{$spfFound|escape}">
             <button type="button" class="sm-copy-btn" onclick="smCopy('spf-found',this)" title="{$lang.btn_copy}">
@@ -2088,7 +2088,7 @@
           {$lang.spf_add_desc}
         </p>
         <div class="sm-mfg">
-          <label class="sm-mlabel">{$lang.spf_txt_label}</label>
+          <label class="sm-mlabel" for="spf-recommended">{$lang.spf_txt_label}</label>
           <div class="sm-record-wrap">
             <input type="text" id="spf-recommended" readonly value="{$spfRecommended|escape}">
             <button type="button" class="sm-copy-btn" onclick="smCopy('spf-recommended',this)" title="{$lang.btn_copy}">
@@ -2313,7 +2313,7 @@
         {* ── Rangée 1 : Politique + Politique sous-domaines ───────────── *}
         <div class="sm-dmarc-row g2">
           <div>
-            <label class="sm-mlabel">
+            <label class="sm-mlabel" for="dmarc-policy">
               {$lang.dmarc_builder_policy}
               <i class="sm-help-i" title="{$lang.dmarc_builder_policy_help|escape}">i</i>
             </label>
@@ -2325,7 +2325,7 @@
             </select>
           </div>
           <div>
-            <label class="sm-mlabel">
+            <label class="sm-mlabel" for="dmarc-subpolicy">
               {$lang.dmarc_builder_subpolicy}
               <i class="sm-help-i" title="{$lang.dmarc_builder_subpolicy_help|escape}">i</i>
             </label>
@@ -2342,7 +2342,7 @@
         {* ── Rangée 2 : Alignement DKIM + Alignement SPF ──────────────── *}
         <div class="sm-dmarc-row g2" style="margin-top:10px;">
           <div>
-            <label class="sm-mlabel">{$lang.dmarc_builder_adkim}</label>
+            <label class="sm-mlabel" for="dmarc-adkim">{$lang.dmarc_builder_adkim}</label>
             <select id="dmarc-adkim" onchange="smDmarcUpdatePreview()"
                     style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
               <option value="r" selected>{$lang.dmarc_builder_align_relaxed}</option>
@@ -2350,7 +2350,7 @@
             </select>
           </div>
           <div>
-            <label class="sm-mlabel">{$lang.dmarc_builder_aspf}</label>
+            <label class="sm-mlabel" for="dmarc-aspf">{$lang.dmarc_builder_aspf}</label>
             <select id="dmarc-aspf" onchange="smDmarcUpdatePreview()"
                     style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
               <option value="r" selected>{$lang.dmarc_builder_align_relaxed}</option>
@@ -2362,7 +2362,7 @@
         {* ── Rangée 3 : Pourcentage + Format + Intervalle ─────────────── *}
         <div class="sm-dmarc-row g3" style="margin-top:10px;">
           <div>
-            <label class="sm-mlabel">
+            <label class="sm-mlabel" for="dmarc-pct">
               {$lang.dmarc_builder_pct}
               <i class="sm-help-i" title="{$lang.dmarc_builder_pct_help|escape}">i</i>
             </label>
@@ -2371,7 +2371,7 @@
                    style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
           </div>
           <div>
-            <label class="sm-mlabel">{$lang.dmarc_builder_rf}</label>
+            <label class="sm-mlabel" for="dmarc-rf">{$lang.dmarc_builder_rf}</label>
             <select id="dmarc-rf" onchange="smDmarcUpdatePreview()"
                     style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
               <option value="afrf" selected>AFRF</option>
@@ -2379,7 +2379,7 @@
             </select>
           </div>
           <div>
-            <label class="sm-mlabel">
+            <label class="sm-mlabel" for="dmarc-ri">
               {$lang.dmarc_builder_ri}
               <i class="sm-help-i" title="{$lang.dmarc_builder_ri_help|escape}">i</i>
             </label>
@@ -2392,7 +2392,7 @@
         {* ── Rangée 4 : RUA + RUF ─────────────────────────────────────── *}
         <div class="sm-dmarc-row g2" style="margin-top:10px;">
           <div>
-            <label class="sm-mlabel">
+            <label class="sm-mlabel" for="dmarc-rua">
               {$lang.dmarc_builder_rua}
               <i class="sm-help-i" title="{$lang.dmarc_builder_rua_help|escape}">i</i>
             </label>
@@ -2403,7 +2403,7 @@
                    style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
           </div>
           <div>
-            <label class="sm-mlabel">
+            <label class="sm-mlabel" for="dmarc-ruf">
               {$lang.dmarc_builder_ruf}
               <i class="sm-help-i" title="{$lang.dmarc_builder_ruf_help|escape}">i</i>
             </label>
@@ -2429,7 +2429,7 @@
               <code style="display:inline-block;font-size:12px;background:#f7f8fa;padding:6px 8px;border:1px solid #eee;border-radius:4px;white-space:nowrap;">_dmarc.{$domain|escape}</code>
             </div>
             <div>
-              <label class="sm-mlabel" style="margin-bottom:2px;">{$lang.dmarc_builder_preview}</label>
+              <label class="sm-mlabel" for="dmarc-preview" style="margin-bottom:2px;">{$lang.dmarc_builder_preview}</label>
               <div class="sm-record-wrap">
                 <input type="text" id="dmarc-preview" readonly
                        style="font-family:monospace;font-size:12px;">
