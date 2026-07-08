@@ -106,6 +106,8 @@ require_once __DIR__ . '/lib/SmarterMailProtoUsage.php';
 require_once __DIR__ . '/lib/SmarterMailProductSettings.php';
 // Vérification DNS unifiée (SPF/DKIM/Autodiscover/DMARC) avec cache 5 min
 require_once __DIR__ . '/lib/SmarterMailDnsCheck.php';
+// Forfaits (packages) : forme normalisée + resolver + convertisseur legacy.
+require_once __DIR__ . '/lib/SmarterMailPackages.php';
 
 use WHMCS\Database\Capsule;
 
@@ -136,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.16.0',
+        'MODVersion' => '1.17.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -535,6 +537,25 @@ function smartermail_ConfigOptions(): array
                 '"none" est le plus sûr pour démarrer (mode observation),',
                 '"quarantine" envoie en spam les courriels suspects,',
                 '"reject" les bloque complètement.',
+            ]),
+        ],
+
+        // ── FORFAIT (pont vers le gestionnaire de forfaits — addon) ───────────
+        // Dernier slot configoption (24/24). S'il est renseigné, le forfait PREND
+        // LE PAS sur toutes les options individuelles ci-dessus (résolu via
+        // _sm_resolvePackage). « (Hérité) » = continuer à utiliser ces options
+        // (comportement historique strict). Dropdown peuplé depuis mod_sm_packages ;
+        // en cas d'absence de table / d'erreur, seule l'option héritée s'affiche
+        // (la page de configuration produit ne casse jamais).
+        'configoption24' => [
+            'FriendlyName' => 'Forfait (prioritaire sur les options ci-dessus)',
+            'Type'         => 'dropdown',
+            'Options'      => _sm_configOptionPackageChoices(),
+            'Default'      => '',
+            'Description'  => implode(' ', [
+                'Sélectionnez un forfait créé dans l\'addon « SmarterMail — Forfaits ».',
+                'Un forfait remplace TOUTES les options individuelles ci-dessus.',
+                'Laisser « (Hérité) » pour continuer d\'utiliser ces options.',
             ]),
         ],
     ];

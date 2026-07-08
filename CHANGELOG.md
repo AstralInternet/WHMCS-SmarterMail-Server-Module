@@ -10,6 +10,37 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.17.0] - 2026-07-08
+
+### Ajouté — fondation du gestionnaire de forfaits (packages) — P0 + P1
+
+Première étape (invisible et sans risque) du chantier « forfaits » pour la
+revente : une couche de données + un pont config-option, **sans encore rien
+brancher** — les produits existants restent strictement inchangés.
+
+- **Forme normalisée + resolver + convertisseur** (`lib/SmarterMailPackages.php`,
+  nouveau) : une représentation unique de la config d'un produit, résolue soit
+  depuis un **forfait nommé** (table `mod_sm_packages`, référencé par
+  `configoption24`), soit — à défaut — **convertie depuis les 23 configoptions
+  historiques + `mod_sm_product_settings`** de façon **byte-identique**. Le
+  resolver ne lève jamais d'exception (forfait → hérité → défauts). Valeurs
+  brutes pour les champs à plancher divergent (`gb_per_tier`,
+  `billing_threshold_days`) : chaque site d'appel conserve son propre plancher.
+- **Tables** `mod_sm_packages` (forfaits, avec soft-delete) et `mod_sm_settings`
+  (réglages globaux clé/valeur JSON) — auto-créées à la demande, non bloquantes.
+- **`configoption24` « Forfait »** : nouveau dropdown (dernier slot, 24/24) peuplé
+  depuis `mod_sm_packages`. Vide = « (Hérité) » = comportement historique. En cas
+  d'absence de table / d'erreur, seule l'option héritée s'affiche (la page de
+  configuration produit ne casse jamais).
+- **Harnais byte-identique** (`tools/diag_packages.php`, lecture seule) : vérifie
+  pour chaque produit que le convertisseur reproduit EXACTEMENT chaque expression
+  consommateur (défaut + cast + plancher module ET hook). Garde-fou à lancer avant
+  de brancher les consommateurs.
+
+**Aucun consommateur ne lit encore les forfaits** — provisioning, facturation et
+espace client sont inchangés. Prochaines étapes : GUI à onglets (P2), puis bascule
+progressive des consommateurs (P3 affichage, P4 provisioning/facture).
+
 ## [1.16.0] - 2026-07-08
 
 ### Modifié — factures dans la langue & la devise du client (Phase 2, généricité)
