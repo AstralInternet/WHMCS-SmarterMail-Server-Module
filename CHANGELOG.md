@@ -10,6 +10,28 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.19.0] - 2026-07-08
+
+### Modifié — bascule des consommateurs d'affichage sur les forfaits — P3
+
+Première bascule réelle vers le resolver de forfaits, limitée aux consommateurs
+**sans impact sur la facturation ni le provisioning** (affichage / vérifications
+DNS). Byte-identique pour les produits sans forfait (garanti par `diag_packages.php`).
+
+- **Vérifications DNS** (`lib/SmarterMailDnsCheck.php`) : SPF (primaire + secondaires),
+  Autodiscover (hôte + cible SRV) et DMARC (activation) lisent désormais la config
+  résolue (`_sm_packageFromParams()`) au lieu des configoptions brutes.
+- **Espace client** : les défauts du générateur DMARC (RUA + politique) et les
+  critères de mot de passe affichés (adduserpage + edituserpage) passent par le
+  resolver.
+- **Nameservers du guide DNS** : `_sm_providerNameservers()` lit le réglage global
+  `provider_nameservers` (page addon → Réglages globaux) avec repli sur les valeurs
+  par défaut (`_sm_defaultNameservers()`). Le dé-branding des NS se fait donc sans
+  toucher au code.
+
+Un produit lié à un forfait voit désormais ses **réglages DNS / mot de passe (affichés)
+issus du forfait**. Provisioning et facturation restent sur l'ancien chemin jusqu'à P4.
+
 ## [1.18.0] - 2026-07-08
 
 ### Ajouté — GUI du gestionnaire de forfaits (packages) — P2

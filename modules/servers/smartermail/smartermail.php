@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.18.0',
+        'MODVersion' => '1.19.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -2376,12 +2376,11 @@ function _sm_clientCurrencyId(array $params): int
  */
 function _sm_providerNameservers(): array
 {
-    return [
-        'cpanel'      => ['ns3.astralinternet.com', 'ns4.astralinternet.com',
-                          'ns3.hosting-management.com', 'ns4.hosting-management.com'],
-        'plesk'       => ['ns20.astralinternet.com', 'ns21.astralinternet.com'],
-        'clientspace' => ['zone1.astralinternet.com', 'zone2.astralinternet.com', 'zone3.astralinternet.com'],
-    ];
+    // Réglage global du revendeur (page addon → Réglages globaux) s'il est défini ;
+    // sinon valeurs par défaut (historique Astral, _sm_defaultNameservers()).
+    // N'affecte QUE l'onglet pré-sélectionné du guide DNS (aucun effet fonctionnel).
+    $ns = _sm_getGlobalSetting('provider_nameservers', _sm_defaultNameservers());
+    return (is_array($ns) && $ns) ? $ns : _sm_defaultNameservers();
 }
 
 /**
@@ -2405,6 +2404,10 @@ function _sm_providerNameservers(): array
  */
 function smartermail_ClientArea(array $params): array
 {
+    // Config résolue (forfait si sélectionné, sinon options héritées). Utilisée
+    // pour les défauts DMARC affichés ; ne lève jamais.
+    $pkg = _sm_packageFromParams($params);
+
     // ── ROUTEUR CENTRAL ──────────────────────────────────────────────────────
     //
     // tabOverviewReplacementTemplate intercepte TOUTES les requêtes productdetails,
@@ -3525,8 +3528,8 @@ function smartermail_ClientArea(array $params): array
             // - configoption22 : RUA suggéré par défaut
             // - configoption23 : politique suggérée
             'dmarcDefaults'  => [
-                'rua'    => trim((string) ($params['configoption22'] ?? '')),
-                'policy' => trim((string) ($params['configoption23'] ?? 'none')),
+                'rua'    => $pkg['dmarc_rua'],
+                'policy' => $pkg['dmarc_policy'],
             ],
             'domainNsDefault'=> $domainNsDefault, // Onglet DNS actif par défaut: cpanel|plesk|clientspace|generic
             // ── Détail de facturation EAS/MAPI pour le popup (i) ──────────
@@ -4043,6 +4046,9 @@ function smartermail_deletedomainalias(array $params): string
  */
 function smartermail_adduserpage(array $params): array
 {
+    // Config résolue (forfait sinon hérité) — critères mot de passe affichés.
+    $pkg = _sm_packageFromParams($params);
+
     $init = _sm_initDomainAdmin($params);
     if (isset($init['error'])) {
         return ['templatefile' => 'error', 'vars' => ['error' => $init['error']]];
@@ -4076,10 +4082,10 @@ function smartermail_adduserpage(array $params): array
             'mapiPrice'        => (float) ($params['configoption3'] ?? 0),
             'bundlePrice'      => (float) ($params['configoption4'] ?? 0),
             'lockDays'         => max(1, (int) ($params['configoption16'] ?? 1)),  // Seuil facturation EAS/MAPI
-            'pwdMinLength'     => max(1, (int) ($params['configoption9']  ?? 8)),
-            'pwdRequireUpper'  => ($params['configoption10'] ?? 'on') === 'on',
-            'pwdRequireNumber' => ($params['configoption11'] ?? 'on') === 'on',
-            'pwdRequireSpecial'=> ($params['configoption12'] ?? 'on') === 'on',
+            'pwdMinLength'     => max(1, (int) $pkg['pwd_min_len']),
+            'pwdRequireUpper'  => $pkg['pwd_require_upper'],
+            'pwdRequireNumber' => $pkg['pwd_require_digit'],
+            'pwdRequireSpecial'=> $pkg['pwd_require_special'],
             // Jeton CSRF — injecté dans le <form> par adduser.tpl pour
             // que createuser puisse valider l'origine de la requête.
             'csrfToken'        => _sm_csrfToken(),
@@ -4339,11 +4345,12 @@ function smartermail_edituserpage(array $params): array
         }
     }
 
-    // ── Critères de mot de passe (depuis les configoptions du module) ─────
-    $pwdMinLength      = max(1, (int) ($params['configoption9']  ?? 8));
-    $pwdRequireUpper   = ($params['configoption10'] ?? 'on') === 'on';
-    $pwdRequireNumber  = ($params['configoption11'] ?? 'on') === 'on';
-    $pwdRequireSpecial = ($params['configoption12'] ?? 'on') === 'on';
+    // ── Critères de mot de passe (via le forfait résolu, sinon hérité) ────
+    $pkg               = _sm_packageFromParams($params);
+    $pwdMinLength      = max(1, (int) $pkg['pwd_min_len']);
+    $pwdRequireUpper   = $pkg['pwd_require_upper'];
+    $pwdRequireNumber  = $pkg['pwd_require_digit'];
+    $pwdRequireSpecial = $pkg['pwd_require_special'];
 
     // ── Forwarding actuel ─────────────────────────────────────────────────
     $fwdData   = $api->getMailboxForwardList($daToken, $username, $domain);

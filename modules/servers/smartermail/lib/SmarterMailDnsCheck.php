@@ -39,6 +39,10 @@ if (!defined('WHMCS')) { die('Accès direct interdit.'); }
 
 use WHMCS\Database\Capsule;
 
+// Resolver de forfaits : _sm_packageFromParams() fournit la config DNS résolue
+// (forfait sélectionné, sinon options héritées). require_once idempotent.
+require_once __DIR__ . '/SmarterMailPackages.php';
+
 // =============================================================================
 //  TABLE DE CACHE
 // =============================================================================
@@ -245,7 +249,9 @@ function _sm_dnsExtractTxt(array $rec): string
  */
 function _sm_checkSpf(string $domain, array $params, bool $forceRefresh = false, bool $cacheOnly = false): array
 {
-    $expected = trim((string) ($params['configoption13'] ?? ''));
+    // Config résolue (forfait si sélectionné, sinon options héritées).
+    $pkg      = _sm_packageFromParams($params);
+    $expected = $pkg['spf_primary'];
 
     // Cas spécial : si l'admin n'a PAS configuré de mécanisme SPF, on retourne
     // un statut neutre — la mini-carte SPF s'affiche en NA et indique au client
@@ -261,7 +267,7 @@ function _sm_checkSpf(string $domain, array $params, bool $forceRefresh = false,
 
     // Liste des mécanismes acceptés (principal en premier)
     $accepted = [$expected];
-    $secondary = trim((string) ($params['configoption18'] ?? ''));
+    $secondary = $pkg['spf_secondary'];
     if ($secondary !== '') {
         foreach (explode(',', $secondary) as $m) {
             $m = trim($m);
@@ -378,8 +384,9 @@ function _sm_checkDkimDns(string $domain, array $smDkim, bool $forceRefresh = fa
 function _sm_checkAutodiscover(string $domain, array $params, bool $forceRefresh = false, bool $cacheOnly = false): array
 {
     $serverHost = strtolower(trim((string) ($params['serverhostname'] ?? '')));
-    $expectedHost = strtolower(trim((string) ($params['configoption19'] ?? ''))) ?: $serverHost;
-    $expectedSrv  = strtolower(trim((string) ($params['configoption20'] ?? ''))) ?: $serverHost;
+    $pkg          = _sm_packageFromParams($params);
+    $expectedHost = $pkg['autodiscover_host'] ?: $serverHost;
+    $expectedSrv  = $pkg['srv_target'] ?: $serverHost;
 
     // Valeurs recommandées pour le guide DNS — toujours calculables sans DNS.
     // Permet aux modales de fonctionner même en mode loading.
@@ -539,7 +546,8 @@ function _sm_checkAutodiscover(string $domain, array $params, bool $forceRefresh
  */
 function _sm_checkDmarc(string $domain, array $params, bool $forceRefresh = false, bool $cacheOnly = false): array
 {
-    $enabled = ($params['configoption21'] ?? 'on') === 'on';
+    $pkg     = _sm_packageFromParams($params);
+    $enabled = $pkg['dmarc_check'];
     if (!$enabled) {
         return ['status' => 'na', 'found' => '', 'enabled' => false];
     }
