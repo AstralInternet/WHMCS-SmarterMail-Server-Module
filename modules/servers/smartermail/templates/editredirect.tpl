@@ -275,95 +275,13 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 });
 
-// ── Modales ────────────────────────────────────────────────────────────
-function smOpen(id) {
-  document.getElementById(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
-  var inp = document.querySelector('#' + id + ' input');
-  if (inp) setTimeout(function () { inp.focus(); }, 80);
-}
-
-function smClose(id) {
-  document.getElementById(id).classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-function smBg(e, id) {
-  if (e.target === document.getElementById(id)) smClose(id);
-}
-
-document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape' || e.keyCode === 27) {
-    document.querySelectorAll('.sm-overlay.open').forEach(function (el) {
-      smClose(el.id);
-    });
-  }
-});
+// ── Modales : smOpen / smClose / smBg + fermeture Échap ─────────────────
+// → _sm_common.js (injecté dans le <head>). Focus auto du 1er champ éditable.
 
 // ── Ajout destination ─────────────────────────────────────────────────
-function smAddTarget() {
-  var input = document.getElementById('sm-target-input');
-  var errEl = document.getElementById('sm-target-err');
-  var addr  = input.value.trim().toLowerCase();
-
-  errEl.style.display = 'none';
-  if (!addr) return;
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
-    errEl.textContent = input.dataset.errinvalid || 'Adresse courriel invalide.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  if (smTargets.indexOf(addr) !== -1) {
-    errEl.textContent = input.dataset.errdup || 'Cette adresse est déjà dans la liste.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  smTargets.push(addr);
-  smRenderTargets();
-  input.value = '';
-  smClose('sm-target-modal');
-}
-
-// ── Retrait destination ───────────────────────────────────────────────
-function smRemoveTarget(addr) {
-  smTargets = smTargets.filter(function (a) { return a !== addr; });
-  smRenderTargets();
-}
-
-// ── Rendu pills + inputs cachés ───────────────────────────────────────
-function smRenderTargets() {
-  var pillsEl  = document.getElementById('sm-target-pills');
-  var hiddenEl = document.getElementById('sm-targets-hidden');
-  var emptyEl  = document.getElementById('sm-targets-empty');
-
-  // Nettoyer les pills existantes
-  var existing = pillsEl.querySelectorAll('.sm-pill');
-  existing.forEach(function (p) { p.remove(); });
-
-  if (!smTargets.length) {
-    if (emptyEl) emptyEl.style.display = '';
-    if (hiddenEl) hiddenEl.innerHTML = '';
-    return;
-  }
-
-  if (emptyEl) emptyEl.style.display = 'none';
-
-  smTargets.forEach(function (addr) {
-    var pill = document.createElement('span');
-    pill.className = 'sm-pill';
-    pill.innerHTML = '<i class="fa fa-share" style="font-size:10px;"></i> '
-      + escHtml(addr)
-      + '<button type="button" class="sm-pill-x" onclick="smRemoveTarget(\'' + escAttr(addr) + '\')">&times;</button>';
-    pillsEl.appendChild(pill);
-  });
-
-  hiddenEl.innerHTML = smTargets.map(function (addr) {
-    return '<input type="hidden" name="targets[]" value="' + escAttr(addr) + '">';
-  }).join('');
-}
+// ── Cibles : smAddTarget / smRemoveTarget / smRenderTargets ─────────────
+// → _sm_common.js (injecté dans le <head>). État dans le global smTargets
+//   ci-dessus ; soumission via #sm-targets-hidden (targets[]).
 
 // ── Suppression ────────────────────────────────────────────────────────
 // Soumettre le formulaire de suppression séparé après confirmation
@@ -372,16 +290,7 @@ function smConfirmDelete() {
   document.getElementById('form-delredirect').submit();
 }
 
-// ── Utilitaires ──────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-function escAttr(s) {
-  return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
+// ── Utilitaires : escHtml / escAttr → _sm_common.js (head) ────────────
 
 {/literal}
 </script>

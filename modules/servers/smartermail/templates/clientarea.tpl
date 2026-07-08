@@ -2561,25 +2561,9 @@ function smToggleDnsCard(){
 }
 
 // ── Modales ───────────────────────────────────────────────────────────
-function smOpen(id){
-  document.getElementById(id).classList.add('open');
-  document.body.style.overflow='hidden';
-}
-function smClose(id){
-  document.getElementById(id).classList.remove('open');
-  document.body.style.overflow='';
-}
-function smBg(e,id){
-  if(e.target===document.getElementById(id)) smClose(id);
-}
-// Fermeture à la touche Échap — fonctionne pour toutes les modales (DKIM, SPF, guide DNS)
-document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'||e.keyCode===27){
-    document.querySelectorAll('.sm-overlay.open').forEach(function(el){
-      smClose(el.id);
-    });
-  }
-});
+// smOpen / smClose / smBg + fermeture Échap : voir _sm_common.js (injecté dans
+// le <head> par le hook ClientAreaHeadOutput). Le smOpen partagé ajoute le focus
+// du premier champ éditable — bénéfique pour la modale d'alias de domaine.
 
 // ── Copie ─────────────────────────────────────────────────────────────
 function smCopy(id,btn){

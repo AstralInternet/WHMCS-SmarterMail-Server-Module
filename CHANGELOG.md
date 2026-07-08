@@ -10,6 +10,49 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.6.0] - 2026-07-08
+
+### Modifié — socle CSS/JS partagé & mode sombre par tokens (Piste A, Phase 3)
+
+Refonte interne de l'espace client : les styles et le JavaScript, autrefois
+copiés dans chaque template (~850 lignes de `<style>` très dupliquées + ~30
+fonctions JS), sont centralisés dans des fichiers uniques injectés par le hook
+`ClientAreaHeadOutput`. Palette **unifiée** via des design tokens `--sm-*`.
+Facturation inchangée ; seuls changements visuels **volontaires** : les
+redirections passent du vert à l'indigo commun.
+
+- **`_sm_styles.css`** (nouveau, injecté) — kit modale, widget mot de passe et
+  composants partagés (pills, boutons, boîtes de prix…) + ~22 **design tokens**
+  (primaire indigo, succès vert unique, danger, avertissement, surfaces /
+  bordures / texte). Chaque template ne conserve que ses vraies spécificités.
+- **`_sm_common.js`** (nouveau, injecté dans le `<head>`) — fonctions JS
+  partagées, retirées des templates : kit modale (`smOpen` / `smClose` / `smBg`
+  + fermeture Échap), échappement (`escHtml` / `escAttr`), widget mot de passe
+  (`smTogglePwd` / `smGeneratePwd` / `smCrit` / `smCheckPwd`) et gestion des
+  listes d'adresses (ajout/retrait d'alias, de redirections et de cibles + rendu
+  des cibles). Gardes `typeof` pour les rappels propres à un template
+  (`smMarkDirty`, `smCheckReady`). Effets bénéfiques : fermeture Échap sur toutes
+  les pages, focus automatique à l'ouverture des modales. Le rendu des pills
+  d'alias/redirection reste local (modèles de soumission distincts entre
+  edituser et adduser).
+- **Mode sombre par redéfinition de tokens** — `_sm_dark_mode.css` redéfinit les
+  tokens `--sm-*` sous `html.lagom-dark-mode` ; les règles tokenisées s'adaptent
+  seules. Modales de redirection basculées sur les variantes partagées
+  `.info` / `.del` (cohérentes clair **et** sombre).
+- **Palette unifiée (changement visuel volontaire)** — pages de redirection en
+  indigo commun ; un des deux verts concurrents disparaît au profit d'un vert
+  « succès » unique.
+- **Templates morts purgés** — `pwdmodal.tpl`, `pwdwidget.tpl`,
+  `_dns_copy_field.tpl` (222 lignes, confirmés inutilisés).
+
+### Corrigé
+
+- **Info-bulle « Retirer » des pills alias/redirection** (edituser) : le
+  `title="{$lang.btn_remove}"` piégé dans un bloc `{literal}` s'affichait
+  littéralement au lieu d'être traduit → nouveau global `SM_LANG_BTN_REMOVE`
+  (réutilise la clé i18n existante `btn_remove`). Ajouté aussi aux pills
+  d'adduser pour cohérence.
+
 ## [1.5.0] - 2026-07-06
 
 ### Ajouté — quota disque bloquant & modèles de facturation (Phase 2, design §3.3)

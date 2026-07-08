@@ -239,111 +239,16 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 });
 
-// ── Modales ────────────────────────────────────────────────────────────
-function smOpen(id) {
-  document.getElementById(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
-  // Focus automatique sur le premier input de la modale
-  var inp = document.querySelector('#' + id + ' input');
-  if (inp) setTimeout(function () { inp.focus(); }, 80);
-}
-
-function smClose(id) {
-  document.getElementById(id).classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// Fermeture au clic sur le fond de la modale
-function smBg(e, id) {
-  if (e.target === document.getElementById(id)) smClose(id);
-}
-
-// Fermeture à la touche Échap
-document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape' || e.keyCode === 27) {
-    document.querySelectorAll('.sm-overlay.open').forEach(function (el) {
-      smClose(el.id);
-    });
-  }
-});
+// ── Modales : smOpen / smClose / smBg + fermeture Échap ─────────────────
+// → _sm_common.js (injecté dans le <head>). Focus auto du 1er champ éditable.
 
 // ── Ajout d'une adresse de destination ────────────────────────────────
 // Valide le format courriel côté JS et ajoute l'adresse à smTargets.
 // La validation PHP (filter_var) s'effectue aussi côté serveur.
-function smAddTarget() {
-  var input  = document.getElementById('sm-target-input');
-  var errEl  = document.getElementById('sm-target-err');
-  var addr   = input.value.trim().toLowerCase();
-
-  errEl.style.display = 'none';
-  if (!addr) return;
-
-  // Validation format courriel (regex basique — PHP valide aussi)
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
-    errEl.textContent = input.dataset.errinvalid || 'Adresse courriel invalide.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  // Déduplication (insensible à la casse)
-  if (smTargets.indexOf(addr) !== -1) {
-    errEl.textContent = input.dataset.errdup || 'Cette adresse est déjà dans la liste.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  smTargets.push(addr);
-  smRenderTargets();
-  input.value = '';
-  smClose('sm-target-modal');
-  smCheckReady();
-}
-
-// ── Retrait d'une adresse de destination ──────────────────────────────
-function smRemoveTarget(addr) {
-  smTargets = smTargets.filter(function (a) { return a !== addr; });
-  smRenderTargets();
-  smCheckReady();
-}
-
-// ── Rendu des pills et des inputs cachés ─────────────────────────────
-// Construit les pills visuelles et les champs targets[] soumis en POST.
-function smRenderTargets() {
-  var pillsEl  = document.getElementById('sm-target-pills');
-  var hiddenEl = document.getElementById('sm-targets-hidden');
-  var emptyEl  = document.getElementById('sm-targets-empty');
-
-  if (!smTargets.length) {
-    // Aucune destination — afficher le texte vide
-    if (emptyEl) emptyEl.style.display = '';
-    if (hiddenEl) hiddenEl.innerHTML = '';
-    // Vider les pills sauf le span vide
-    var pills = pillsEl.querySelectorAll('.sm-pill');
-    pills.forEach(function (p) { p.remove(); });
-    return;
-  }
-
-  // Masquer le texte vide dès qu'une destination est ajoutée
-  if (emptyEl) emptyEl.style.display = 'none';
-
-  // Reconstruire toutes les pills
-  var pills = pillsEl.querySelectorAll('.sm-pill');
-  pills.forEach(function (p) { p.remove(); });
-
-  smTargets.forEach(function (addr) {
-    var pill = document.createElement('span');
-    pill.className = 'sm-pill';
-    pill.innerHTML = '<i class="fa fa-share" style="font-size:10px;"></i> '
-      + escHtml(addr)
-      + '<button type="button" class="sm-pill-x" onclick="smRemoveTarget(\'' + escAttr(addr) + '\')">&times;</button>';
-    pillsEl.appendChild(pill);
-  });
-
-  // Champs cachés targets[] — un par adresse
-  hiddenEl.innerHTML = smTargets.map(function (addr) {
-    return '<input type="hidden" name="targets[]" value="' + escAttr(addr) + '">';
-  }).join('');
-}
+// ── Cibles : smAddTarget / smRemoveTarget / smRenderTargets ─────────────
+// → _sm_common.js (injecté dans le <head>). État dans le global smTargets
+//   ci-dessus ; soumission via #sm-targets-hidden (targets[]). smAddTarget/
+//   smRemoveTarget appellent smCheckReady() (défini plus bas) via garde typeof.
 
 // ── Activation du bouton Créer ─────────────────────────────────────────
 // Le bouton est actif seulement si :
@@ -384,16 +289,7 @@ function smValidate() {
   return true;
 }
 
-// ── Utilitaires XSS-safe ──────────────────────────────────────────────
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-function escAttr(s) {
-  return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
+// ── Utilitaires XSS-safe : escHtml / escAttr → _sm_common.js (head) ────────
 
 {/literal}
 </script>

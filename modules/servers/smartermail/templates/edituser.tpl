@@ -9,6 +9,7 @@ var SM_LANG_PRICE_SAVING  = '{$lang.js_price_saving|escape:"javascript"}';
 var SM_LANG_PRICE_INCL    = '{$lang.js_price_included|escape:"javascript"}';
 var SM_LANG_ALIAS_EMPTY   = '{$lang.js_alias_empty|escape:"javascript"}';
 var SM_LANG_FWD_EMPTY     = '{$lang.js_fwd_empty|escape:"javascript"}';
+var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
 </script>
 <style>
 {literal}
@@ -469,71 +470,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (pc) pc.addEventListener('input', smCheckPwd);
 });
 
-function smTogglePwd() {
-  var f = document.getElementById('sm-pwd-input');
-  var e = document.getElementById('sm-eye-icon');
-  f.type = f.type === 'password' ? 'text' : 'password';
-  e.className = f.type === 'password' ? 'fa fa-eye' : 'fa fa-eye-slash';
-}
-
-function smGeneratePwd() {
-  var chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_=+';
-  var pwd = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
-  pwd += '0123456789'[Math.floor(Math.random() * 10)];
-  pwd += '!@#$%^&*-_=+'[Math.floor(Math.random() * 13)];
-  for (var i = pwd.length; i < Math.max(SM_PWD_MIN, 14); i++)
-    pwd += chars[Math.floor(Math.random() * chars.length)];
-  pwd = pwd.split('').sort(function() { return Math.random() - .5; }).join('');
-  var f = document.getElementById('sm-pwd-input');
-  f.value = pwd; f.type = 'text';
-  document.getElementById('sm-eye-icon').className = 'fa fa-eye-slash';
-  // (P0.5) Remplir aussi le champ de confirmation, sinon okMatch reste faux dans
-  // smCheckPwd() et le bouton de soumission demeure bloqué après « Générer ».
-  var fc = document.getElementById('sm-pwd-confirm');
-  if (fc) { fc.value = pwd; }
-  smCheckPwd();
-}
-
-function smCrit(id, ok) {
-  var el = document.getElementById(id);
-  if (!el) return;
-  el.className = ok ? 'ok' : '';
-  el.querySelector('i').className = ok ? 'fa fa-check' : 'fa fa-times';
-}
-
-function smCheckPwd() {
-  var pwd      = document.getElementById('sm-pwd-input').value;
-  var conf     = document.getElementById('sm-pwd-confirm').value;
-  var pwdLower = pwd.toLowerCase();
-
-  var okLen      = pwd.length >= SM_PWD_MIN;
-  var okUpper    = !SM_REQ_UPPER || /[A-Z]/.test(pwd);
-  var okNum      = !SM_REQ_NUM   || /[0-9]/.test(pwd);
-  var okSpec     = !SM_REQ_SPEC  || /[!@#$%^&*\-_=+]/.test(pwd);
-  var okNoUser   = SM_USERNAME.length === 0 || pwdLower.indexOf(SM_USERNAME.toLowerCase()) === -1;
-  var domBase    = SM_DOMAIN_BASE.length >= 4 ? SM_DOMAIN_BASE.toLowerCase() : '';
-  var okNoDomain = pwdLower.indexOf(SM_DOMAIN.toLowerCase()) === -1
-                && (domBase === '' || pwdLower.indexOf(domBase) === -1);
-  var okMatch    = pwd.length > 0 && pwd === conf;
-
-  smCrit('crit-len',      okLen);
-  smCrit('crit-upper',    okUpper);
-  smCrit('crit-num',      okNum);
-  smCrit('crit-spec',     okSpec);
-  smCrit('crit-no-user',  okNoUser);
-  smCrit('crit-no-domain',okNoDomain);
-  smCrit('crit-match',    okMatch);
-
-  var allOk = okLen && okUpper && okNum && okSpec && okNoUser && okNoDomain && okMatch;
-  var score  = [okLen, okUpper, okNum, okSpec, okNoUser, okNoDomain, pwd.length >= 16].filter(Boolean).length;
-  var pct    = Math.min(100, Math.round(score / 7 * 100));
-  var bar    = document.getElementById('sm-pwd-bar');
-  bar.style.width      = pct + '%';
-  bar.style.background = pct < 45 ? '#e74c3c' : pct < 80 ? '#f39c12' : '#27ae60';
-
-  var btn = document.getElementById('sm-pwd-submit');
-  if (btn) btn.disabled = !allOk;
-}
+// ── Widget mot de passe : smTogglePwd / smGeneratePwd / smCrit / smCheckPwd ──
+// → _sm_common.js (injecté dans le <head>). Dépend des globals SM_PWD_MIN,
+//   SM_REQ_*, SM_DOMAIN(_BASE), SM_USERNAME déclarés dans le préambule ci-dessus.
 {/literal}
 </script>
 
@@ -620,20 +559,9 @@ document.addEventListener('DOMContentLoaded', function() {
   smUpdatePrice();
 });
 
-// ── Helpers modales ───────────────────────────────────────────────────
-function smOpen(id) {
-  document.getElementById(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
-  var inp = document.querySelector('#'+id+' input[type="text"], #'+id+' input[type="password"], #'+id+' input[type="number"]');
-  if (inp) setTimeout(function(){ inp.focus(); }, 80);
-}
-function smClose(id) {
-  document.getElementById(id).classList.remove('open');
-  document.body.style.overflow = '';
-}
-function smBg(e, id) {
-  if (e.target === document.getElementById(id)) smClose(id);
-}
+// ── Helpers modales : smOpen / smClose / smBg + fermeture Échap ────────────
+// → _sm_common.js (injecté dans le <head>). Le smOpen partagé gère le focus du
+//   premier champ éditable de la modale.
 
 // ── État modifié ──────────────────────────────────────────────────────
 function smMarkDirty() {
@@ -674,77 +602,27 @@ function smSave() {
 }
 
 // ── Alias ─────────────────────────────────────────────────────────────
-function smAddAlias() {
-  var input = document.getElementById('sm-alias-input');
-  var errEl = document.getElementById('sm-alias-err');
-  var name  = input.value.trim().toLowerCase().replace(/\s+/g,'');
-  errEl.style.display = 'none';
-  if (!name) return;
-  if (!/^[a-z0-9._\-]+$/.test(name)) {
-    errEl.textContent = input.dataset.errchars || 'Caractères non valides';
-    errEl.style.display = 'block'; return;
-  }
-  if (smAliases.indexOf(name) !== -1) {
-    errEl.textContent = input.dataset.errdup || 'Alias déjà présent';
-    errEl.style.display = 'block'; return;
-  }
-  smAliases.push(name);
-  smRenderAliasPills();
-  input.value = '';
-  smMarkDirty();
-  smClose('sm-alias-modal');
-}
-
-function smRemoveAlias(name) {
-  smAliases = smAliases.filter(function(a){ return a !== name; });
-  smRenderAliasPills();
-  smMarkDirty();
-}
-
+// ── Alias : smAddAlias / smRemoveAlias → _sm_common.js (head). Le rendu
+//   smRenderAliasPills reste LOCAL ici (soumission via smSave()→#hid-aliases,
+//   donc ne synchronise PAS #sm-alias-hidden — contrairement à adduser). ──
 function smRenderAliasPills() {
   var c = document.getElementById('sm-alias-pills');
   if (!smAliases.length) { c.innerHTML = '<span class="sm-pills-empty">' + SM_LANG_ALIAS_EMPTY + '</span>'; return; }
   c.innerHTML = smAliases.map(function(a){
     return '<span class="sm-pill" data-name="'+escAttr(a)+'">'+escHtml(a)+'@'+escHtml(SM_DOMAIN)
-          +'<button type="button" class="sm-pill-x" onclick="smRemoveAlias(\''+escAttr(a)+'\')" title="{$lang.btn_remove}">&times;</button></span>';
+          +'<button type="button" class="sm-pill-x" onclick="smRemoveAlias(\''+escAttr(a)+'\')" title="'+SM_LANG_BTN_REMOVE+'">&times;</button></span>';
   }).join('');
 }
 
-// ── Redirection ───────────────────────────────────────────────────────
-function smAddFwd() {
-  var input = document.getElementById('sm-fwd-input');
-  var errEl = document.getElementById('sm-fwd-err');
-  var addr  = input.value.trim().toLowerCase();
-  errEl.style.display = 'none';
-  if (!addr) return;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
-    errEl.textContent = input.dataset.errinvalid || 'Adresse invalide';
-    errEl.style.display = 'block'; return;
-  }
-  if (smFwdList.indexOf(addr) !== -1) {
-    errEl.textContent = input.dataset.errdup || 'Adresse déjà présente';
-    errEl.style.display = 'block'; return;
-  }
-  smFwdList.push(addr);
-  smRenderFwdPills();
-  input.value = '';
-  smMarkDirty();
-  smClose('sm-fwd-modal');
-}
-
-function smRemoveFwd(addr) {
-  smFwdList = smFwdList.filter(function(a){ return a !== addr; });
-  smRenderFwdPills();
-  smMarkDirty();
-}
-
+// ── Redirection : smAddFwd / smRemoveFwd → _sm_common.js (head). Le rendu
+//   smRenderFwdPills reste LOCAL ici (même raison que les alias). ──
 function smRenderFwdPills() {
   var c = document.getElementById('sm-fwd-pills');
   if (!smFwdList.length) { c.innerHTML = '<span class="sm-pills-empty">' + SM_LANG_FWD_EMPTY + '</span>'; return; }
   c.innerHTML = smFwdList.map(function(a){
     return '<span class="sm-pill fwd" data-addr="'+escAttr(a)+'">'
           +'<i class="fa fa-share" style="font-size:10px;"></i> '+escHtml(a)
-          +'<button type="button" class="sm-pill-x" onclick="smRemoveFwd(\''+escAttr(a)+'\')" title="{$lang.btn_remove}">&times;</button></span>';
+          +'<button type="button" class="sm-pill-x" onclick="smRemoveFwd(\''+escAttr(a)+'\')" title="'+SM_LANG_BTN_REMOVE+'">&times;</button></span>';
   }).join('');
 }
 
@@ -783,9 +661,7 @@ function smUpdatePrice() {
   }
 }
 
-// ── Utilitaires ───────────────────────────────────────────────────────
-function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escAttr(s){ return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+// ── Utilitaires : escHtml / escAttr → _sm_common.js (head) ────────────────
 
 // ── Mot de passe — fonctions définies ci-dessus (smTogglePwd, smGeneratePwd, smCrit, smCheckPwd)
 {/literal}

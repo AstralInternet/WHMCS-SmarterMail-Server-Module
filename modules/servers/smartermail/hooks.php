@@ -1315,6 +1315,28 @@ function _sm_loadSharedCss(): string
     return $cache;
 }
 
+/**
+ * Charge le JS partagé du module (_sm_common.js) — kit modale (smOpen/smClose/
+ * smBg/Échap) + échappement (escHtml/escAttr) — autrefois copié dans chaque
+ * <script> de template. Injecté dans le <head>, donc défini AVANT les <script>
+ * inline (du <body>) : un template peut encore redéfinir localement une fonction
+ * (sa définition, plus tardive, l'emporte) pendant la migration progressive.
+ */
+function _sm_loadCommonJs(): string
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $path = realpath(__DIR__ . '/templates/_sm_common.js');
+    if ($path && is_readable($path)) {
+        $cache = (string) file_get_contents($path);
+    } else {
+        $cache = '';
+        logActivity('SmarterMail [js] Fichier partagé introuvable : ' . __DIR__ . '/templates/_sm_common.js');
+    }
+    return $cache;
+}
+
 add_hook('ClientAreaHeadOutput', 1, function ($vars) {
     // Filtre : on n'agit que sur la page productdetails d'un service.
     // $_GET est utilisé directement car $vars ne contient pas systématiquement
@@ -1349,6 +1371,12 @@ add_hook('ClientAreaHeadOutput', 1, function ($vars) {
     $dark = _sm_loadDarkModeCss();
     if ($dark !== '') {
         $out .= '<style id="sm-dark-mode-shared">' . $dark . '</style>';
+    }
+    // JS partagé (kit modale + échappement) : injecté dans le <head> donc défini
+    // avant les <script> inline des templates qui l'utilisent.
+    $commonJs = _sm_loadCommonJs();
+    if ($commonJs !== '') {
+        $out .= '<script id="sm-common-js">' . $commonJs . '</script>';
     }
     return $out;
 });
