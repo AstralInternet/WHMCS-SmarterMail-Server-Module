@@ -98,6 +98,13 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
   {/if}
 </div>
 
+{* Bannière d'erreur inline — la saisie est préservée (sauf le mot de passe). *}
+{if $formError}
+  <div class="sm-form-error" role="alert">
+    <i class="fa fa-exclamation-triangle"></i> {$formError|escape}
+  </div>
+{/if}
+
 {* ── Alias | Redirection ─────────────────────────────────────────────── *}
 <div class="sm-2col">
 
@@ -267,8 +274,8 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
   {* ── État précédent EAS/MAPI — nécessaire pour détecter les transitions ON→OFF et OFF→ON ── *}
   {* saveuser() compare was_eas/was_mapi avec enable_eas/enable_mapi pour enregistrer          *}
   {* précisément les activations/désactivations dans mod_sm_proto_usage.                       *}
-  {if $canEAS}<input type="hidden" name="was_eas"  value="{if $easEnabled}1{else}0{/if}">{/if}
-  {if $canMAPI}<input type="hidden" name="was_mapi" value="{if $mapiEnabled}1{else}0{/if}">{/if}
+  {if $canEAS}<input type="hidden" name="was_eas"  value="{if $easWas}1{else}0{/if}">{/if}
+  {if $canMAPI}<input type="hidden" name="was_mapi" value="{if $mapiWas}1{else}0{/if}">{/if}
   <input type="hidden" name="fwd_spam"    value="{$fwdSpam|escape}">
   <input type="hidden" name="fwd_updated" value="1">
   <div id="hid-aliases"></div>

@@ -136,7 +136,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.6.0',
+        'MODVersion' => '1.7.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -2449,8 +2449,13 @@ function smartermail_ClientArea(array $params): array
             // formulaire à préserver (suppressions, toggles) conservent la page
             // d'erreur générique.
             $errorReturnPages = [
+                'createuser'     => 'smartermail_adduserpage',
+                'saveuser'       => 'smartermail_edituserpage',
                 'createredirect' => 'smartermail_addredirectpage',
                 'saveredirect'   => 'smartermail_editredirectpage',
+                // savepassword : volontairement absent — son unique saisie (le mot
+                // de passe) n'est de toute façon pas re-remplie, et re-rendre
+                // edituserpage corromprait l'affichage EAS/alias (POST partiel).
             ];
             if (isset($errorReturnPages[$customAction])) {
                 $params['__sm_formError'] = $result;
@@ -4223,6 +4228,26 @@ function smartermail_edituserpage(array $params): array
 
     $domainBase = strstr($domain, '.', true) ?: $domain;
 
+    // Pré-remplissage après un échec de saveuser (préserver la saisie du client) :
+    // on surcharge les valeurs chargées de l'API par celles POSTées.
+    $formError = (string) ($params['__sm_formError'] ?? '');
+    // État RÉEL des protocoles (source des champs cachés was_eas/was_mapi que
+    // saveuser compare pour détecter un changement) — jamais surchargé.
+    $easWas  = isset($easMailboxes[strtolower($email)]);
+    $mapiWas = isset($mapiMailboxes[strtolower($email)]);
+    // État AFFICHÉ (cases cochées) — surchargé par $_POST après un échec.
+    $easEnabled  = $easWas;
+    $mapiEnabled = $mapiWas;
+    if ($formError !== '') {
+        $maxMBInput  = max(0, (int) ($_POST['mailboxsize_mb'] ?? $maxMBInput));
+        $easEnabled  = ($_POST['enable_eas']  ?? '') === '1';
+        $mapiEnabled = ($_POST['enable_mapi'] ?? '') === '1';
+        $fwdKeep     = isset($_POST['fwd_keep']);
+        $fwdDelete   = isset($_POST['fwd_delete']);
+        $userAliases = array_values(array_filter(array_map('strval', (array) ($_POST['aliases'] ?? []))));
+        $fwdList     = array_values(array_filter(array_map('strval', (array) ($_POST['fwd_list'] ?? []))));
+    }
+
     return [
         'templatefile' => 'edituser',
         'pagetitle'    => $pageTitle,
@@ -4233,6 +4258,8 @@ function smartermail_edituserpage(array $params): array
             'lang'             => _sm_lang($params),
             'username'         => $username,
             'email'            => $email,
+            // Bannière d'erreur inline (vide en affichage normal).
+            'formError'        => $formError,
             'userData'         => $userData,
             'mailSettings'     => $mailSettings,
             'currentMB'        => $currentMB,
@@ -4245,8 +4272,10 @@ function smartermail_edituserpage(array $params): array
             'fwdKeep'          => $fwdKeep,
             'fwdDelete'        => $fwdDelete,
             'fwdSpam'          => $fwdSpam,
-            'easEnabled'       => isset($easMailboxes[strtolower($email)]),
-            'mapiEnabled'      => isset($mapiMailboxes[strtolower($email)]),
+            'easEnabled'       => $easEnabled,
+            'mapiEnabled'      => $mapiEnabled,
+            'easWas'           => $easWas,
+            'mapiWas'          => $mapiWas,
             'canEAS'           => ($params['configoption14'] ?? 'on') === 'on',  // configoption14 : offre EAS activée
             'canMAPI'          => ($params['configoption15'] ?? 'on') === 'on',  // configoption15 : offre MAPI activée
             'easPrice'         => (float) ($params['configoption2'] ?? 0),

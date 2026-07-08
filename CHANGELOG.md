@@ -10,6 +10,32 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.7.0] - 2026-07-08
+
+### Ajouté — préservation de la saisie après une erreur serveur (Piste B, UX)
+
+Quand la création ou la modification d'une boîte courriel ou d'une redirection
+échoue côté serveur, le client ne perd plus sa saisie : au lieu d'une **page
+d'erreur pleine page**, le **formulaire d'origine est ré-affiché pré-rempli**
+avec une bannière d'erreur inline. S'applique à `createuser`, `saveuser`,
+`createredirect` et `saveredirect`.
+
+- **Mécanisme** (dispatcher) : sur échec d'une action POST disposant d'un
+  formulaire source, ce formulaire est re-rendu via son renderer, auquel le
+  message d'erreur est transmis (`$params['__sm_formError']`) ; le renderer relit
+  `$_POST` pour repeupler les champs. Le jeton **CSRF est régénéré** (re-soumission
+  valide). Repli propre sur la page d'erreur si le renderer lui-même échoue (ex.
+  domaine injoignable). Les suppressions/bascules conservent la page d'erreur.
+- **Champs préservés** : nom d'utilisateur / d'alias, taille de boîte, protocoles
+  EAS/MAPI, alias et redirections (pills), options de redirection, destinations.
+  Le **mot de passe n'est volontairement pas re-rempli** (le client le re-saisit).
+- **Bannière partagée** `.sm-form-error` dans `_sm_styles.css` (couleurs par
+  tokens danger → mode sombre géré automatiquement).
+- **Sûreté edituser** : l'état RÉEL des protocoles (champs cachés `was_eas` /
+  `was_mapi` que `saveuser` compare pour détecter un changement) est préservé
+  indépendamment de l'affichage pré-rempli (nouveaux vars `easWas` / `mapiWas`),
+  évitant qu'un changement de protocole soit silencieusement ignoré au 2ᵉ envoi.
+
 ## [1.6.0] - 2026-07-08
 
 ### Modifié — socle CSS/JS partagé & mode sombre par tokens (Piste A, Phase 3)
