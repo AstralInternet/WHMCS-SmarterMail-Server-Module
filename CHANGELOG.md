@@ -10,6 +10,32 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.18.0] - 2026-07-08
+
+### Ajouté — GUI du gestionnaire de forfaits (packages) — P2
+
+L'addon « SmarterMail — Forfaits » (anciennement « Facturation & Quotas ») devient
+une interface à onglets pour créer et gérer les forfaits. **Toujours sans brancher
+les consommateurs** : provisioning, facturation et espace client restent inchangés
+tant qu'aucun produit ne pointe vers un forfait.
+
+- **Liste des forfaits** : tableau (nom, type, quota, boîte max, nombre de produits
+  liés) + création / modification / suppression (soft-delete, avec avertissement si
+  le forfait est encore utilisé par des produits).
+- **Éditeur à onglets** (Bootstrap) : Général (protocoles EAS/MAPI, prix, seuil,
+  serveur, boîtes, alias, résiliation) · Mot de passe · DNS (SPF / autodiscover /
+  SRV / DMARC) · Disque & facturation (type de forfait, quota, tranche, taille max
+  par boîte, excédent, seuil). Le « type de forfait » (à l'usage / excédent / bloqué)
+  est une projection de `overage_mode` ; `_sm_computeBaseCharge` reste intact.
+- **Réglages globaux** : disponibilité EAS/MAPI du serveur (masque la section EAS/MAPI
+  des forfaits si désactivée) + nameservers du guide DNS — stockés dans `mod_sm_settings`.
+- **Panneau produit « hérité » conservé** (onglet dédié) pour les produits non convertis.
+- Helpers CRUD `_sm_savePackage()` / `_sm_deletePackage()` / `_sm_listPackages()` +
+  `_sm_defaultNameservers()` (`lib/SmarterMailPackages.php`).
+
+Prochaine étape : bascule progressive des consommateurs sur le resolver — P3 (affichage
+espace client, DNS, nameservers globaux), puis P4 (provisioning + facture).
+
 ## [1.17.0] - 2026-07-08
 
 ### Ajouté — fondation du gestionnaire de forfaits (packages) — P0 + P1
