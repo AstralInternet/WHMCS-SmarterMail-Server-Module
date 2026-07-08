@@ -192,13 +192,25 @@
 .sm-tag-fwd{background:#e8f5e9;color:#2e7d32}
 .sm-empty{color:#ddd}
 .sm-no-results{text-align:center;padding:30px;color:#aaa}
-.sm-toolbar{display:flex;gap:8px;margin-bottom:10px;align-items:center;justify-content:space-between}
+.sm-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center;justify-content:space-between}
 .sm-toolbar-search{flex:0 0 auto;display:flex;align-items:center;gap:6px}
 .sm-toolbar-search label{font-size:12px;color:#888;white-space:nowrap}
 .sm-toolbar-search input{width:200px;padding:5px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px}
 .sm-toolbar-right{flex:0 0 auto;display:flex;align-items:center;gap:6px}
 .sm-toolbar-right label{font-size:12px;color:#888;white-space:nowrap}
 .sm-toolbar-right select{padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;background:#fff}
+
+/* (Casse mobile) Générateur DMARC — grilles en CLASSES surchargeable par media
+   query (les styles inline ne le sont pas) : empilées en 1 colonne sous 600 px. */
+.sm-dmarc-row{display:grid;gap:12px}
+.sm-dmarc-row.g2{grid-template-columns:1fr 1fr}
+.sm-dmarc-row.g3{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:600px){
+  .sm-dmarc-row.g2,.sm-dmarc-row.g3{grid-template-columns:1fr}
+  /* Barre d'outils : chaque groupe pleine largeur + champ recherche extensible */
+  .sm-toolbar-search,.sm-toolbar-right{flex:1 1 100%;justify-content:space-between}
+  .sm-toolbar-search input{flex:1;width:auto}
+}
 .sm-pagination{display:flex;gap:3px;align-items:center;justify-content:center;padding:10px 0 4px;flex-wrap:wrap}
 .sm-page-btn{min-width:30px;height:26px;padding:0 7px;border:1px solid #ddd;border-radius:4px;background:#fff;font-size:12px;cursor:pointer;line-height:1}
 .sm-page-btn:hover:not([disabled]):not(.active){background:#f5f5f5}
@@ -356,13 +368,13 @@
 /* ── Bouton-lien "Comment configurer vos DNS" ──────────────────────────── */
 /* Aspect discret de lien, mais accessibilité d'un bouton (pas de navigation) */
 .sm-dns-card-header{
-  display:flex;align-items:center;justify-content:space-between;
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
   padding:10px 16px;cursor:pointer;user-select:none;
   background:#f7f8fa;border-bottom:1px solid #e0e0e0;
   border-radius:6px 6px 0 0;
 }
 .sm-dns-card-header:hover{background:#f0f1f3}
-.sm-dns-card-left{display:flex;align-items:center;gap:8px}
+.sm-dns-card-left{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .sm-dns-card-pills{display:flex;gap:5px}
 .sm-dns-card-right{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#444}
 .sm-dns-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;transition:opacity .2s}
@@ -2332,7 +2344,7 @@
       <form onsubmit="event.preventDefault();return false;" id="sm-dmarc-form">
 
         {* ── Rangée 1 : Politique + Politique sous-domaines ───────────── *}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="sm-dmarc-row g2">
           <div>
             <label class="sm-mlabel">
               {$lang.dmarc_builder_policy}
@@ -2361,7 +2373,7 @@
         </div>
 
         {* ── Rangée 2 : Alignement DKIM + Alignement SPF ──────────────── *}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+        <div class="sm-dmarc-row g2" style="margin-top:10px;">
           <div>
             <label class="sm-mlabel">{$lang.dmarc_builder_adkim}</label>
             <select id="dmarc-adkim" onchange="smDmarcUpdatePreview()"
@@ -2381,7 +2393,7 @@
         </div>
 
         {* ── Rangée 3 : Pourcentage + Format + Intervalle ─────────────── *}
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px;">
+        <div class="sm-dmarc-row g3" style="margin-top:10px;">
           <div>
             <label class="sm-mlabel">
               {$lang.dmarc_builder_pct}
@@ -2411,7 +2423,7 @@
         </div>
 
         {* ── Rangée 4 : RUA + RUF ─────────────────────────────────────── *}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+        <div class="sm-dmarc-row g2" style="margin-top:10px;">
           <div>
             <label class="sm-mlabel">
               {$lang.dmarc_builder_rua}

@@ -10,6 +10,19 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.9.1] - 2026-07-08
+
+### Corrigé — 3 casses de mise en page mobile (< 600 px, Piste B)
+
+- **Barre d'outils** (recherche + filtres) du tableau de bord : ajout de
+  `flex-wrap` — elle débordait sous ~430 px. Sous 600 px, chaque groupe passe
+  pleine largeur et le champ de recherche devient extensible.
+- **En-tête de la carte DNS** : `flex-wrap` sur l'en-tête et sa partie gauche —
+  le titre, les pastilles d'état et le résumé ne débordent plus vers 375 px.
+- **Générateur DMARC** : les grilles de champs, jusqu'ici en styles **inline**
+  (non surchargeables par media query), passent en classes `.sm-dmarc-row`
+  (`.g2` / `.g3`) et s'**empilent en 1 colonne** sous 600 px.
+
 ## [1.9.0] - 2026-07-08
 
 ### Ajouté — message de succès après une action (flash PRG, Piste B, UX)
