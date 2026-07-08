@@ -10,6 +10,27 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.8.0] - 2026-07-08
+
+### Ajouté — anti double-soumission des formulaires (Piste B, UX)
+
+Les formulaires de l'espace client (création/modification de boîte, mot de passe,
+suppression, redirections, alias de domaine, DKIM) ne peuvent plus être soumis
+deux fois : au premier envoi, les boutons de soumission sont **désactivés et
+affichent un spinner** jusqu'à la navigation. Évite les doublons de création et
+les actions répétées par double-clic ou double-appui sur Entrée.
+
+- **`smLockForm()` + verrou global** dans `_sm_common.js` : un écouteur `submit`
+  verrouille tout formulaire mutatif du module (repéré par son champ caché
+  `customAction`) et bloque un 2ᵉ envoi. La **validation est respectée**
+  (`e.defaultPrevented` : un `onsubmit`/`onclick` qui annule n'entraîne pas de
+  verrou) et la validation HTML5 native (`required`) n'est pas gênée.
+- **Envois JavaScript** (edituser « Enregistrer », suppression de redirection)
+  qui appellent `form.submit()` — lequel ne déclenche pas l'événement `submit` —
+  verrouillent explicitement via `smLockForm()`.
+- Verrou par chargement de page : après un ré-affichage (ex. erreur serveur avec
+  saisie préservée), le formulaire revient déverrouillé.
+
 ## [1.7.0] - 2026-07-08
 
 ### Ajouté — préservation de la saisie après une erreur serveur (Piste B, UX)

@@ -254,3 +254,43 @@ function smRenderTargets() {
     }).join('');
   }
 }
+
+/* ── Anti double-soumission ─────────────────────────────────────────────────
+   Verrouille un <form> au premier envoi (drapeau + désactivation des boutons de
+   soumission + spinner) et bloque tout envoi ultérieur. Les soumissions étant
+   des POST PLEINE PAGE, le verrou tient jusqu'à la navigation (pas de
+   déverrouillage nécessaire). `btn` permet de viser aussi un bouton déclencheur
+   situé HORS du <form> (cas des envois JS via form.submit()). */
+function smLockForm(form, btn) {
+  if (form && form.dataset.smSubmitting === '1') return false;
+  if (form) form.dataset.smSubmitting = '1';
+  var targets = form
+    ? Array.prototype.slice.call(form.querySelectorAll('button[type="submit"], input[type="submit"]'))
+    : [];
+  if (btn && targets.indexOf(btn) === -1) targets.push(btn);
+  targets.forEach(function (b) {
+    if (b.dataset.smBusy === '1') return;
+    b.dataset.smBusy = '1';
+    if (b.tagName === 'BUTTON') {
+      var txt = (b.textContent || '').trim();
+      b.innerHTML = '<i class="fa fa-spinner fa-spin"></i>' + (txt ? ' ' + txt : '');
+    }
+    b.disabled = true;
+  });
+  return true;
+}
+
+/* Verrou GLOBAL des soumissions NATIVES (clic sur un bouton type=submit ou touche
+   Entrée). Ne cible QUE nos formulaires mutatifs (présence d'un champ caché
+   customAction) et respecte la validation : si un onsubmit/onclick a bloqué
+   l'envoi, e.defaultPrevented est vrai → pas de verrou. Les envois JS via
+   form.submit() ne déclenchent PAS cet événement et appellent smLockForm()
+   eux-mêmes (voir edituser smSave / editredirect smConfirmDelete). */
+document.addEventListener('submit', function (e) {
+  if (e.defaultPrevented) return;
+  var form = e.target;
+  if (!form || form.tagName !== 'FORM') return;
+  if (!form.querySelector('input[name="customAction"]')) return;
+  if (form.dataset.smSubmitting === '1') { e.preventDefault(); return; }
+  smLockForm(form);
+});

@@ -605,7 +605,11 @@ function smSave() {
   document.getElementById('hid-fwd-opts').innerHTML = opts;
 
   smDirty = false;
-  document.getElementById('sm-save-form').submit();
+  // Anti double-soumission : l'envoi se fait en JS (form.submit() ne déclenche
+  // pas le verrou global) → on verrouille explicitement (bouton Save hors du form).
+  var f = document.getElementById('sm-save-form');
+  if (!smLockForm(f, document.getElementById('sm-save-btn'))) return;  // envoi déjà en cours
+  f.submit();
 }
 
 // ── Alias ─────────────────────────────────────────────────────────────

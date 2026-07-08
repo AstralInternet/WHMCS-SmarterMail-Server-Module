@@ -294,7 +294,10 @@ document.addEventListener('DOMContentLoaded', function () {
 // Soumettre le formulaire de suppression séparé après confirmation
 function smConfirmDelete() {
   smClose('sm-del-modal');
-  document.getElementById('form-delredirect').submit();
+  // Anti double-soumission (envoi JS → verrou explicite avant form.submit()).
+  var f = document.getElementById('form-delredirect');
+  if (!smLockForm(f)) return;  // envoi déjà en cours
+  f.submit();
 }
 
 // ── Utilitaires : escHtml / escAttr → _sm_common.js (head) ────────────
