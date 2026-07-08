@@ -294,3 +294,17 @@ document.addEventListener('submit', function (e) {
   if (form.dataset.smSubmitting === '1') { e.preventDefault(); return; }
   smLockForm(form);
 });
+
+/* ── Flash de succès : nettoyage de l'URL ────────────────────────────────────
+   La bannière verte est rendue côté serveur d'après ?smok=<action>. Une fois la
+   page affichée, on retire ce paramètre de la barre d'adresse (sans recharger)
+   pour qu'un rafraîchissement ne ré-affiche pas la bannière (comportement
+   « flash » : visible une seule fois). */
+(function () {
+  if (!window.history || !history.replaceState || typeof URLSearchParams === 'undefined') return;
+  var params = new URLSearchParams(location.search);
+  if (!params.has('smok')) return;
+  params.delete('smok');
+  var qs = params.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+})();

@@ -371,6 +371,18 @@ $_lang = [
     'btn_more_info'            => 'Learn more',
     'btn_generate_pwd'         => 'Generate password',
 
+    // ── Success « flash » messages (PRG) after a successful action ────────────
+    'flash_createuser'         => 'Email address created.',
+    'flash_saveuser'           => 'Changes saved.',
+    'flash_savepassword'       => 'Password changed.',
+    'flash_deleteuser'         => 'Email address deleted.',
+    'flash_createredirect'     => 'Redirect created.',
+    'flash_saveredirect'       => 'Redirect saved.',
+    'flash_deleteredirect'     => 'Redirect deleted.',
+    'flash_adddomainalias'     => 'Domain alias added.',
+    'flash_deletedomainalias'  => 'Domain alias deleted.',
+    'flash_toggledkim'         => 'DKIM setting updated.',
+
     // ── Placeholders ─────────────────────────────────────────────────────────
     'eu_alias_ph_ex'           => 'e.g.: info',
     'eu_fwd_ph_ex'             => 'e.g.: other@example.com',

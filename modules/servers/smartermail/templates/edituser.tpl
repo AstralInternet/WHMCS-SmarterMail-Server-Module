@@ -98,6 +98,13 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
   {/if}
 </div>
 
+{* Bannière de succès (flash PRG) — ex. après un changement de mot de passe. *}
+{if $flashSuccess}
+  <div class="sm-flash-success" role="status">
+    <i class="fa fa-check-circle"></i> {$flashSuccess|escape}
+  </div>
+{/if}
+
 {* Bannière d'erreur inline — la saisie est préservée (sauf le mot de passe). *}
 {if $formError}
   <div class="sm-form-error" role="alert">

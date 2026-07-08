@@ -136,7 +136,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.8.0',
+        'MODVersion' => '1.9.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -2259,6 +2259,28 @@ function _sm_handleDnsAjax(array $params, bool $forceRefresh): array
 // =============================================================================
 
 /**
+ * Retourne le message de succès « flash » (PRG) à afficher après une action
+ * réussie, d'après ?smok=<action> ajouté à l'URL de redirection. Whitelist
+ * stricte : seul un code d'action connu produit un message (localisé côté
+ * serveur), jamais de contenu arbitraire. Chaîne vide si absent/inconnu.
+ *
+ * @param array $lang Table de langue courante
+ * @return string     Message localisé ou ''
+ */
+function _sm_flashMessage(array $lang): string
+{
+    $key = trim((string) ($_GET['smok'] ?? ''));
+    if ($key === '') return '';
+    $allowed = [
+        'createuser', 'saveuser', 'savepassword', 'deleteuser',
+        'createredirect', 'saveredirect', 'deleteredirect',
+        'adddomainalias', 'deletedomainalias', 'toggledkim',
+    ];
+    if (!in_array($key, $allowed, true)) return '';
+    return (string) ($lang['flash_' . $key] ?? '');
+}
+
+/**
  * Page d'accueil de l'espace client — Tableau de bord du service courriel.
  *
  * Appelé quand un client clique sur son service dans l'espace client WHMCS.
@@ -2483,6 +2505,10 @@ function smartermail_ClientArea(array $params): array
             $redir .= '&customAction=edituserpage&username=' . urlencode($username);
         }
 
+        // Message de succès (flash PRG) : le code d'action est relu à l'arrivée
+        // par _sm_flashMessage() et affiché en bannière verte.
+        $redir .= '&smok=' . urlencode($customAction);
+
         header('Location: ' . str_replace(["\r", "\n"], '', $redir));
         exit;
     }
@@ -2490,6 +2516,8 @@ function smartermail_ClientArea(array $params): array
     // ── Tableau de bord principal (pas de customAction) ───────────────────
 
     $lang   = _sm_lang($params);
+    // Message de succès (flash PRG) après une action réussie (?smok=<action>).
+    $flashSuccess = _sm_flashMessage($lang);
     // $params['domain'] vient de WHMCS (tblhosting) — on le normalise par précaution
     $params['domain'] = strtolower(trim((string) ($params['domain'] ?? '')));
     $errTpl = fn($msg) => [
@@ -3328,6 +3356,7 @@ function smartermail_ClientArea(array $params): array
         'vars' => [
             'domain'         => $domain,
             'lang'           => $lang,
+            'flashSuccess'   => $flashSuccess,
             'usageGB'        => $usageGB,
             'gbPerTier'      => $gbPerTier,
             'gbBilled'       => $gbBilled,
@@ -4231,6 +4260,8 @@ function smartermail_edituserpage(array $params): array
     // Pré-remplissage après un échec de saveuser (préserver la saisie du client) :
     // on surcharge les valeurs chargées de l'API par celles POSTées.
     $formError = (string) ($params['__sm_formError'] ?? '');
+    // Message de succès (flash PRG) — ex. après savepassword (?smok=savepassword).
+    $flashSuccess = _sm_flashMessage(_sm_lang($params));
     // État RÉEL des protocoles (source des champs cachés was_eas/was_mapi que
     // saveuser compare pour détecter un changement) — jamais surchargé.
     $easWas  = isset($easMailboxes[strtolower($email)]);
@@ -4260,6 +4291,7 @@ function smartermail_edituserpage(array $params): array
             'email'            => $email,
             // Bannière d'erreur inline (vide en affichage normal).
             'formError'        => $formError,
+            'flashSuccess'     => $flashSuccess,
             'userData'         => $userData,
             'mailSettings'     => $mailSettings,
             'currentMB'        => $currentMB,

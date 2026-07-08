@@ -10,6 +10,23 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.9.0] - 2026-07-08
+
+### Ajouté — message de succès après une action (flash PRG, Piste B, UX)
+
+Après une action réussie (création / modification / suppression de boîte, mot de
+passe, redirection, alias de domaine, DKIM), une **bannière verte de
+confirmation** s'affiche à l'arrivée de la redirection Post-Redirect-Get, en
+complément de la préservation de la saisie sur erreur (1.7.0).
+
+- **`_sm_flashMessage()`** : le dispatcher ajoute `?smok=<action>` à l'URL de
+  redirection ; à l'arrivée, le code d'action est relu et mappé vers un message
+  **localisé** via une **whitelist stricte** (aucun contenu arbitraire affiché).
+- Bannière `.sm-flash-success` (couleurs par tokens succès → mode sombre géré)
+  affichée en tête du **tableau de bord** et de la **page d'édition de boîte**
+  (retour après un changement de mot de passe).
+- **10 clés i18n `flash_*`** FR / EN (parité stricte).
+
 ## [1.8.0] - 2026-07-08
 
 ### Ajouté — anti double-soumission des formulaires (Piste B, UX)

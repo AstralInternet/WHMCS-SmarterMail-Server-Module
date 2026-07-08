@@ -380,6 +380,16 @@ $_lang = [
     'add_user_ph_username'     => 'utilisateur',
 
     // ── Libellé erreur générique ──────────────────────────────────────────────
+    'flash_createuser'         => 'Adresse courriel créée.',
+    'flash_saveuser'           => 'Modifications enregistrées.',
+    'flash_savepassword'       => 'Mot de passe modifié.',
+    'flash_deleteuser'         => 'Adresse courriel supprimée.',
+    'flash_createredirect'     => 'Redirection créée.',
+    'flash_saveredirect'       => 'Redirection enregistrée.',
+    'flash_deleteredirect'     => 'Redirection supprimée.',
+    'flash_adddomainalias'     => 'Alias de domaine ajouté.',
+    'flash_deletedomainalias'  => 'Alias de domaine supprimé.',
+    'flash_toggledkim'         => 'Paramètre DKIM mis à jour.',
     'err_label'                => 'Erreur :',
 
     // ── Messages d'erreur PHP visibles par le client ──────────────────────────

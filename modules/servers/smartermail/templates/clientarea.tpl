@@ -582,6 +582,13 @@
  *}
 </style>
 
+{* Bannière de succès (flash PRG) — affichée après une action réussie. *}
+{if $flashSuccess}
+  <div class="sm-flash-success" role="status">
+    <i class="fa fa-check-circle"></i> {$flashSuccess|escape}
+  </div>
+{/if}
+
 {* ── En-tête domaine ─────────────────────────────────────────────────── *}
 <div class="sm-domain-header">
   <div class="sm-domain-name"><i class="fa fa-envelope"></i>{$domain|escape}</div>
