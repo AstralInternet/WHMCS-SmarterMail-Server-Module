@@ -10,6 +10,46 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.11.0] - 2026-07-08
+
+### Modifié — panneau DNS unifié : 1 modale au lieu de 4 (Piste B, UX)
+
+Les 4 modales de détail d'enregistrement DNS (SPF, DKIM, DMARC, Autodiscover)
+sont fusionnées en **une seule modale « Enregistrements DNS »**, avec une
+**section par enregistrement** (champs Host/Value copiables inchangés). Les
+boutons « détails » des mini-cartes ouvrent cette modale et **défilent** jusqu'à
+la section concernée (brève surbrillance). Le guide DNS à onglets et le
+générateur DMARC restent des modales distinctes (usages différents).
+
+- Nouveau helper `smDnsRecords('<clé>')` : ouvre `sm-dns-records-modal` et
+  `scrollIntoView` vers `#sm-dns-rec-<clé>`.
+- Contenu des enregistrements (champs copiables, alertes, états) **préservé à
+  l'identique** — seules les enveloppes de modale redondantes (en-tête / pied)
+  ont été retirées. Le bouton « Générateur DMARC » est déplacé dans la section
+  DMARC.
+- Nouvelle clé i18n `dns_records_title` (FR/EN) ; styles `.sm-dns-rec-*` (mode
+  sombre géré). Structure vérifiée (équilibre `{if}` / `<div>` / `<section>`
+  inchangé vs avant remaniement).
+
+## [1.10.0] - 2026-07-08
+
+### Modifié — widget mot de passe inline à la création de boîte (Piste B, UX)
+
+À la création d'une adresse courriel, le widget mot de passe (champ + afficher /
+générer + barre de force + critères + confirmation) est désormais **directement
+dans le formulaire**, au lieu d'une **modale obligatoire** à ouvrir avant de
+pouvoir créer. Le bouton « Créer » passe au vert dès que le nom d'utilisateur ET
+le mot de passe sont valides.
+
+- Modale « Définir le mot de passe » + bouton/statut associés **supprimés** ; le
+  champ mot de passe (`name="password"`) est soumis directement (plus de champ
+  caché intermédiaire ni de `smApplyPwd` / `smPwdSet`).
+- Nouveau `smUpdateCreate()` : revalide (via `smCheckPwd` partagé) et bascule
+  l'état « prêt » du bouton Créer à chaque frappe (mot de passe, confirmation, nom
+  d'utilisateur) et après « Générer ».
+- **edituser conserve** sa modale de changement de mot de passe (action
+  `savepassword` distincte et **optionnelle** — pas un point de friction).
+
 ## [1.9.1] - 2026-07-08
 
 ### Corrigé — 3 casses de mise en page mobile (< 600 px, Piste B)

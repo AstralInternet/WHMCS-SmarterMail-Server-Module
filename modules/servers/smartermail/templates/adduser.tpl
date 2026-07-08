@@ -10,7 +10,6 @@ var SM_LANG_PRICE_INCL    = '{$lang.js_price_included|escape:"javascript"}';
 var SM_LANG_ALIAS_EMPTY   = '{$lang.js_alias_empty|escape:"javascript"}';
 var SM_LANG_FWD_EMPTY     = '{$lang.js_fwd_empty|escape:"javascript"}';
 var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
-var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
 </script>
 <style>
 {literal}
@@ -32,11 +31,8 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
 .sm-email-row input{flex:1;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px 0 0 4px;border-right:none;font-size:13px}
 .sm-email-row input:focus{border-color:var(--sm-primary);outline:none}
 .sm-email-suffix{padding:7px 12px;background:var(--sm-surface);border:1px solid var(--sm-border-input);border-radius:0 4px 4px 0;font-size:13px;color:var(--sm-text-2);white-space:nowrap}
-.sm-pwd-row{display:flex;align-items:center;gap:10px;margin-top:6px}
-.sm-pwd-status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--sm-border-input);border-radius:4px;background:var(--sm-surface);font-size:12px;color:#aaa;min-width:180px}
-.sm-pwd-status.set{color:var(--sm-success);border-color:#a5d6a7;background:#f1f9f1}
-.sm-btn-setpwd{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;background:var(--sm-warning);color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer}
-.sm-btn-setpwd:hover{background:var(--sm-warning-dark)}
+/* Le widget mot de passe est désormais INLINE dans la carte (kit .sm-ig /
+   .sm-pwd-strength / .sm-pwd-crit de _sm_styles.css) — plus de modale ni de statut. */
 
 /* ── Actions (spécifique adduser) ───────────────────────────── */
 .sm-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px;background:var(--sm-surface);border:1px solid var(--sm-border);border-radius:6px}
@@ -70,8 +66,6 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
   {* de l'action mutative. Sans ce jeton, un site tiers pourrait soumettre *}
   {* un formulaire createuser depuis l'extérieur en exploitant la session. *}
   <input type="hidden" name="token"        value="{$csrfToken|escape}">
-  <input type="hidden" name="password"     id="hid-password" value="">
-
   {* Bannière d'erreur inline — la saisie est préservée (sauf le mot de passe). *}
   {if $formError}
     <div class="sm-form-error" role="alert">
@@ -98,14 +92,29 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
 
       <div>
         <label class="sm-form-label">{$lang.add_user_lbl_pwd} <span style="color:#e74c3c;">*</span></label>
-        <div class="sm-pwd-row">
-          <div class="sm-pwd-status" id="pwd-status-display">
-            <i class="fa fa-lock"></i> {$lang.pwd_not_set}
+        <div class="sm-ig">
+          <input type="password" name="password" id="sm-pwd-input" autocomplete="new-password"
+                 placeholder="{$lang.pwd_new_label}" required>
+          <div class="sm-ig-btns">
+            <button type="button" onclick="smTogglePwd()"><i class="fa fa-eye" id="sm-eye-icon"></i></button>
+            <button type="button" onclick="smGeneratePwd();smUpdateCreate();" title="{$lang.btn_generate_pwd}"><i class="fa fa-random"></i></button>
           </div>
-          <button type="button" class="sm-btn-setpwd" onclick="smOpen('sm-setpwd-modal')">
-            <i class="fa fa-key"></i> {$lang.pwd_btn_define}
-          </button>
         </div>
+        <div class="sm-pwd-strength"><div class="sm-pwd-bar" id="sm-pwd-bar" style="width:0;background:#e74c3c;"></div></div>
+        <div style="margin-top:10px;">
+          <label class="sm-form-label">{$lang.pwd_confirm_label}</label>
+          <input type="password" class="sm-minput-full" id="sm-pwd-confirm"
+                 placeholder="{$lang.pwd_confirm_label}" autocomplete="new-password">
+        </div>
+        <ul class="sm-pwd-crit">
+          <li id="crit-len"><i class="fa fa-times"></i> {$lang.pwd_crit_min|replace:'%d':$pwdMinLength}</li>
+          {if $pwdRequireUpper}  <li id="crit-upper"><i class="fa fa-times"></i> {$lang.pwd_crit_upper}</li>{/if}
+          {if $pwdRequireNumber} <li id="crit-num"><i class="fa fa-times"></i> {$lang.pwd_crit_number}</li>{/if}
+          {if $pwdRequireSpecial}<li id="crit-spec"><i class="fa fa-times"></i> {$lang.pwd_crit_special}</li>{/if}
+          <li id="crit-no-user"><i class="fa fa-times"></i> {$lang.pwd_crit_no_user}</li>
+          <li id="crit-no-domain"><i class="fa fa-times"></i> {$lang.pwd_crit_no_domain}</li>
+          <li id="crit-match"><i class="fa fa-times"></i> {$lang.pwd_crit_match}</li>
+        </ul>
       </div>
 
     </div>
@@ -217,49 +226,7 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
 
 {* ════ MODALES ════════════════════════════════════════════════════ *}
 
-{* ── Définir mot de passe (ne soumet PAS — remplit le champ caché) ── *}
-<div class="sm-overlay" id="sm-setpwd-modal">
-  <div class="sm-mbox wide">
-    <div class="sm-mhead pwd">
-      <h4><i class="fa fa-key"></i> {$lang.pwd_modal_title}</h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-setpwd-modal')">&times;</button>
-    </div>
-    <div class="sm-mbody">
-      <div style="margin-bottom:14px;">
-        <label class="sm-mlabel">{$lang.pwd_new_label}</label>
-        <div class="sm-ig">
-          <input type="password" id="sm-pwd-input" autocomplete="new-password"
-                 placeholder="{$lang.pwd_new_label}">
-          <div class="sm-ig-btns">
-            <button type="button" onclick="smTogglePwd()"><i class="fa fa-eye" id="sm-eye-icon"></i></button>
-            <button type="button" onclick="smGeneratePwd()" title="{$lang.btn_generate_pwd}"><i class="fa fa-random"></i></button>
-          </div>
-        </div>
-        <div class="sm-pwd-strength"><div class="sm-pwd-bar" id="sm-pwd-bar" style="width:0;background:#e74c3c;"></div></div>
-      </div>
-      <div style="margin-bottom:10px;">
-        <label class="sm-mlabel">{$lang.pwd_confirm_label}</label>
-        <input type="password" class="sm-minput-full" id="sm-pwd-confirm"
-               placeholder="{$lang.pwd_confirm_label}" autocomplete="new-password">
-      </div>
-      <ul class="sm-pwd-crit">
-        <li id="crit-len"><i class="fa fa-times"></i> {$lang.pwd_crit_min|replace:'%d':$pwdMinLength}</li>
-        {if $pwdRequireUpper}  <li id="crit-upper"><i class="fa fa-times"></i> {$lang.pwd_crit_upper}</li>{/if}
-        {if $pwdRequireNumber} <li id="crit-num"><i class="fa fa-times"></i> {$lang.pwd_crit_number}</li>{/if}
-        {if $pwdRequireSpecial}<li id="crit-spec"><i class="fa fa-times"></i> {$lang.pwd_crit_special}</li>{/if}
-        <li id="crit-no-user"><i class="fa fa-times"></i> {$lang.pwd_crit_no_user}</li>
-        <li id="crit-no-domain"><i class="fa fa-times"></i> {$lang.pwd_crit_no_domain}</li>
-        <li id="crit-match"><i class="fa fa-times"></i> {$lang.pwd_crit_match}</li>
-      </ul>
-    </div>
-    <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-setpwd-modal')">{$lang.btn_cancel}</button>
-      <button type="button" class="btn btn-warning btn-sm" id="sm-pwd-apply" onclick="smApplyPwd()" disabled>
-        <i class="fa fa-check"></i> {$lang.pwd_btn_apply}
-      </button>
-    </div>
-  </div>
-</div>
+{* Widget mot de passe : désormais INLINE dans la carte (plus de modale). *}
 
 {* ── Ajouter alias ─────────────────────────────────────────────── *}
 <div class="sm-overlay" id="sm-alias-modal" onclick="smBg(event,'sm-alias-modal')">
@@ -369,7 +336,6 @@ var SM_REQ_SPEC  = !!document.getElementById('crit-spec');
 
 var smAliases = [];
 var smFwdList = [];
-var smPwdSet  = false;
 
 // ── Listeners ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
@@ -386,8 +352,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   var pi = document.getElementById('sm-pwd-input');
   var pc = document.getElementById('sm-pwd-confirm');
-  if (pi) pi.addEventListener('input', smCheckPwd);
-  if (pc) pc.addEventListener('input', smCheckPwd);
+  var fu = document.getElementById('field-username');
+  if (pi) pi.addEventListener('input', smUpdateCreate);
+  if (pc) pc.addEventListener('input', smUpdateCreate);
+  if (fu) fu.addEventListener('input', smUpdateCreate);
+  smUpdateCreate();  // état initial du bouton Créer
 
   var ai = document.getElementById('sm-alias-input');
   var fi = document.getElementById('sm-fwd-input');
@@ -400,38 +369,28 @@ document.addEventListener('DOMContentLoaded', function() {
 // ── Modales : smOpen / smClose / smBg + fermeture Échap ────────────
 // → _sm_common.js (injecté dans le <head>). Focus auto du 1er champ éditable.
 
-// ── Validation création ───────────────────────────────────────────
-function smCreateValidate() {
-  var username = (document.getElementById('field-username') || {}).value || '';
-  if (!username.trim()) { alert('Veuillez entrer un nom d\'utilisateur.'); return false; }
-  if (!smPwdSet) { smOpen('sm-setpwd-modal'); return false; }
-  return true;
+// ── Validation + état du bouton Créer (widget mot de passe INLINE) ──────────
+// smUpdateCreate : appelé à chaque frappe (mot de passe, confirmation, username)
+// → revalide le mot de passe (smCheckPwd, partagé) et bascule l'état « prêt » du
+//   bouton Créer selon la validité du mot de passe ET du nom d'utilisateur.
+function smUpdateCreate() {
+  var pwdOk = smCheckPwd();
+  var u = ((document.getElementById('field-username') || {}).value || '').trim();
+  var uOk = /^[a-z0-9][a-z0-9._\-]{0,63}$/i.test(u);
+  var btn = document.getElementById('btn-create');
+  if (btn) btn.classList.toggle('ready', pwdOk && uOk);
 }
 
-// ── Widget mot de passe : smTogglePwd / smGeneratePwd / smCrit / smCheckPwd ──
-// → _sm_common.js (injecté dans le <head>). smCheckPwd lit le username saisi
-//   (#field-username) ; dépend des globals SM_PWD_MIN, SM_REQ_*, SM_DOMAIN(_BASE)
-//   déclarés dans le préambule ci-dessus. smApplyPwd reste local (spécifique).
-
-function smApplyPwd() {
-  var pwd = document.getElementById('sm-pwd-input').value;
-  document.getElementById('hid-password').value = pwd;
-  smPwdSet = true;
-
-  // Mettre à jour l'indicateur visuel
-  var status = document.getElementById('pwd-status-display');
-  status.className = 'sm-pwd-status set';
-  status.innerHTML = '<i class="fa fa-check-circle"></i> ' + SM_LANG_PWD_DEFINED;
-
-  // Rendre le bouton Créer actif
-  var btn = document.getElementById('btn-create');
-  if (btn) btn.className = btn.className.replace('sm-btn-create', 'sm-btn-create ready').replace('ready ready','ready');
-
-  smClose('sm-setpwd-modal');
-  // Vider les champs pour sécurité
-  document.getElementById('sm-pwd-input').value = '';
-  document.getElementById('sm-pwd-confirm').value = '';
-  smCheckPwd();
+// Garde de soumission : bloque la création si username ou mot de passe invalide.
+function smCreateValidate() {
+  var u = ((document.getElementById('field-username') || {}).value || '').trim();
+  if (!u) { alert('Veuillez entrer un nom d\'utilisateur.'); return false; }
+  if (!smCheckPwd()) {
+    var pi = document.getElementById('sm-pwd-input');
+    if (pi) pi.focus();
+    return false;
+  }
+  return true;
 }
 
 // ── Alias ─────────────────────────────────────────────────────────

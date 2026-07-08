@@ -390,6 +390,9 @@ $_lang = [
     'flash_adddomainalias'     => 'Alias de domaine ajouté.',
     'flash_deletedomainalias'  => 'Alias de domaine supprimé.',
     'flash_toggledkim'         => 'Paramètre DKIM mis à jour.',
+
+    // Titre du panneau DNS unifié (modale regroupant SPF/DKIM/DMARC/Autodiscover)
+    'dns_records_title'        => 'Enregistrements DNS',
     'err_label'                => 'Erreur :',
 
     // ── Messages d'erreur PHP visibles par le client ──────────────────────────

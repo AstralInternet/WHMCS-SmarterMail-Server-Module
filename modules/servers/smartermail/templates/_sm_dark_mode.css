@@ -54,6 +54,10 @@ html.lagom-dark-mode{
 html.lagom-dark-mode .sm-form-error{color:#ef9a9a}
 html.lagom-dark-mode .sm-flash-success{color:#a5d6a7}
 
+/* Panneau DNS unifié — sections */
+html.lagom-dark-mode .sm-dns-rec-section{border-bottom-color:#3a3d44}
+html.lagom-dark-mode .sm-dns-rec-title{color:#e0e0e0}
+
 /* ── Cartes (sm-card et ses headers/body) ─────────────────────────── */
 html.lagom-dark-mode .sm-card{background:#2a2d34;border-color:#3a3d44;color:#d0d0d0}
 html.lagom-dark-mode .sm-card-header{background:#1f2228;border-bottom-color:#3a3d44;color:#e0e0e0}

@@ -383,6 +383,9 @@ $_lang = [
     'flash_deletedomainalias'  => 'Domain alias deleted.',
     'flash_toggledkim'         => 'DKIM setting updated.',
 
+    // Unified DNS panel title (modal grouping SPF/DKIM/DMARC/Autodiscover)
+    'dns_records_title'        => 'DNS records',
+
     // ── Placeholders ─────────────────────────────────────────────────────────
     'eu_alias_ph_ex'           => 'e.g.: info',
     'eu_fwd_ph_ex'             => 'e.g.: other@example.com',

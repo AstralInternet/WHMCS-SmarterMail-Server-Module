@@ -441,6 +441,15 @@
 .sm-dns-mini-line code{font-size:11px;background:#f7f8fa;padding:1px 6px;border-radius:3px}
 .sm-dns-mini-note{font-size:11px;color:#888;font-style:italic;margin-top:2px}
 .sm-dns-mini-actions{display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap}
+
+/* ── Panneau DNS unifié : sections (1 par enregistrement) dans une modale ──── */
+.sm-dns-records-scroll{max-height:70vh;overflow-y:auto}
+.sm-dns-rec-section{border-bottom:1px solid #eee}
+.sm-dns-rec-section:last-child{border-bottom:none}
+.sm-dns-rec-title{margin:0;padding:14px 18px 0;font-size:14px;font-weight:700;color:#2c3e50;display:flex;align-items:center;gap:8px;scroll-margin-top:6px}
+/* Surbrillance brève de la section ciblée quand on ouvre le panneau via une mini-carte */
+.sm-dns-rec-flash{animation:smDnsRecFlash 1.3s ease}
+@keyframes smDnsRecFlash{0%,100%{background:transparent}18%{background:#fff8e1}}
 /* Petites icônes de sous-statut (Autodiscover : CNAME présent / SRV présent) */
 .sm-dns-sub-icon{display:inline-flex;align-items:center;font-size:11px}
 .sm-dns-sub-icon.ok i{color:#2e7d32}
@@ -936,7 +945,7 @@
         </div>
         {/if}
         <div class="sm-dns-mini-actions">
-          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-spf-modal')">
+          <button type="button" class="sm-dns-btn" onclick="smDnsRecords('spf')">
             <i class="fa fa-eye"></i> {$lang.dns_card_view}
           </button>
         </div>
@@ -982,7 +991,7 @@
               <span class="sm-toggle-knob"></span>
             </button>
           </form>
-          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-dkim-modal')">
+          <button type="button" class="sm-dns-btn" onclick="smDnsRecords('dkim')">
             <i class="fa fa-eye"></i> {$lang.dns_card_view}
           </button>
         </div>
@@ -1016,7 +1025,7 @@
           </div>
         </div>
         <div class="sm-dns-mini-actions">
-          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-autodiscover-modal')">
+          <button type="button" class="sm-dns-btn" onclick="smDnsRecords('autodiscover')">
             <i class="fa fa-eye"></i> {$lang.dns_card_view}
           </button>
         </div>
@@ -1039,7 +1048,7 @@
           </div>
         </div>
         <div class="sm-dns-mini-actions">
-          <button type="button" class="sm-dns-btn" onclick="smOpen('sm-dmarc-modal')">
+          <button type="button" class="sm-dns-btn" onclick="smDnsRecords('dmarc')">
             <i class="fa fa-eye"></i> {$lang.dns_card_view}
           </button>
         </div>
@@ -1981,23 +1990,24 @@
   </div>
 </div>
 
-{* ════════ MODALES DNS ════════════════════════════════════════════════ *}
-
-{* ── Modal DKIM ─────────────────────────────────────────────────────── *}
-{* Accessible depuis les états B (désactivé), C (standby) et D (actif). *}
-{* L'en-tête change de couleur selon l'état DKIM :                       *}
-{*   active   → vert  | standby  → orange | disabled/autre → sombre      *}
-{if $dkim}
-<div class="sm-overlay" id="sm-dkim-modal" onclick="smBg(event,'sm-dkim-modal')">
-  <div class="sm-mbox">
+{* ════════ PANNEAU DNS UNIFIÉ — 1 modale, 1 section par enregistrement ═══════
+   Fusion des anciennes modales SPF / DKIM / DMARC / Autodiscover. Les
+   mini-cartes l'ouvrent via smDnsRecords('<clé>') (défile jusqu'à la section
+   voulue). Le guide à onglets et le générateur DMARC restent des modales
+   distinctes (usages différents). *}
+<div class="sm-overlay" id="sm-dns-records-modal" onclick="smBg(event,'sm-dns-records-modal')">
+  <div class="sm-mbox sm-mbox-guide">
     <div class="sm-mhead dark">
-      <h4>
-        <i class="fa fa-key"></i>
-        {$lang.dkim_modal_title} — {$domain}
-      </h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-dkim-modal')">&times;</button>
+      <h4><i class="fa fa-list-alt"></i> {$lang.dns_records_title} — {$domain}</h4>
+      <button type="button" class="sm-mclose" onclick="smClose('sm-dns-records-modal')">&times;</button>
     </div>
-    <div class="sm-mbody">
+    <div class="sm-dns-records-scroll">
+
+      {* ── DKIM ─────────────────────────────────────────────────────────── *}
+      {if $dkim}
+      <section id="sm-dns-rec-dkim" class="sm-dns-rec-section">
+        <h4 class="sm-dns-rec-title"><i class="fa fa-key"></i> {$lang.dkim_modal_title}</h4>
+        <div class="sm-mbody">
 
       {* ── Message de statut — seulement si pertinent (pas en état actif) *}
       {* L'état actif est déjà communiqué par l'en-tête vert — pas besoin  *}
@@ -2048,28 +2058,14 @@
       {/if}
 
     </div>
-    <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-dkim-modal')">{$lang.btn_close}</button>
-    </div>
-  </div>
-</div>
-{/if}
+      </section>
+      {/if}
 
-{* ── Modal SPF ──────────────────────────────────────────────────────── *}
-{* Même structure que la modale DKIM :                                   *}
-{*   En-tête coloré (vert=ok, rouge=manquant) — corps en couleur neutre  *}
-{*   Enregistrements copiables + note de propagation en bas              *}
-{if $spfMechanism}
-<div class="sm-overlay" id="sm-spf-modal" onclick="smBg(event,'sm-spf-modal')">
-  <div class="sm-mbox sm-mbox-sm">
-    <div class="sm-mhead dark">
-      <h4>
-        <i class="fa fa-shield"></i>
-        {$lang.spf_modal_title} — {$domain}
-      </h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-spf-modal')">&times;</button>
-    </div>
-    <div class="sm-mbody">
+      {* ── SPF ──────────────────────────────────────────────────────────── *}
+      {if $spfMechanism}
+      <section id="sm-dns-rec-spf" class="sm-dns-rec-section">
+        <h4 class="sm-dns-rec-title"><i class="fa fa-shield"></i> {$lang.spf_modal_title}</h4>
+        <div class="sm-mbody">
 
       {if $spfValid}
         {* ── SPF configuré : afficher le record actuel ───────────────── *}
@@ -2117,32 +2113,14 @@
       </div>
 
     </div>
-    <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-spf-modal')">{$lang.btn_close}</button>
-    </div>
-  </div>
-</div>
-{/if}
+      </section>
+      {/if}
 
-{* ══ Modale : Détail Autodiscover ═══════════════════════════════════════════ *}
-{*
-  Affiche les enregistrements CNAME et SRV attendus + leur état actuel.
-  Le client peut copier la valeur recommandée et la coller chez son registrar.
-  Les valeurs attendues viennent de configoption19/20 ou par défaut du
-  serverhostname WHMCS.
-*}
-<div class="sm-overlay" id="sm-autodiscover-modal" onclick="smBg(event,'sm-autodiscover-modal')">
-  <div class="sm-mbox">
-    <div class="sm-mhead dark">
-      <h4>
-        <i class="fa fa-magic"></i>
-        {$lang.autodiscover_title} — {$domain}
-        {* Bulle (i) en lieu et place du paragraphe explicatif — gain de hauteur *}
-        <i class="sm-help-i dark" title="{$lang.autodiscover_explain|escape}">i</i>
-      </h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-autodiscover-modal')">&times;</button>
-    </div>
-    <div class="sm-mbody" style="padding:14px 18px;">
+      {* ── Autodiscover ─────────────────────────────────────────────────── *}
+      <section id="sm-dns-rec-autodiscover" class="sm-dns-rec-section">
+        <h4 class="sm-dns-rec-title"><i class="fa fa-magic"></i> {$lang.autodiscover_title}
+          <i class="sm-help-i" title="{$lang.autodiscover_explain|escape}">i</i></h4>
+        <div class="sm-mbody" style="padding:14px 18px;">
 
       {*
         ── Carte 1 : CNAME / A ─────────────────────────────────────────────
@@ -2241,29 +2219,13 @@
       </div>
 
     </div>
-    <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-autodiscover-modal')">{$lang.btn_close}</button>
-    </div>
-  </div>
-</div>
+      </section>
 
-{* ══ Modale : Détail DMARC ══════════════════════════════════════════════════ *}
-{*
-  Vue détaillée de l'état DMARC : record actuel (si présent), record recommandé
-  par défaut, et bouton vers le Générateur DMARC pour personnaliser la politique.
-*}
-<div class="sm-overlay" id="sm-dmarc-modal" onclick="smBg(event,'sm-dmarc-modal')">
-  <div class="sm-mbox">
-    <div class="sm-mhead dark">
-      <h4>
-        <i class="fa fa-envelope-o"></i>
-        {$lang.dmarc_title} — {$domain}
-        {* (i) — texte explicatif disponible via tooltip natif *}
-        <i class="sm-help-i dark" title="{$lang.dmarc_explain|escape}">i</i>
-      </h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-dmarc-modal')">&times;</button>
-    </div>
-    <div class="sm-mbody" style="padding:14px 18px;">
+      {* ── DMARC ────────────────────────────────────────────────────────── *}
+      <section id="sm-dns-rec-dmarc" class="sm-dns-rec-section">
+        <h4 class="sm-dns-rec-title"><i class="fa fa-envelope-o"></i> {$lang.dmarc_title}
+          <i class="sm-help-i" title="{$lang.dmarc_explain|escape}">i</i></h4>
+        <div class="sm-mbody" style="padding:14px 18px;">
 
       {* ── Record actuel — Hôte + valeur en 2 colonnes ─────────────────── *}
       <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:12px;">
@@ -2296,12 +2258,17 @@
       </div>
 
     </div>
+        <div style="padding:0 18px 14px;text-align:right;">
+          <button type="button" class="sm-btn-create ready"
+                  onclick="smClose('sm-dns-records-modal'); smOpen('sm-dmarc-builder-modal'); smDmarcUpdatePreview();">
+            <i class="fa fa-magic"></i> {$lang.dmarc_open_builder}
+          </button>
+        </div>
+      </section>
+
+    </div>
     <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-dmarc-modal')">{$lang.btn_close}</button>
-      <button type="button" class="sm-btn-create ready"
-              onclick="smClose('sm-dmarc-modal'); smOpen('sm-dmarc-builder-modal'); smDmarcUpdatePreview();">
-        <i class="fa fa-magic"></i> {$lang.dmarc_open_builder}
-      </button>
+      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-dns-records-modal')">{$lang.btn_close}</button>
     </div>
   </div>
 </div>
@@ -2561,6 +2528,20 @@ function smUpdate(){
 }
 
 document.addEventListener('DOMContentLoaded', smInit);
+
+// ── Panneau DNS unifié — ouvre la modale et défile jusqu'à la section voulue ──
+function smDnsRecords(key){
+  smOpen('sm-dns-records-modal');
+  var el = document.getElementById('sm-dns-rec-' + key);
+  if (!el) return;
+  // Laisser la modale s'afficher avant de défiler + surligner brièvement.
+  setTimeout(function(){
+    try { el.scrollIntoView({block:'start', behavior:'smooth'}); } catch(e){ el.scrollIntoView(); }
+    el.classList.remove('sm-dns-rec-flash');
+    void el.offsetWidth;                 // redémarre l'animation même si déjà appliquée
+    el.classList.add('sm-dns-rec-flash');
+  }, 80);
+}
 
 // ── Carte DNS rétractable ──────────────────────────────────────────────
 function smToggleDnsCard(){
