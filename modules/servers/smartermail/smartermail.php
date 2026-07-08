@@ -2440,6 +2440,27 @@ function smartermail_ClientArea(array $params): array
         $result = ($actions[$customAction])($params);
 
         if ($result !== 'success') {
+            // Préserver la saisie : quand une action possède un formulaire
+            // source, on RE-REND ce formulaire pré-rempli avec une bannière
+            // d'erreur inline, au lieu de la page d'erreur pleine page (qui
+            // ferait perdre toute la saisie du client). Le message d'erreur est
+            // transmis au renderer via $params['__sm_formError'] ; celui-ci
+            // relit $_POST pour repeupler les champs. Les actions sans
+            // formulaire à préserver (suppressions, toggles) conservent la page
+            // d'erreur générique.
+            $errorReturnPages = [
+                'createredirect' => 'smartermail_addredirectpage',
+                'saveredirect'   => 'smartermail_editredirectpage',
+            ];
+            if (isset($errorReturnPages[$customAction])) {
+                $params['__sm_formError'] = $result;
+                $page = ($errorReturnPages[$customAction])($params);
+                // Si le renderer lui-même bascule en page d'erreur (échec d'init,
+                // domaine injoignable…), on n'a rien à pré-remplir → repli.
+                if (($page['templatefile'] ?? '') !== 'error') {
+                    return $toTab($page);
+                }
+            }
             return [
                 'tabOverviewReplacementTemplate' => 'templates/error',
                 'vars' => ['error' => '[' . htmlspecialchars($customAction) . '] ' . $result],
@@ -3898,6 +3919,12 @@ function smartermail_adduserpage(array $params): array
     $domain     = $params['domain'];
     $domainBase = strstr($domain, '.', true) ?: $domain;
 
+    // Pré-remplissage après un échec de createuser (préserver la saisie). Le
+    // mot de passe n'est volontairement PAS re-rempli (le client le re-saisit).
+    $formError = (string) ($params['__sm_formError'] ?? '');
+    $re        = $formError !== '';
+    $jsonFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE;
+
     return [
         'templatefile' => 'adduser',
         'vars'         => [
@@ -3918,6 +3945,16 @@ function smartermail_adduserpage(array $params): array
             // Jeton CSRF — injecté dans le <form> par adduser.tpl pour
             // que createuser puisse valider l'origine de la requête.
             'csrfToken'        => _sm_csrfToken(),
+            // Saisie préservée après échec serveur (valeurs vides en affichage normal).
+            'formError'        => $formError,
+            'prefillUsername'  => $re ? (string) ($_POST['username'] ?? '') : '',
+            'prefillSize'      => $re ? max(0, (int) ($_POST['mailboxsize_mb'] ?? 0)) : 0,
+            'prefillEas'       => $re && isset($_POST['enable_eas']),
+            'prefillMapi'      => $re && isset($_POST['enable_mapi']),
+            'prefillFwdKeep'   => $re && isset($_POST['fwd_keep']),
+            'prefillFwdDelete' => $re && isset($_POST['fwd_delete']),
+            'prefillAliases'   => json_encode($re ? array_values(array_filter(array_map('strval', (array) ($_POST['aliases'] ?? [])))) : [], $jsonFlags),
+            'prefillFwds'      => json_encode($re ? array_values(array_filter(array_map('strval', (array) ($_POST['fwd_list'] ?? [])))) : [], $jsonFlags),
         ],
     ];
 }
@@ -4974,6 +5011,15 @@ function smartermail_addredirectpage(array $params): array
 
     $lang = _sm_lang($params);
 
+    // Pré-remplissage après un échec de createredirect (préserver la saisie).
+    // Le dispatcher pose $params['__sm_formError'] avant de re-rendre ; on relit
+    // alors $_POST pour repeupler le champ alias et les cibles.
+    $formError      = (string) ($params['__sm_formError'] ?? '');
+    $prefillAlias   = $formError !== '' ? (string) ($_POST['aliasname'] ?? '') : '';
+    $prefillTargets = $formError !== ''
+        ? array_values(array_filter(array_map('strval', (array) ($_POST['targets'] ?? []))))
+        : [];
+
     return [
         'templatefile' => 'addredirect',
         'vars'         => [
@@ -4983,6 +5029,10 @@ function smartermail_addredirectpage(array $params): array
             // Jeton CSRF — injecté dans le <form> par addredirect.tpl
             // pour que createredirect puisse valider l'origine.
             'csrfToken' => _sm_csrfToken(),
+            // Saisie préservée après échec serveur (vide/[] en affichage normal).
+            'formError'      => $formError,
+            'prefillAlias'   => $prefillAlias,
+            'prefillTargets' => json_encode($prefillTargets, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE),
         ],
     ];
 }
@@ -5123,7 +5173,10 @@ function smartermail_editredirectpage(array $params): array
     $domain  = strtolower(trim((string) ($params['domain'] ?? '')));
 
     // Valider le nom de l'alias reçu en GET
-    $aliasName = strtolower(trim((string) ($_GET['aliasname'] ?? '')));
+    // Fallback sur $_POST : après un échec de saveredirect (POST), l'alias
+    // n'est plus dans $_GET mais dans le corps POST — nécessaire pour re-rendre
+    // le bon formulaire pré-rempli.
+    $aliasName = strtolower(trim((string) ($_GET['aliasname'] ?? $_POST['aliasname'] ?? '')));
     if ($aliasName === '' || !preg_match('/^[a-z0-9][a-z0-9._\-]*$/i', $aliasName)) {
         return [
             'templatefile' => 'error',
@@ -5131,23 +5184,34 @@ function smartermail_editredirectpage(array $params): array
         ];
     }
 
-    // Charger les données de l'alias depuis l'API
-    try {
-        $aliasData = $api->getAlias($aliasName, $daToken);
-        if (empty($aliasData) || empty($aliasData['name'])) {
+    // Pré-remplissage après un échec de saveredirect (préserver la saisie).
+    $formError = (string) ($params['__sm_formError'] ?? '');
+
+    if ($formError !== '') {
+        // Utiliser les cibles POSTées (les modifications du client) SANS
+        // re-solliciter l'API : l'alias existe forcément (la sauvegarde vient
+        // d'échouer) et un nouvel appel API pourrait à son tour échouer et faire
+        // perdre la saisie.
+        $targets = array_values(array_filter(array_map('strval', (array) ($_POST['targets'] ?? []))));
+    } else {
+        // Charger les données de l'alias depuis l'API
+        try {
+            $aliasData = $api->getAlias($aliasName, $daToken);
+            if (empty($aliasData) || empty($aliasData['name'])) {
+                return [
+                    'templatefile' => 'error',
+                    'vars'         => ['error' => $lang['err_user_required'] ?? 'Alias introuvable.', 'lang' => $lang],
+                ];
+            }
+            $targets = (array) ($aliasData['aliasTargetList'] ?? []);
+        } catch (\Throwable $e) {
+            logActivity('SmarterMail [editredirectpage] erreur chargement alias '
+                . $aliasName . ' (service #' . $params['serviceid'] . '): ' . $e->getMessage());
             return [
                 'templatefile' => 'error',
-                'vars'         => ['error' => $lang['err_user_required'] ?? 'Alias introuvable.', 'lang' => $lang],
+                'vars'         => ['error' => $lang['err_connection'] ?? 'Le service courriel est temporairement indisponible.', 'lang' => $lang],
             ];
         }
-        $targets = (array) ($aliasData['aliasTargetList'] ?? []);
-    } catch (\Throwable $e) {
-        logActivity('SmarterMail [editredirectpage] erreur chargement alias '
-            . $aliasName . ' (service #' . $params['serviceid'] . '): ' . $e->getMessage());
-        return [
-            'templatefile' => 'error',
-            'vars'         => ['error' => $lang['err_connection'] ?? 'Le service courriel est temporairement indisponible.', 'lang' => $lang],
-        ];
     }
 
     return [
@@ -5157,6 +5221,8 @@ function smartermail_editredirectpage(array $params): array
             'serviceid' => $params['serviceid'],
             'lang'      => $lang,
             'aliasName' => $aliasName,
+            // Bannière d'erreur inline (vide en affichage normal).
+            'formError' => $formError,
             // JSON_HEX_TAG encode < et > en \u003C / \u003E — empêche une séquence
             // </script> dans une adresse de fermer prématurément le bloc <script>
             // du template. Les adresses sont validées par FILTER_VALIDATE_EMAIL,

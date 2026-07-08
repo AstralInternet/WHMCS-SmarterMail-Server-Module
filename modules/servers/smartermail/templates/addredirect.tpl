@@ -88,6 +88,13 @@
   <input type="hidden" name="token"        value="{$csrfToken|escape}">
   <input type="hidden" name="aliasname"    id="hid-aliasname" value="">
 
+  {* Bannière d'erreur inline — la saisie (alias + cibles) est préservée. *}
+  {if $formError}
+    <div class="sm-form-error" role="alert">
+      <i class="fa fa-exclamation-triangle"></i> {$formError|escape}
+    </div>
+  {/if}
+
   {* ── Section : Adresse source ────────────────────────────────────────── *}
   <div class="sm-card">
     <div class="sm-card-header">
@@ -112,6 +119,7 @@
            *}
           <input type="text"
                  id="field-aliasname"
+                 value="{$prefillAlias|escape}"
                  placeholder="{$lang.add_redirect_source_ph}"
                  pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]*"
                  autocomplete="off"
@@ -212,6 +220,8 @@
 <script>
 {* Variables localisées injectées avant le bloc literal *}
 var SM_LANG_TARGETS_EMPTY = '{$lang.add_redirect_dest_empty|escape:"javascript"}';
+{* Destinations postées à re-remplir après un échec serveur (JSON ; [] sinon). *}
+var SM_INITIAL_TARGETS = {$prefillTargets nofilter};
 {literal}
 
 // ── État de l'application ─────────────────────────────────────────────
@@ -221,6 +231,15 @@ var smTargets = [];
 
 // ── Listeners DOMContentLoaded ────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
+  // Pré-remplissage après un échec serveur (préserver la saisie) : recharger les
+  // destinations postées et rendre les pills.
+  if (typeof SM_INITIAL_TARGETS !== 'undefined' && Array.isArray(SM_INITIAL_TARGETS)) {
+    SM_INITIAL_TARGETS.forEach(function (addr) {
+      if (addr && typeof addr === 'string') smTargets.push(addr.toLowerCase().trim());
+    });
+    smRenderTargets();
+  }
+
   // Touche Entrée dans le champ aliasname → passer au focus suivant
   var aliasInput = document.getElementById('field-aliasname');
   if (aliasInput) {
@@ -237,6 +256,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (e.key === 'Enter') { e.preventDefault(); smAddTarget(); }
     });
   }
+
+  // Refléter l'état initial du bouton « Créer » (surtout après pré-remplissage).
+  smCheckReady();
 });
 
 // ── Modales : smOpen / smClose / smBg + fermeture Échap ─────────────────

@@ -109,6 +109,11 @@
 .sm-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#777;text-decoration:none;margin-bottom:14px}
 .sm-back:hover{color:var(--sm-primary)}
 
+/* Bannière d'erreur de formulaire — saisie préservée après un échec serveur.
+   Couleurs via tokens danger → s'adapte seule au mode sombre. */
+.sm-form-error{display:flex;align-items:flex-start;gap:9px;background:var(--sm-danger-tint);border:1px solid var(--sm-danger);color:var(--sm-danger-dark);border-radius:6px;padding:11px 14px;font-size:13px;line-height:1.5;margin-bottom:16px}
+.sm-form-error i{margin-top:2px;flex-shrink:0}
+
 /* Grilles 2 colonnes */
 .sm-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
 .sm-2col .sm-card{margin-bottom:0}

@@ -89,6 +89,13 @@
    *}
   <input type="hidden" name="aliasname"    value="{$aliasName|escape}">
 
+  {* Bannière d'erreur inline — la saisie (cibles) est préservée après échec. *}
+  {if $formError}
+    <div class="sm-form-error" role="alert">
+      <i class="fa fa-exclamation-triangle"></i> {$formError|escape}
+    </div>
+  {/if}
+
   {* ── Section : Adresse source (lecture seule) ─────────────────────── *}
   <div class="sm-card">
     <div class="sm-card-header">

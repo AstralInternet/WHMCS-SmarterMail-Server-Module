@@ -72,6 +72,13 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
   <input type="hidden" name="token"        value="{$csrfToken|escape}">
   <input type="hidden" name="password"     id="hid-password" value="">
 
+  {* Bannière d'erreur inline — la saisie est préservée (sauf le mot de passe). *}
+  {if $formError}
+    <div class="sm-form-error" role="alert">
+      <i class="fa fa-exclamation-triangle"></i> {$formError|escape}
+    </div>
+  {/if}
+
   {* ── Adresse + Mot de passe ──────────────────────────────────────── *}
   <div class="sm-card">
     <div class="sm-card-header"><i class="fa fa-envelope-o"></i> {$lang.add_user_lbl_email}</div>
@@ -81,6 +88,7 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
         <label class="sm-form-label">{$lang.add_user_lbl_email} <span style="color:#e74c3c;">*</span></label>
         <div class="sm-email-row">
           <input type="text" name="username" id="field-username"
+                 value="{$prefillUsername|escape}"
                  placeholder="{$lang.add_user_ph_username}" pattern="[a-zA-Z0-9._\-]+"
                  autocomplete="off" autofocus required>
           <span class="sm-email-suffix">@{$domain|escape}</span>
@@ -135,8 +143,8 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
           </button>
         </div>
         <div class="sm-fwd-opts">
-          <label><input type="checkbox" name="fwd_keep"   id="fwd_keep">   {$lang.eu_fwd_keep}</label>
-          <label><input type="checkbox" name="fwd_delete" id="fwd_delete"> {$lang.eu_fwd_delete}</label>
+          <label><input type="checkbox" name="fwd_keep"   id="fwd_keep"{if $prefillFwdKeep} checked{/if}>   {$lang.eu_fwd_keep}</label>
+          <label><input type="checkbox" name="fwd_delete" id="fwd_delete"{if $prefillFwdDelete} checked{/if}> {$lang.eu_fwd_delete}</label>
         </div>
         <div id="sm-fwd-hidden"></div>
       </div>
@@ -155,21 +163,21 @@ var SM_LANG_PWD_DEFINED   = '{$lang.js_pwd_defined|escape:"javascript"}';
           <label class="sm-form-label">
             {$lang.eu_disk_limit} <span class="sm-form-hint">— {$lang.zero_unlimited}</span>
           </label>
-          <input type="number" class="sm-number" name="mailboxsize_mb" value="0" min="0">
+          <input type="number" class="sm-number" name="mailboxsize_mb" value="{$prefillSize|default:0}" min="0">
         </div>
 
         {* Droite : protocoles *}
         <div>
           {if $canEAS}
           <div class="sm-chk-row">
-            <input type="checkbox" name="enable_eas" value="1" id="chk-eas" onchange="smUpdatePrice()">
+            <input type="checkbox" name="enable_eas" value="1" id="chk-eas" onchange="smUpdatePrice()"{if $prefillEas} checked{/if}>
             <label for="chk-eas">{$lang.eu_eas_label}</label>
             <button type="button" class="sm-info-btn" onclick="smOpen('sm-info-eas')">i</button>
           </div>
           {/if}
           {if $canMAPI}
           <div class="sm-chk-row">
-            <input type="checkbox" name="enable_mapi" value="1" id="chk-mapi" onchange="smUpdatePrice()">
+            <input type="checkbox" name="enable_mapi" value="1" id="chk-mapi" onchange="smUpdatePrice()"{if $prefillMapi} checked{/if}>
             <label for="chk-mapi">{$lang.eu_mapi_label}</label>
             <button type="button" class="sm-info-btn" onclick="smOpen('sm-info-mapi')">i</button>
           </div>
@@ -351,6 +359,9 @@ var SM_BUNDLE_PRICE = {$bundlePrice|default:0};
 var SM_DOMAIN       = '{$domain|escape:"javascript"}';
 var SM_DOMAIN_BASE  = '{$domainBase|escape:"javascript"}';
 var SM_PWD_MIN      = {$pwdMinLength|default:8};
+{* Alias / redirections postés à re-remplir après un échec serveur (JSON ; [] sinon). *}
+var SM_INITIAL_ALIASES = {$prefillAliases nofilter};
+var SM_INITIAL_FWDS    = {$prefillFwds nofilter};
 {literal}
 var SM_REQ_UPPER = !!document.getElementById('crit-upper');
 var SM_REQ_NUM   = !!document.getElementById('crit-num');
@@ -362,6 +373,17 @@ var smPwdSet  = false;
 
 // ── Listeners ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
+  // Pré-remplissage après un échec serveur (préserver la saisie) : recharger les
+  // alias et redirections postés, rendre les pills, puis rafraîchir le prix.
+  if (typeof SM_INITIAL_ALIASES !== 'undefined' && Array.isArray(SM_INITIAL_ALIASES)) {
+    SM_INITIAL_ALIASES.forEach(function(a){ if (a && typeof a === 'string') smAliases.push(a.toLowerCase().trim()); });
+    smRenderAliasPills();
+  }
+  if (typeof SM_INITIAL_FWDS !== 'undefined' && Array.isArray(SM_INITIAL_FWDS)) {
+    SM_INITIAL_FWDS.forEach(function(a){ if (a && typeof a === 'string') smFwdList.push(a.toLowerCase().trim()); });
+    smRenderFwdPills();
+  }
+
   var pi = document.getElementById('sm-pwd-input');
   var pc = document.getElementById('sm-pwd-confirm');
   if (pi) pi.addEventListener('input', smCheckPwd);
@@ -371,6 +393,8 @@ document.addEventListener('DOMContentLoaded', function() {
   var fi = document.getElementById('sm-fwd-input');
   if (ai) ai.addEventListener('keydown', function(e){ if(e.key==='Enter'){e.preventDefault();smAddAlias();} });
   if (fi) fi.addEventListener('keydown', function(e){ if(e.key==='Enter'){e.preventDefault();smAddFwd();} });
+
+  smUpdatePrice();
 });
 
 // ── Modales : smOpen / smClose / smBg + fermeture Échap ────────────
