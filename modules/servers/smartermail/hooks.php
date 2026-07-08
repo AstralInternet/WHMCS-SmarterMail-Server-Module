@@ -197,6 +197,116 @@ function _sm_hookLang(): array
     return $cache = $_lang;
 }
 
+/**
+ * Charge le tableau de traduction $_lang pour UNE langue donnée (chemin
+ * sécurisé). Mutualisé par _sm_hookLang() (langue système) et _sm_invoiceLang()
+ * (langue du client). Cache statique PAR langue → chaque fichier n'est inclus
+ * qu'une fois par exécution du cron, même si le hook traite plusieurs factures
+ * de langues différentes dans le même passage.
+ *
+ * SÉCURITÉ — PATH TRAVERSAL : le nom de langue est nettoyé (strtolower +
+ * preg_replace) puis realpath() valide que le fichier résolu est bien dans
+ * /lang/. Toute valeur hostile (ex. "../../config") retourne un tableau vide.
+ *
+ * @param string $language Nom de langue WHMCS (ex. 'french', 'english').
+ * @return array<string,string> Traductions, ou [] si langue absente/invalide.
+ */
+function _sm_loadLangArray(string $language): array
+{
+    static $cache = [];
+
+    // Nettoyage anti path-traversal : lettres minuscules et tiret uniquement.
+    $language = preg_replace('/[^a-z\-]/', '', strtolower(trim($language)));
+    if ($language === '') {
+        return [];
+    }
+    if (isset($cache[$language])) {
+        return $cache[$language];
+    }
+
+    $langDir = realpath(__DIR__ . '/lang');
+    if ($langDir === false) {
+        return $cache[$language] = [];
+    }
+
+    $langFile = $langDir . '/' . $language . '.php';
+    // file_exists + realpath dans $langDir : double barrière anti-inclusion hors-path.
+    if (!file_exists($langFile) || strpos((string) realpath($langFile), $langDir) !== 0) {
+        return $cache[$language] = [];
+    }
+
+    $_lang = [];
+    include $langFile; // $_lang est peuplé par le fichier inclus
+    return $cache[$language] = $_lang;
+}
+
+/**
+ * Tableau de traduction pour les LIBELLÉS DE FACTURE, dans la langue du CLIENT
+ * propriétaire de la facture (et non la langue système). Une facture d'un client
+ * anglophone affiche ainsi ses lignes en anglais, un francophone en français.
+ *
+ * Repli propre : si le client n'a pas de langue définie (tblclients.language
+ * vide) ou si le fichier de cette langue est absent, on retombe sur la langue
+ * système via _sm_hookLang() — le comportement historique.
+ *
+ * @param string|null $clientLanguage tblclients.language du propriétaire.
+ * @return array<string,string> Traductions (jamais vide : repli système garanti).
+ */
+function _sm_invoiceLang(?string $clientLanguage): array
+{
+    $clientLanguage = trim((string) $clientLanguage);
+    if ($clientLanguage !== '') {
+        $arr = _sm_loadLangArray($clientLanguage);
+        if (!empty($arr)) {
+            return $arr;
+        }
+    }
+    // Client sans langue propre, ou fichier de langue absent → langue système.
+    return _sm_hookLang();
+}
+
+/**
+ * Symbole de devise (préfixe, sinon suffixe) pour un id de devise WHMCS donné,
+ * inséré dans le TEXTE des libellés de facture (ex. « × 6,00 € »). NOTE : le
+ * MONTANT de chaque ligne est déjà dans la devise du client (géré par WHMCS) —
+ * ceci ne corrige que le symbole codé en dur dans la description. Repli : devise
+ * par défaut, puis '$'. Cache statique par id.
+ *
+ * @param int $currencyId tblclients.currency du propriétaire de la facture.
+ * @return string Symbole (ex. '$', '€', '£'). Repli : '$'.
+ */
+function _sm_hookCurrencySymbol(int $currencyId): string
+{
+    static $cache = [];
+    if (isset($cache[$currencyId])) {
+        return $cache[$currencyId];
+    }
+
+    $sym = '$';
+    try {
+        $cur = null;
+        if ($currencyId > 0) {
+            $cur = Capsule::table('tblcurrencies')->where('id', $currencyId)->first();
+        }
+        if (!$cur) {
+            $cur = Capsule::table('tblcurrencies')->where('default', 1)->first();
+        }
+        if ($cur) {
+            $s = trim((string) ($cur->prefix ?? ''));
+            if ($s === '') {
+                $s = trim((string) ($cur->suffix ?? ''));
+            }
+            if ($s !== '') {
+                $sym = $s;
+            }
+        }
+    } catch (\Throwable $e) {
+        // Non bloquant — repli '$'
+    }
+
+    return $cache[$currencyId] = $sym;
+}
+
 
 // =============================================================================
 //  FONCTION UTILITAIRE : Compte administrateur pour localAPI
@@ -304,6 +414,32 @@ add_hook('InvoiceCreation', 1, function (array $params) {
     //
     // Une facture peut contenir plusieurs services d'hébergement si le client
     // a plusieurs produits actifs avec dates de renouvellement identiques.
+
+    // ── Langue & devise de la facture (= celles du CLIENT propriétaire) ───────
+    // Tous les libellés AJOUTÉS à la facture (détail d'utilisation, dépassement
+    // de quota, en-têtes EAS/MAPI) sont rendus dans la LANGUE du client et avec
+    // le SYMBOLE de SA devise — pas la langue/devise système. Résolu UNE fois
+    // par facture : tous les items d'une facture appartiennent au même client.
+    $invClientLang = '';
+    $invCurrencyId = 0;
+    try {
+        $invRow = Capsule::table('tblinvoices')->where('id', $invoiceId)->first();
+        if ($invRow) {
+            $cliRow = Capsule::table('tblclients')
+                ->where('id', (int) $invRow->userid)
+                ->first();
+            if ($cliRow) {
+                $invClientLang = (string) ($cliRow->language ?? '');
+                $invCurrencyId = (int) ($cliRow->currency ?? 0);
+            }
+        }
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail InvoiceCreation [langue/devise client] : ' . $e->getMessage());
+    }
+    // Repli langue : langue système (historique) ; repli devise : défaut → '$'.
+    $invoiceLang     = _sm_invoiceLang($invClientLang);
+    $invoiceCurrency = _sm_hookCurrencySymbol($invCurrencyId);
+
     foreach ($items as $item) {
       try {  // ── Catch global : protège le cron en cas d'erreur inattendue ──
         $serviceId = (int) $item->relid;
@@ -473,10 +609,12 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         $tiers         = (int) $charge['billedTiers'];   // pour le libellé d'utilisation
         $newAmount     = $charge['baseAmount'];
 
-        // Description : format "{X.XX Go utilisé · N Tranche(s) × Y Go × $Z.ZZ}"
+        // Description : format "{X.XX Go utilisé · N Tranche(s) × Y Go × <D>Z.ZZ}"
+        // (où <D> = symbole de la devise DU CLIENT — €, $, £…).
         // Cohérent avec l'affichage dans l'espace client.
-        // Le gabarit est lu depuis le fichier de langue via _sm_hookLang() afin
-        // de supporter l'anglais et le français canadien selon la langue système.
+        // Le gabarit est lu depuis le fichier de langue via _sm_invoiceLang(),
+        // dans la LANGUE du client propriétaire (repli langue système) ; le
+        // symbole de devise est injecté dans %4$s (voir l'appel sprintf plus bas).
         // Clé : 'inv_usage_label' — paramètres sprintf : %1$s %2$d %3$d %4$s
         //
         // MISE EN FORME DE LA FACTURE (retour de ligne) :
@@ -485,20 +623,22 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         //   la lisibilité sur la facture PDF/courriel. Résultat visuel :
         //
         //     Hébergement courriel (SM+) - domaine.ca (2026/05/12 - 2026/06/11)
-        //     » 155.58 Go utilisé · 16 Tranche(s) de 10 Go × $6
+        //     » 155.58 Go utilisé · 16 Tranche(s) de 10 Go × 6,00 $  (symbole = devise du client)
         //
         //   Le retour de ligne est un "\n" codé en dur (fonctionne dans les
         //   factures WHMCS PDF et HTML). Le préfixe "» " est externalisé dans
         //   les fichiers de langue (clé 'inv_usage_prefix') pour permettre
         //   une personnalisation par langue (ex: "» " en FR, "» " en EN).
         $usageFormatted = number_format($usageGB, 2);
-        $hookLang       = _sm_hookLang(); // Chargé une seule fois (cache statique)
+        // Libellés dans la LANGUE du client (résolue une fois par facture) ; le
+        // prix par tranche est préfixé du SYMBOLE de SA devise (ex. « × 6,00 € »).
+        $hookLang       = $invoiceLang;
         $usageLabel     = sprintf(
-            $hookLang['inv_usage_label'] ?? '%1$s Go utilisé · %2$d Tranche(s) × %3$d Go × $%4$s',
-            $usageFormatted,   // %1$s — utilisation en Go formatée
-            $tiers,            // %2$d — nombre de tranches calculées
-            $gbPerTier,        // %3$d — Go par tranche (configoption1)
-            $baseUnitPrice     // %4$s — prix unitaire par tranche
+            $hookLang['inv_usage_label'] ?? '%1$s Go utilisé · %2$d Tranche(s) × %3$d Go × %4$s',
+            $usageFormatted,                                    // %1$s — utilisation en Go formatée
+            $tiers,                                             // %2$d — nombre de tranches calculées
+            $gbPerTier,                                         // %3$d — Go par tranche (configoption1)
+            $invoiceCurrency . number_format($baseUnitPrice, 2) // %4$s — prix/tranche AVEC devise du client
         );
 
         // ── Ligne principale (disque) via l'API UpdateInvoice ─────────────────
@@ -566,9 +706,9 @@ add_hook('InvoiceCreation', 1, function (array $params) {
             $ov = $charge['overageLine'];
             $addLine(
                 sprintf(
-                    $hookLang['inv_overage_label'] ?? 'Dépassement de quota : %1$d tranche(s) × $%2$s',
+                    $hookLang['inv_overage_label'] ?? 'Dépassement de quota : %1$d tranche(s) × %2$s',
                     (int) $ov['tiers'],
-                    number_format((float) ($psettings['overage_price'] ?? 0), 2)
+                    $invoiceCurrency . number_format((float) ($psettings['overage_price'] ?? 0), 2)
                 ),
                 (float) $ov['amount']
             );

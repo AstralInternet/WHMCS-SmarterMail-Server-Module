@@ -10,6 +10,36 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.16.0] - 2026-07-08
+
+### Modifié — factures dans la langue & la devise du client (Phase 2, généricité)
+
+Suite du chantier revente : les factures générées par le module s'adaptent
+désormais au **client**, plus seulement à la configuration système. **Sans
+changer les montants** facturés en mono-devise (cas d'Astral : identique).
+
+- **Langue de la facture** : les libellés ajoutés par le hook `InvoiceCreation`
+  (détail d'utilisation disque, en-têtes EAS/MAPI, dépassement de quota, mention
+  « désactivé le… ») sont rendus dans la **langue du client propriétaire** de la
+  facture (`tblclients.language`) au lieu de la langue système. Repli propre sur
+  la langue système si le client n'a pas de langue définie. Nouveaux helpers
+  `_sm_loadLangArray()` (chargeur mutualisé, cache par langue, chemin sécurisé)
+  et `_sm_invoiceLang()`.
+- **Symbole de devise sur la facture** : le `$` codé en dur dans les libellés de
+  prix (« × $6 ») est remplacé par le **symbole de la devise du client**
+  (`_sm_hookCurrencySymbol()`). Les *montants* des lignes étaient déjà dans la
+  bonne devise (gérés par WHMCS) ; seul le symbole du texte était figé.
+- **Estimé du tableau de bord** : correction du tarif produit lu en dur dans la
+  devise 1 (`currency=1`) → lecture dans la **devise du client**
+  (`_sm_clientCurrencyId()`), avec repli sur la devise par défaut si le produit
+  n'a pas de tarif dans cette devise. L'estimé affiché correspond enfin à la
+  facture pour un client multidevise.
+
+**Limitation connue** (chantier séparé) : les suppléments EAS/MAPI sont des
+valeurs brutes de configoptions (`configoption2/3`), **non converties** par
+devise — un revendeur multidevise doit en tenir compte. Aucune incidence en
+mono-devise.
+
 ## [1.15.0] - 2026-07-08
 
 ### Modifié — devise & dé-branding pour la revente (Phase 2, généricité)

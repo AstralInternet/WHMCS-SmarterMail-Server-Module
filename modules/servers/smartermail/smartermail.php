@@ -136,7 +136,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.15.0',
+        'MODVersion' => '1.16.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -2317,6 +2317,33 @@ function _sm_currencySymbol(array $params): string
 }
 
 /**
+ * Id de la devise WHMCS du CLIENT propriétaire du service (repli : devise par
+ * défaut, id 1). Sert à lire le bon tarif produit (tblpricing.currency) pour un
+ * estimé cohérent avec la facture, quelle que soit la devise du client.
+ *
+ * @param array $params Paramètres du module (doit contenir 'serviceid').
+ * @return int Id de devise (> 0). Repli : 1 (devise par défaut WHMCS).
+ */
+function _sm_clientCurrencyId(array $params): int
+{
+    try {
+        $sid = (int) ($params['serviceid'] ?? 0);
+        if ($sid > 0) {
+            $curId = (int) Capsule::table('tblhosting')
+                ->join('tblclients', 'tblhosting.userid', '=', 'tblclients.id')
+                ->where('tblhosting.id', $sid)
+                ->value('tblclients.currency');
+            if ($curId > 0) {
+                return $curId;
+            }
+        }
+    } catch (\Throwable $e) {
+        // Non bloquant — repli ci-dessous
+    }
+    return 1; // Devise par défaut WHMCS
+}
+
+/**
  * Correspondance nameservers → onglet du guide DNS (cpanel / plesk / clientspace).
  *
  * REVENDEURS : remplacez ces nameservers par LES VÔTRES pour que l'onglet du
@@ -2694,12 +2721,23 @@ function smartermail_ClientArea(array $params): array
                     : ucfirst(str_replace(['_', '-'], ' ', $pmSlug));
             }
 
-            // Prix mensuel du produit — DANS le if ($svc) pour éviter le null access
+            // Prix mensuel du produit — DANS la devise DU CLIENT (repli devise
+            // par défaut). Auparavant figé sur currency=1 → estimé erroné pour un
+            // client facturé dans une autre devise. On lit d'abord le tarif de SA
+            // devise ; à défaut (produit non tarifé dans cette devise), repli id 1.
+            $clientCurId = _sm_clientCurrencyId($params);
             $pricing = Capsule::table('tblpricing')
                 ->where('relid', (int) $svc->packageid)
                 ->where('type', 'product')
-                ->where('currency', 1)
+                ->where('currency', $clientCurId)
                 ->value('monthly');
+            if ($pricing === null && $clientCurId !== 1) {
+                $pricing = Capsule::table('tblpricing')
+                    ->where('relid', (int) $svc->packageid)
+                    ->where('type', 'product')
+                    ->where('currency', 1)
+                    ->value('monthly');
+            }
             $basePrice = (float) ($pricing ?? 0);
         }
     } catch (\Throwable $e) {

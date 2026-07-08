@@ -682,7 +682,9 @@ $_lang = [
     //
     // Paramètres de substitution (sprintf) :
     //   inv_usage_label   : %1$s = utilisation en Go (formaté), %2$d = nb tranches,
-    //                       %3$d = Go par tranche, %4$s = prix unitaire
+    //                       %3$d = Go par tranche, %4$s = prix unitaire AVEC le
+    //                       symbole de devise du client (injecté par le hook —
+    //                       NE PAS ajouter de « $ » dans le gabarit).
     //   inv_usage_prefix  : préfixe affiché AVANT le détail d'utilisation sur la
     //                       deuxième ligne de la facture. Le "\n" (retour de ligne)
     //                       est ajouté côté PHP — ce préfixe suit immédiatement.
@@ -692,10 +694,11 @@ $_lang = [
     //   inv_combined_hdr  : en-tête pour les lignes EAS + MAPI combinés
     //   inv_eas_hdr       : en-tête pour les lignes ActiveSync (EAS) uniquement
     //   inv_mapi_hdr      : en-tête pour les lignes MAPI/Exchange uniquement
-    'inv_usage_label'  => '%1$s Go utilisé · %2$d Tranche(s) de %3$d Go × $%4$s',
+    'inv_usage_label'  => '%1$s Go utilisé · %2$d Tranche(s) de %3$d Go × %4$s',
     'inv_usage_prefix' => '» ',
-    // Ligne d'excédent de quota (mode 'bill') : %1$d = tranches excédentaires, %2$s = prix d'excédent
-    'inv_overage_label'=> 'Dépassement de quota : %1$d tranche(s) excédentaire(s) × $%2$s',
+    // Ligne d'excédent de quota (mode 'bill') : %1$d = tranches excédentaires,
+    // %2$s = prix d'excédent AVEC symbole de devise (injecté — pas de « $ » ici).
+    'inv_overage_label'=> 'Dépassement de quota : %1$d tranche(s) excédentaire(s) × %2$s',
     'inv_disabled_on'  => '(Désactivé le %s)',
     'inv_entry_prefix' => '- ',
     'inv_combined_hdr' => 'EAS + MAPI/Exchange :',

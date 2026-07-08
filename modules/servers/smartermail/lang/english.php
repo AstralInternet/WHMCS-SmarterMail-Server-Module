@@ -681,7 +681,9 @@ $_lang = [
     //
     // Placeholders:
     //   inv_usage_label   : %1$s = usage in GB (formatted), %2$d = tier count,
-    //                       %3$d = GB per tier, %4$s = unit price
+    //                       %3$d = GB per tier, %4$s = unit price WITH the client's
+    //                       currency symbol (injected by the hook — do NOT add a
+    //                       "$" in the template).
     //   inv_usage_prefix  : prefix shown BEFORE the usage detail on the second
     //                       line of the invoice. The "\n" (line break) is added
     //                       in PHP — this prefix follows immediately after it.
@@ -691,10 +693,11 @@ $_lang = [
     //   inv_combined_hdr  : header for combined EAS + MAPI invoice lines
     //   inv_eas_hdr       : header for ActiveSync (EAS)-only invoice lines
     //   inv_mapi_hdr      : header for MAPI/Exchange-only invoice lines
-    'inv_usage_label'  => '%1$s GB used · %2$d Tier(s) of %3$d GB × $%4$s',
+    'inv_usage_label'  => '%1$s GB used · %2$d Tier(s) of %3$d GB × %4$s',
     'inv_usage_prefix' => '» ',
     // Quota overage line (mode 'bill'): %1$d = extra tiers, %2$s = overage price
-    'inv_overage_label'=> 'Quota overage: %1$d extra tier(s) × $%2$s',
+    // WITH currency symbol (injected — do not add a "$" here).
+    'inv_overage_label'=> 'Quota overage: %1$d extra tier(s) × %2$s',
     'inv_disabled_on'  => '(Disabled on %s)',
     'inv_entry_prefix' => '- ',
     'inv_combined_hdr' => 'EAS + MAPI/Exchange:',
