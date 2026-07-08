@@ -4,12 +4,15 @@
 > **Périmètre :** ~17 900 lignes — PHP (smartermail.php 5021, hooks.php 1053, lib/ 4356), templates Smarty (5940), lang FR/EN (1553)
 > **Méthode :** audit multi-agents en 3 phases — 8 dimensions d'analyse en parallèle (chaque agent lit réellement le code), **contre-vérification adversariale** de chaque défaut majeur par 1-2 agents sceptiques indépendants (angles *correctitude* et *atteignabilité*), puis 5 volets de propositions (généricité, feuille de route, veille concurrentielle, CSS, GUI). 67 agents au total.
 > **Résultat :** 37 constats **CONFIRMÉS** par contre-vérification, 1 constat **RÉFUTÉ** (retiré, documenté en §3.9), 47 propositions priorisées.
+>
+> **⟳ Mise à jour 2026-07-08 :** remédiation menée jusqu'à la **v1.22.0** — voir la section **« 1bis · État d'avancement »** ci-dessous. Le code est implémenté et vérifié en lint ; la **validation fonctionnelle sur serveur de développement est prévue le 2026-07-09** (checklist : `CHECKLIST_TEST_bac_a_sable.md`).
 
 ---
 
 ## Sommaire
 
 1. [Synthèse exécutive](#1-synthèse-exécutive)
+   - [**1bis. État d'avancement de la remédiation** (mise à jour 2026-07-08)](#1bis-état-davancement-de-la-remédiation)
 2. [Partie I — Audit du module actuel](#2-partie-i--audit-du-module-actuel)
 3. [Partie II — Flexibilité multi-entreprise](#3-partie-ii--flexibilité-multi-entreprise)
 4. [Partie III — Fluidité client, CSS et GUI](#4-partie-iii--fluidité-client-css-et-gui)
@@ -41,6 +44,66 @@ Aucun de ces défauts n'est exploitable par un tiers ; ce sont des **défauts de
 1. **Audit complet** → Partie I. 37 défauts confirmés (1 critique, 12 élevés, le reste moyen/faible), aucun critique de sécurité. Le point structurel : `smartermail_ClientArea` (1085 lignes, 8 responsabilités) et une duplication systématique (validation mot de passe ×4 chemins incohérents, blocs EAS/MAPI ×2, résolution d'alias ×4).
 2. **Flexibilité multi-entreprise** → Partie II. Le cœur technique est déjà générique ; les blocages sont concentrés et bien délimités : marque Astral en dur (NS, exemples, onglet portail), `$` et devise ID 1 figés, admin 100 % francophone, quotas jamais bloquants (`maxSize=0` en dur), pas de `ChangePackage`, pas d'adoption de domaines existants. 21 propositions priorisées, dont 5 à effort trivial/faible.
 3. **Fluidité client / CSS / GUI** → Partie III. État des lieux chiffré : 854 lignes CSS dupliquées dans 5 templates, 96 couleurs hex sans aucune variable, ~30 fonctions JS copiées (avec **un bug réel de divergence** : le bouton « Générer » de la modale mot de passe d'edituser bloque la soumission), perte de saisie totale après erreur serveur, aucun message de succès. Plan de standardisation en 5 chantiers + 13 simplifications GUI, toutes réalisables en Smarty/CSS/JS vanilla.
+
+---
+
+# 1bis. État d'avancement de la remédiation
+
+> **Mise à jour : 2026-07-08 · version courante `1.22.0`** (audit initial réalisé sur 1.2.2).
+> Tout le code listé « ✅ Fait » est **implémenté et lint-clean**. La **validation
+> fonctionnelle sur serveur de développement est prévue le 2026-07-09** — voir
+> `CHECKLIST_TEST_bac_a_sable.md`. Rien n'a encore été validé en conditions réelles.
+
+Reprise de chaque item du **§5 (plan d'action global)** avec sa version de livraison :
+
+| §5 | Item | État | Version |
+|---|---|---|---|
+| P0-1 | Marquage « facturé » APRÈS succès `UpdateInvoice` | ✅ Fait | 1.2.3 |
+| P0-2 | Erreurs métier HTTP 200 + test retour `set*Enabled` | ✅ Fait | 1.2.3 |
+| P0-3 | Jamais de `disk_gb=0` facturable | ✅ Fait | 1.2.3 |
+| P0-4 | Verbosité des logs (mode debug) | ✅ Fait | 1.2.3 |
+| P0-5 | Bug bouton « Générer » mot de passe (edituser) | ✅ Fait | 1.2.3 |
+| P1-6 | Rollover `proto_usage` + dédup + hook `InvoiceCancelled` + purge | ✅ Fait | 1.3.0 / 1.4.1 |
+| P1-7 | Transport résilient (retry/backoff, cache tokens, timeouts) | ✅ Fait | 1.3.0 |
+| P1-8 | DNS fiable (statut `unknown`, cooldown, IDN, NS en cache) | ✅ Fait | 1.3.0 |
+| P1-9 | Résiliation + `UsageUpdate` robustes (404 idempotent) | ✅ Fait | 1.3.0 |
+| P1-10 | Politique mot de passe unifiée (non contournable) | ✅ Fait | 1.3.0 |
+| P2-11 | Quota bloquant + `ChangePackage` + **système de forfaits** | ✅ Fait | 1.5.0 + 1.17.0→1.22.0 |
+| P2-12 | Adoption de domaines existants | ⏳ À faire | — |
+| P2-13 | Dé-branding (NS/exemples) · devise client · facture en langue du client | ✅ Fait | 1.15.0 / 1.16.0 |
+| P2-13 | Admin en anglais (pivot i18n admin) | ⏳ À faire | — |
+| P2-14 | Vrai SSO webmail | ✅ Fait | 1.4.0 |
+| P2-14 | Courriel de bienvenue · `LoginLink` admin | ⏳ À faire | — |
+| P3-15 | Socle CSS/JS (`_sm_styles.css`, tokens, dark mode, `_sm_common.js`) | ✅ Fait | 1.6.0 |
+| P3-16 | Préservation saisie · flash succès · saisie inline · panneau DNS unifié | ✅ Fait | 1.7.0→1.13.0 |
+| P3-17 | Accessibilité (labels, ARIA, focus) + casses mobiles | ✅ Fait | 1.9.1 / 1.13.0 |
+| §6 | Répondeur automatique (réponse d'absence par boîte) | ✅ Fait | 1.14.0 |
+| §5-18 | Maintenance documentaire (README, index d'en-tête) | ⏳ Partiel | — |
+
+## Chantier « forfaits » (extension de P2-11 — pièce maîtresse de la revente)
+
+Forfaits **nommés et réutilisables**, gérés dans l'addon, référencés par les produits via
+`configoption24`, avec **repli 100 % byte-identique** pour les produits sans forfait
+(garanti par `tools/diag_packages.php`). Livré en 6 étapes :
+
+- **P0/P1** (1.17.0) — resolver + convertisseur legacy + tables `mod_sm_packages`/`mod_sm_settings` + dropdown `configoption24` + harnais byte-identique.
+- **P2** (1.18.0) — GUI addon à onglets (CRUD forfaits + réglages globaux).
+- **P3** (1.19.0) — bascule des consommateurs d'affichage/DNS + nameservers globaux.
+- **P4** (1.20.0 / 1.21.0) — provisioning, puis facturation (hook `InvoiceCreation` + estimé client).
+- **P5** (1.22.0) — enforcement mot de passe, règle `pwd_require_lower`, taille max/boîte, masquage EAS/MAPI global, bouton « convertir en forfait ».
+
+## Reste à faire (hors tests)
+
+- **P2-12** — Adoption de domaines existants (déverrouille le parc déjà équipé).
+- **P2-13** — Admin en anglais (pivot i18n côté admin).
+- **P2-14** — Courriel de bienvenue · `LoginLink` admin.
+- **P2 (divers)** — conversion FX des suppléments EAS/MAPI (multidevise) ; fonctions SmarterMail absentes (catch-all, listes de diffusion, quotas par défaut, anti-spam) ; rapports/alertes admin.
+- **§5-18** — rafraîchir `modules/README.md` + régénérer l'index d'en-tête de `smartermail.php`.
+
+## ⚠️ Bloquant avant mise en production (à valider en test)
+
+- **Répondeur — mapping `externalAudience`** (`0`=None / `1`=Contacts / `2`=All) : déduit de l'enum OOF Exchange + l'UI SmarterMail, **jamais confirmé sur serveur réel** (§6.6). Correctif en **un seul point** si divergence (constantes `AR_AUDIENCE_*`, `SmarterMailApi.php`).
+- **Facturation sur forfait** : factures WHMCS 9.0 **immuables** → comparer les lignes/montants avant-après pour un produit lié à un forfait ET un produit hérité, avant tout passage en prod.
 
 ---
 
