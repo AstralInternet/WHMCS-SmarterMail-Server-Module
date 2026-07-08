@@ -130,7 +130,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
         {/foreach}
       </div>
       <div class="sm-inline-add">
-        <input type="text" id="sm-alias-input" placeholder="{$lang.eu_alias_ph}"
+        <input type="text" id="sm-alias-input" aria-label="{$lang.eu_alias_ph}" placeholder="{$lang.eu_alias_ph}"
                pattern="[a-zA-Z0-9._-]+" autocomplete="off"
                data-errchars="{$lang.eu_alias_err_chars}" data-errdup="{$lang.eu_alias_err_dup}">
         <span class="sm-inline-suffix">@{$domain|escape}</span>
@@ -164,7 +164,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
         {/foreach}
       </div>
       <div class="sm-inline-add">
-        <input type="text" id="sm-fwd-input" placeholder="{$lang.eu_fwd_ph}"
+        <input type="text" id="sm-fwd-input" aria-label="{$lang.eu_fwd_ph}" placeholder="{$lang.eu_fwd_ph}"
                autocomplete="off"
                data-errinvalid="{$lang.eu_fwd_err_invalid}" data-errdup="{$lang.eu_fwd_err_dup}">
         <button type="button" class="sm-inline-btn" onclick="smAddFwd()" title="{$lang.eu_btn_add}"><i class="fa fa-plus"></i></button>
@@ -194,7 +194,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
 
       {* Gauche — limite de stockage *}
       <div>
-        <label class="sm-form-label">
+        <label class="sm-form-label" for="field-size">
           {$lang.eu_disk_limit}
           <span class="sm-form-hint">— {$lang.zero_unlimited}</span>
         </label>
@@ -380,7 +380,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
       <input type="hidden" name="selectuser"   value="{$username|escape}">
       <div class="sm-mbody">
 <div style="margin-bottom:14px;">
-          <label class="sm-mlabel">{$lang.pwd_new_label}</label>
+          <label class="sm-mlabel" for="sm-pwd-input">{$lang.pwd_new_label}</label>
           <div class="sm-ig">
             <input type="password" id="sm-pwd-input" name="password"
                    placeholder="{$lang.pwd_new_label}" autocomplete="new-password">
@@ -397,7 +397,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
         </div>
         
         <div style="margin-bottom:10px;">
-          <label class="sm-mlabel">{$lang.pwd_confirm_label}</label>
+          <label class="sm-mlabel" for="sm-pwd-confirm">{$lang.pwd_confirm_label}</label>
           <input type="password" class="sm-minput-full" id="sm-pwd-confirm"
                  placeholder="{$lang.pwd_confirm_label}" autocomplete="new-password">
         </div>

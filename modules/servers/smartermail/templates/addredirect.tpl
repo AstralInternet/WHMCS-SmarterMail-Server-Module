@@ -107,7 +107,7 @@
       </div>
 
       <div style="margin-bottom:4px;">
-        <label class="sm-form-label">
+        <label class="sm-form-label" for="field-aliasname">
           {$lang.add_redirect_source_label}
           <span style="color:#e74c3c;">*</span>
         </label>
@@ -153,7 +153,7 @@
       </div>
 
       <div class="sm-inline-add">
-        <input type="text" id="sm-target-input" placeholder="{$lang.add_redirect_modal_ph}"
+        <input type="text" id="sm-target-input" aria-label="{$lang.add_redirect_modal_label}" placeholder="{$lang.add_redirect_modal_ph}"
                autocomplete="off"
                data-errinvalid="{$lang.err_redirect_invalid_target_js|escape}" data-errdup="{$lang.err_redirect_dup_target|escape}">
         <button type="button" class="sm-inline-btn" onclick="smAddTarget()" title="{$lang.add_redirect_dest_add}"><i class="fa fa-plus"></i></button>

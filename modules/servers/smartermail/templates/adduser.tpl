@@ -79,7 +79,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
     <div class="sm-card-body">
 
       <div style="margin-bottom:14px;">
-        <label class="sm-form-label">{$lang.add_user_lbl_email} <span style="color:#e74c3c;">*</span></label>
+        <label class="sm-form-label" for="field-username">{$lang.add_user_lbl_email} <span style="color:#e74c3c;">*</span></label>
         <div class="sm-email-row">
           <input type="text" name="username" id="field-username"
                  value="{$prefillUsername|escape}"
@@ -91,7 +91,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
       </div>
 
       <div>
-        <label class="sm-form-label">{$lang.add_user_lbl_pwd} <span style="color:#e74c3c;">*</span></label>
+        <label class="sm-form-label" for="sm-pwd-input">{$lang.add_user_lbl_pwd} <span style="color:#e74c3c;">*</span></label>
         <div class="sm-ig">
           <input type="password" name="password" id="sm-pwd-input" autocomplete="new-password"
                  placeholder="{$lang.pwd_new_label}" required>
@@ -102,7 +102,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
         </div>
         <div class="sm-pwd-strength"><div class="sm-pwd-bar" id="sm-pwd-bar" style="width:0;background:#e74c3c;"></div></div>
         <div style="margin-top:10px;">
-          <label class="sm-form-label">{$lang.pwd_confirm_label}</label>
+          <label class="sm-form-label" for="sm-pwd-confirm">{$lang.pwd_confirm_label}</label>
           <input type="password" class="sm-minput-full" id="sm-pwd-confirm"
                  placeholder="{$lang.pwd_confirm_label}" autocomplete="new-password">
         </div>
@@ -131,7 +131,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
           <span class="sm-pills-empty">{$lang.eu_alias_empty}</span>
         </div>
         <div class="sm-inline-add">
-          <input type="text" id="sm-alias-input" placeholder="{$lang.eu_alias_ph_ex}"
+          <input type="text" id="sm-alias-input" aria-label="{$lang.eu_alias_ph_ex}" placeholder="{$lang.eu_alias_ph_ex}"
                  pattern="[a-zA-Z0-9._-]+" autocomplete="off"
                  data-errchars="{$lang.eu_alias_err_chars}" data-errdup="{$lang.eu_alias_err_dup}">
           <span class="sm-inline-suffix">@{$domain|escape}</span>
@@ -150,7 +150,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
           <span class="sm-pills-empty">{$lang.eu_fwd_empty}</span>
         </div>
         <div class="sm-inline-add">
-          <input type="text" id="sm-fwd-input" placeholder="{$lang.eu_fwd_ph_ex}"
+          <input type="text" id="sm-fwd-input" aria-label="{$lang.eu_fwd_ph_ex}" placeholder="{$lang.eu_fwd_ph_ex}"
                  autocomplete="off"
                  data-errinvalid="{$lang.eu_fwd_err_invalid}" data-errdup="{$lang.eu_fwd_err_dup}">
           <button type="button" class="sm-inline-btn" onclick="smAddFwd()" title="{$lang.eu_btn_add}"><i class="fa fa-plus"></i></button>
@@ -174,10 +174,10 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
 
         {* Gauche : limite d'espace *}
         <div>
-          <label class="sm-form-label">
+          <label class="sm-form-label" for="field-size">
             {$lang.eu_disk_limit} <span class="sm-form-hint">— {$lang.zero_unlimited}</span>
           </label>
-          <input type="number" class="sm-number" name="mailboxsize_mb" value="{$prefillSize|default:0}" min="0">
+          <input type="number" class="sm-number" name="mailboxsize_mb" id="field-size" value="{$prefillSize|default:0}" min="0">
         </div>
 
         {* Droite : protocoles *}

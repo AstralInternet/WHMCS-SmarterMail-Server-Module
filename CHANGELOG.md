@@ -12,7 +12,7 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 
 ## [1.13.0] - 2026-07-08
 
-### Ajouté — accessibilité des modales (Piste B, ♿)
+### Ajouté — accessibilité : modales + labels de formulaire (Piste B, ♿)
 
 Toutes les modales du module sont désormais correctement exposées au clavier et
 aux technologies d'assistance, via le kit modale partagé (`_sm_common.js`) — sans
@@ -25,9 +25,13 @@ modifier chaque modale une par une :
 - **Restauration du focus** : à la fermeture, le focus revient sur l'élément qui
   avait ouvert la modale. Le focus initial va au premier champ éditable, sinon au
   premier élément focusable.
+- **Labels de formulaire associés** (`for` / `id`) : champs de création et
+  d'édition de boîte (nom d'utilisateur, mot de passe, confirmation, taille) et
+  de redirection (nom d'alias) ; `aria-label` ajouté aux nouveaux champs de
+  saisie inline (alias / redirections / cibles).
 
-*Reste de la passe accessibilité (incrément suivant) : association explicite des
-labels de formulaire (`for` / `id`) et revue des contrastes.*
+*Reste de la passe accessibilité : labels des champs copiables DNS (lecture seule)
+et du générateur DMARC, + revue des contrastes (nécessite un rendu visuel).*
 
 ## [1.12.0] - 2026-07-08
 
