@@ -631,8 +631,8 @@
           <span style="font-size:13px;color:#999;margin-left:4px;">{$lang.dash_storage_go} {$lang.dash_storage_used}</span>
           {if $basePrice > 0}
           <span style="display:inline-block;margin-left:12px;font-size:13px;color:#555;">
-            <strong style="color:#222;">${$estimatedPrice|number_format:2}</strong>
-            <span style="color:#aaa;font-size:11px;"> ({$tiers} {$lang.dash_storage_tiers}{if $tiers > 1}s{/if} {$lang.dash_storage_of} {$gbPerTier} {$lang.dash_storage_go} × ${$basePrice|number_format:2})</span>
+            <strong style="color:#222;">{$currencySymbol}{$estimatedPrice|number_format:2}</strong>
+            <span style="color:#aaa;font-size:11px;"> ({$tiers} {$lang.dash_storage_tiers}{if $tiers > 1}s{/if} {$lang.dash_storage_of} {$gbPerTier} {$lang.dash_storage_go} × {$currencySymbol}{$basePrice|number_format:2})</span>
           </span>
           {/if}
         </div>
@@ -682,8 +682,8 @@
             {$easOnlyCount}
             {if $easPrice > 0}
               <small style="color:#aaa;font-weight:400;">
-                &mdash; ${$easOnlyCost|number_format:2}{$lang.per_month}
-                <span style="color:#ccc;">(${$easPrice|number_format:2} × {$easOnlyCount})</span>
+                &mdash; {$currencySymbol}{$easOnlyCost|number_format:2}{$lang.per_month}
+                <span style="color:#ccc;">({$currencySymbol}{$easPrice|number_format:2} × {$easOnlyCount})</span>
               </small>
             {/if}
           </div>
@@ -698,8 +698,8 @@
             {$mapiOnlyCount}
             {if $mapiPrice > 0}
               <small style="color:#aaa;font-weight:400;">
-                &mdash; ${$mapiOnlyCost|number_format:2}{$lang.per_month}
-                <span style="color:#ccc;">(${$mapiPrice|number_format:2} × {$mapiOnlyCount})</span>
+                &mdash; {$currencySymbol}{$mapiOnlyCost|number_format:2}{$lang.per_month}
+                <span style="color:#ccc;">({$currencySymbol}{$mapiPrice|number_format:2} × {$mapiOnlyCount})</span>
               </small>
             {/if}
           </div>
@@ -714,8 +714,8 @@
             {$combinedCount}
             {if $effectiveBundlePrice > 0}
               <small style="color:#aaa;font-weight:400;">
-                &mdash; ${$combinedCost|number_format:2}{$lang.per_month}
-                <span style="color:#ccc;">(${$effectiveBundlePrice|number_format:2} × {$combinedCount})</span>
+                &mdash; {$currencySymbol}{$combinedCost|number_format:2}{$lang.per_month}
+                <span style="color:#ccc;">({$currencySymbol}{$effectiveBundlePrice|number_format:2} × {$combinedCount})</span>
               </small>
             {/if}
           </div>
@@ -726,7 +726,7 @@
         {if $totalProtoCost > 0}
         <div class="sm-stat-row" style="border-top:1px solid #eee;margin-top:4px;padding-top:4px;">
           <div class="sm-stat-label" style="color:#555;font-weight:600;"><i class="fa fa-calculator"></i> {$lang.stat_total_proto}</div>
-          <div class="sm-stat-value" style="font-weight:600;">${$totalProtoCost|number_format:2}{$lang.per_month}</div>
+          <div class="sm-stat-value" style="font-weight:600;">{$currencySymbol}{$totalProtoCost|number_format:2}{$lang.per_month}</div>
         </div>
         {/if}
 
@@ -752,7 +752,7 @@
           <div class="sm-info-label">{$lang.svc_amount}</div>
           <div class="sm-info-value">
             {if $totalEstimated > 0}
-              <strong>${$totalEstimated|number_format:2}{$lang.per_month}</strong>
+              <strong>{$currencySymbol}{$totalEstimated|number_format:2}{$lang.per_month}</strong>
               {* Bouton (i) — ouvre le popup de détail de facturation *}
               <button type="button"
                       class="sm-billing-detail-btn"
@@ -762,12 +762,12 @@
               </button>
               {if $totalProtoCost > 0}
               <div style="font-size:11px;color:#aaa;margin-top:2px;line-height:1.5;">
-                Stockage : ${$estimatedPrice|number_format:2}
-                + Protocoles : ${$totalProtoCost|number_format:2}
+                Stockage : {$currencySymbol}{$estimatedPrice|number_format:2}
+                + Protocoles : {$currencySymbol}{$totalProtoCost|number_format:2}
               </div>
               {/if}
             {elseif $svcAmount > 0}
-              ${$svcAmount|number_format:2}{$lang.per_month}
+              {$currencySymbol}{$svcAmount|number_format:2}{$lang.per_month}
             {else}
               {$lang.na}
             {/if}
@@ -1861,9 +1861,9 @@
           <span class="sm-bd-email">
             {$tiers} {$lang.dash_storage_tiers}{if $tiers > 1}s{/if}
             {$lang.dash_storage_of} {$gbPerTier} {$lang.dash_storage_go}
-            × ${$basePrice|number_format:2}
+            × {$currencySymbol}{$basePrice|number_format:2}
           </span>
-          <span class="sm-bd-price">${$estimatedPrice|number_format:2}{$lang.per_month}</span>
+          <span class="sm-bd-price">{$currencySymbol}{$estimatedPrice|number_format:2}{$lang.per_month}</span>
         </div>
       </div>
       {/if}
@@ -1904,7 +1904,7 @@
                 {$line.deleted_at|date_format:'%d %b %y'}
               </span>
             {/if}
-            <span class="sm-bd-price">${$line.price|number_format:2}</span>
+            <span class="sm-bd-price">{$currencySymbol}{$line.price|number_format:2}</span>
           </div>
           {/foreach}
         </div>
@@ -1929,7 +1929,7 @@
                 {$line.deleted_at|date_format:'%d %b %y'}
               </span>
             {/if}
-            <span class="sm-bd-price">${$line.price|number_format:2}</span>
+            <span class="sm-bd-price">{$currencySymbol}{$line.price|number_format:2}</span>
           </div>
           {/foreach}
         </div>
@@ -1954,7 +1954,7 @@
                 {$line.deleted_at|date_format:'%d %b %y'}
               </span>
             {/if}
-            <span class="sm-bd-price">${$line.price|number_format:2}</span>
+            <span class="sm-bd-price">{$currencySymbol}{$line.price|number_format:2}</span>
           </div>
           {/foreach}
         </div>
@@ -1971,7 +1971,7 @@
       {if $totalEstimated > 0}
       <div class="sm-billing-detail-total">
         <span>{$lang.proto_billing_total}</span>
-        <span>${$totalEstimated|number_format:2}{$lang.per_month}</span>
+        <span>{$currencySymbol}{$totalEstimated|number_format:2}{$lang.per_month}</span>
       </div>
       {/if}
 

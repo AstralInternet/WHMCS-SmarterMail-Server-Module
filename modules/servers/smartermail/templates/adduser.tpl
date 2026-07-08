@@ -248,7 +248,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
       <p class="sm-mdesc">{$lang.info_eas_desc}</p>
       {if $easPrice > 0}
       <div style="margin-top:10px;padding:8px 12px;background:#e8eaf6;border-radius:4px;font-size:12px;color:#3949ab;font-weight:600;">
-        <i class="fa fa-tag"></i> +{$easPrice|number_format:2} $/mois
+        <i class="fa fa-tag"></i> +{$easPrice|number_format:2} {$currencySymbol}{$lang.per_month}
       </div>
       {/if}
     </div>
@@ -267,7 +267,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
       <p class="sm-mdesc">{$lang.info_mapi_desc}</p>
       {if $mapiPrice > 0}
       <div style="margin-top:10px;padding:8px 12px;background:#e8eaf6;border-radius:4px;font-size:12px;color:#3949ab;font-weight:600;">
-        <i class="fa fa-tag"></i> +{$mapiPrice|number_format:2} $/mois
+        <i class="fa fa-tag"></i> +{$mapiPrice|number_format:2} {$currencySymbol}{$lang.per_month}
       </div>
       {/if}
     </div>
@@ -280,6 +280,8 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
 var SM_EAS_PRICE    = {$easPrice|default:0};
 var SM_MAPI_PRICE   = {$mapiPrice|default:0};
 var SM_BUNDLE_PRICE = {$bundlePrice|default:0};
+var SM_CURRENCY  = '{$currencySymbol|default:"$"|escape:"javascript"}';
+var SM_PER_MONTH = '{$lang.per_month|escape:"javascript"}';
 var SM_DOMAIN       = '{$domain|escape:"javascript"}';
 var SM_DOMAIN_BASE  = '{$domainBase|escape:"javascript"}';
 var SM_PWD_MIN      = {$pwdMinLength|default:8};
@@ -408,15 +410,15 @@ function smUpdatePrice() {
     single.style.display = 'none'; bundle.style.display = 'block';
     var bp = SM_BUNDLE_PRICE > 0 ? SM_BUNDLE_PRICE : (SM_EAS_PRICE + SM_MAPI_PRICE);
     var sv = (SM_EAS_PRICE + SM_MAPI_PRICE) - bp;
-    var html = '<i class="fa fa-tag"></i> ' + SM_LANG_PRICE_BUNDLE + '\u00a0: <span class="sm-price-badge bundle">+'+bp.toFixed(2)+' $/mois</span>';
-    if (sv > 0.005) html += ' <span class="sm-price-badge save">' + SM_LANG_PRICE_SAVING + ' '+sv.toFixed(2)+' $</span>';
+    var html = '<i class="fa fa-tag"></i> ' + SM_LANG_PRICE_BUNDLE + '\u00a0: <span class="sm-price-badge bundle">+'+bp.toFixed(2)+' '+SM_CURRENCY+SM_PER_MONTH+'</span>';
+    if (sv > 0.005) html += ' <span class="sm-price-badge save">' + SM_LANG_PRICE_SAVING + ' '+sv.toFixed(2)+' '+SM_CURRENCY+'</span>';
     bundle.innerHTML = html;
   } else {
     bundle.style.display = 'none'; single.style.display = 'block';
     var price = easOn ? SM_EAS_PRICE : SM_MAPI_PRICE;
     var label = easOn ? 'ActiveSync' : 'MAPI / Exchange';
     single.innerHTML = price > 0
-      ? '<i class="fa fa-tag"></i> '+label+'\u00a0: <span class="sm-price-badge">+'+price.toFixed(2)+' $/mois</span>'
+      ? '<i class="fa fa-tag"></i> '+label+'\u00a0: <span class="sm-price-badge">+'+price.toFixed(2)+' '+SM_CURRENCY+SM_PER_MONTH+'</span>'
       : '<i class="fa fa-tag"></i> '+label+'\u00a0: <span class="sm-price-badge">' + SM_LANG_PRICE_INCL + '</span>';
   }
 }

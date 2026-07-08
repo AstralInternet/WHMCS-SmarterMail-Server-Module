@@ -136,7 +136,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.14.0',
+        'MODVersion' => '1.15.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -470,7 +470,7 @@ function smartermail_ConfigOptions(): array
         // Si l'admin laisse les deux options vide, le module utilise par
         // défaut $params['serverhostname'] (hostname configuré dans le
         // serveur WHMCS). Override possible si le hostname différait pour
-        // l'autodiscover (ex: cname dédié comme mail.astralinternet.com).
+        // l'autodiscover (ex: cname dédié comme mail.example.com).
         'configoption19' => [
             'FriendlyName' => 'Hôte Autodiscover attendu',
             'Type'         => 'text',
@@ -480,7 +480,7 @@ function smartermail_ConfigOptions(): array
                 'Cible attendue pour l\'enregistrement CNAME ou A',
                 '"autodiscover.{domaine}". Vide = utilise le hostname',
                 'du serveur WHMCS (champ "Hostname" de tblservers).',
-                'Ex: mail.astralinternet.com',
+                'Ex: mail.example.com',
             ]),
         ],
         'configoption20' => [
@@ -492,7 +492,7 @@ function smartermail_ConfigOptions(): array
                 'Cible attendue pour l\'enregistrement SRV',
                 '"_autodiscover._tcp.{domaine}" (port 443 forcé).',
                 'Vide = utilise le hostname du serveur WHMCS.',
-                'Ex: mail.astralinternet.com',
+                'Ex: mail.example.com',
             ]),
         ],
 
@@ -522,7 +522,7 @@ function smartermail_ConfigOptions(): array
             'Description'  => implode(' ', [
                 'Adresse pré-remplie dans le champ "Send Aggregate Reports To"',
                 'du Générateur DMARC. Le client peut la modifier avant copie.',
-                'Ex: dmarc-reports@astralinternet.com',
+                'Ex: dmarc-reports@example.com',
             ]),
         ],
         'configoption23' => [
@@ -2281,6 +2281,62 @@ function _sm_flashMessage(array $lang): string
 }
 
 /**
+ * Symbole de devise à afficher dans l'espace client. Utilise la devise du CLIENT
+ * (via son service), avec repli sur la devise par défaut WHMCS puis « $ ». Ainsi
+ * un revendeur en €/£/etc. voit son propre symbole sans configuration.
+ *
+ * @param array $params Paramètres WHMCS (serviceid requis)
+ * @return string       Ex. « $ », « € », « £ »
+ */
+function _sm_currencySymbol(array $params): string
+{
+    try {
+        $sid = (int) ($params['serviceid'] ?? 0);
+        $cur = null;
+        if ($sid > 0) {
+            $curId = (int) Capsule::table('tblhosting')
+                ->join('tblclients', 'tblhosting.userid', '=', 'tblclients.id')
+                ->where('tblhosting.id', $sid)
+                ->value('tblclients.currency');
+            if ($curId > 0) {
+                $cur = Capsule::table('tblcurrencies')->where('id', $curId)->first();
+            }
+        }
+        if (!$cur) {
+            $cur = Capsule::table('tblcurrencies')->where('default', 1)->first();
+        }
+        if ($cur) {
+            $sym = trim((string) ($cur->prefix ?? ''));
+            if ($sym === '') $sym = trim((string) ($cur->suffix ?? ''));
+            if ($sym !== '') return $sym;
+        }
+    } catch (\Throwable $e) {
+        // Non bloquant — repli ci-dessous
+    }
+    return '$';
+}
+
+/**
+ * Correspondance nameservers → onglet du guide DNS (cpanel / plesk / clientspace).
+ *
+ * REVENDEURS : remplacez ces nameservers par LES VÔTRES pour que l'onglet du
+ * guide se pré-sélectionne selon les NS du domaine du client. Tout NS non listé
+ * ici → onglet « générique » (instructions universelles, toujours valides). Ceci
+ * n'affecte QUE l'onglet pré-sélectionné — aucune conséquence fonctionnelle.
+ *
+ * @return array<string,string[]>  ['cpanel'=>[...], 'plesk'=>[...], 'clientspace'=>[...]]
+ */
+function _sm_providerNameservers(): array
+{
+    return [
+        'cpanel'      => ['ns3.astralinternet.com', 'ns4.astralinternet.com',
+                          'ns3.hosting-management.com', 'ns4.hosting-management.com'],
+        'plesk'       => ['ns20.astralinternet.com', 'ns21.astralinternet.com'],
+        'clientspace' => ['zone1.astralinternet.com', 'zone2.astralinternet.com', 'zone3.astralinternet.com'],
+    ];
+}
+
+/**
  * Page d'accueil de l'espace client — Tableau de bord du service courriel.
  *
  * Appelé quand un client clique sur son service dans l'espace client WHMCS.
@@ -3259,15 +3315,9 @@ function smartermail_ClientArea(array $params): array
     // échoue, on bascule sur l'onglet "générique" — comportement sûr.
     $domainNsDefault = 'generic'; // Valeur de repli si détection impossible
 
-    // Nameservers cPanel hébergés sur infrastructure Astral Internet / Hosting Management
-    $nsCpanel = ['ns3.astralinternet.com', 'ns4.astralinternet.com',
-                 'ns3.hosting-management.com', 'ns4.hosting-management.com'];
-
-    // Nameservers Plesk hébergés sur infrastructure Astral Internet
-    $nsPlesk  = ['ns20.astralinternet.com', 'ns21.astralinternet.com'];
-
-    // Nameservers de l'espace client Astral Internet (zone DNS gérée directement)
-    $nsClient = ['zone1.astralinternet.com', 'zone2.astralinternet.com', 'zone3.astralinternet.com'];
+    // Correspondance NS → onglet du guide DNS (personnalisable par revendeur :
+    // voir _sm_providerNameservers). Sinon onglet « générique ».
+    $nsMap = _sm_providerNameservers();
 
     try {
         // (P1.3) Récupérer les NS via le CACHE DNS partagé au lieu d'un lookup live
@@ -3280,19 +3330,10 @@ function smartermail_ClientArea(array $params): array
         // Extraire et normaliser les noms de serveurs
         $nsNames = array_map('strtolower', array_column($nsRecords, 'target'));
 
-        // Parcourir les NS trouvés et identifier le type de panneau
+        // Identifier l'onglet selon les NS trouvés (premier match gagne).
         foreach ($nsNames as $ns) {
-            if (in_array($ns, $nsCpanel, true)) {
-                $domainNsDefault = 'cpanel';
-                break; // Premier match suffit
-            }
-            if (in_array($ns, $nsPlesk, true)) {
-                $domainNsDefault = 'plesk';
-                break;
-            }
-            if (in_array($ns, $nsClient, true)) {
-                $domainNsDefault = 'clientspace';
-                break;
+            foreach ($nsMap as $tab => $list) {
+                if (in_array($ns, $list, true)) { $domainNsDefault = $tab; break 2; }
             }
         }
     } catch (\Throwable $e) {
@@ -3364,6 +3405,7 @@ function smartermail_ClientArea(array $params): array
             'tiers'          => $tiers,
             'basePrice'      => $basePrice,
             'estimatedPrice' => $estimatedPrice,
+            'currencySymbol' => _sm_currencySymbol($params),
             // (Étape 4) Quota disque — jauge + bannière (quotaGb=0 → masqué)
             'quotaGb'            => (int) $charge['quota']['gb'],
             'quotaMode'          => (string) $charge['quota']['mode'],
@@ -3970,6 +4012,7 @@ function smartermail_adduserpage(array $params): array
             'serviceid'        => $params['serviceid'],
             'canEAS'           => ($params['configoption14'] ?? 'on') === 'on',  // configoption14 : offre EAS activée
             'canMAPI'          => ($params['configoption15'] ?? 'on') === 'on',  // configoption15 : offre MAPI activée
+            'currencySymbol'   => _sm_currencySymbol($params),
             'easPrice'         => (float) ($params['configoption2'] ?? 0),
             'mapiPrice'        => (float) ($params['configoption3'] ?? 0),
             'bundlePrice'      => (float) ($params['configoption4'] ?? 0),
@@ -4332,6 +4375,7 @@ function smartermail_edituserpage(array $params): array
             'mapiWas'          => $mapiWas,
             'canEAS'           => ($params['configoption14'] ?? 'on') === 'on',  // configoption14 : offre EAS activée
             'canMAPI'          => ($params['configoption15'] ?? 'on') === 'on',  // configoption15 : offre MAPI activée
+            'currencySymbol'   => _sm_currencySymbol($params),
             'easPrice'         => (float) ($params['configoption2'] ?? 0),
             'mapiPrice'        => (float) ($params['configoption3'] ?? 0),
             'bundlePrice'      => (float) ($params['configoption4'] ?? 0),  // Prix combiné EAS+MAPI (manquait — causait SM_BUNDLE_PRICE=0)

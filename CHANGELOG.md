@@ -10,6 +10,29 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.15.0] - 2026-07-08
+
+### Modifié — devise & dé-branding pour la revente (Phase 2, généricité)
+
+Premiers pas vers un module revendable à d'autres hébergeurs, **sans changer le
+provisioning**.
+
+- **Devise dynamique** : tous les prix affichés dans l'espace client (estimé du
+  tableau de bord, coûts par protocole, détail de facturation, estimés
+  d'ajout / édition de boîte) utilisent désormais le **symbole de la devise du
+  client** (via WHMCS ; repli sur la devise par défaut puis `$`) au lieu du `$`
+  codé en dur — helper `_sm_currencySymbol()` + global JS `SM_CURRENCY`. Le
+  suffixe « /mois » réutilise la clé i18n existante `per_month`.
+- **Dé-branding** : les nameservers qui pré-sélectionnent l'onglet du guide DNS
+  sont extraits dans un helper **documenté et personnalisable**
+  (`_sm_providerNameservers()`) — un revendeur y renseigne SES nameservers,
+  sinon onglet « générique ». Exemples de configuration `astralinternet.com`
+  remplacés par `example.com`.
+
+*Reste de la Phase 2 (chantiers séparés, plus risqués ou lourds) : adoption de
+domaines existants (change le provisioning), courriel de bienvenue, LoginLink
+admin, fonctions SmarterMail (catch-all, listes…), rapports admin.*
+
 ## [1.14.0] - 2026-07-08
 
 ### Ajouté — répondeur automatique / réponse d'absence par boîte (Phase 4)
