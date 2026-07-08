@@ -531,6 +531,16 @@ function _sm_billing_productForm($product, array $s, int $activeCount, string $c
     $h .= ' <span class="text-muted">Pousse <code>maxSize</code> au serveur (mode « bloquer » uniquement ; sinon illimité).</span>';
     $h .= '</form>';
 
+    // Convertir la config héritée de ce produit en forfait réutilisable (+ liaison).
+    $h .= '<form method="post" action="addonmodules.php?module=smartermail_billing" '
+        . 'onsubmit="return confirm(\'Créer un forfait depuis la configuration actuelle de ce produit, et le lier si aucun forfait n est encore sélectionné ?\');" style="margin-top:6px;">';
+    $h .= '<input type="hidden" name="csrf" value="' . _sm_billing_h($csrf) . '">';
+    $h .= '<input type="hidden" name="action" value="convertproduct">';
+    $h .= '<input type="hidden" name="product_id" value="' . $pid . '">';
+    $h .= '<button type="submit" class="btn btn-default btn-sm"><i class="fas fa-magic"></i> Convertir en forfait</button>';
+    $h .= ' <span class="text-muted">Crée un forfait reflétant les options actuelles et le sélectionne pour ce produit.</span>';
+    $h .= '</form>';
+
     return $h . '</div></div>';
 }
 
@@ -559,6 +569,93 @@ function _sm_billing_productsView(string $csrf): string
         $html .= _sm_billing_productForm($p, $s, $activeCount, $csrf);
     }
     return $html;
+}
+
+/**
+ * Convertit un produit (config héritée : configoptions + mod_sm_product_settings)
+ * en un FORFAIT réutilisable, puis lie le produit au nouveau forfait (via
+ * configoption24) UNIQUEMENT s'il n'en a pas déjà un — ne jamais écraser un choix.
+ *
+ * Les offres EAS/MAPI sont enregistrées à leur valeur BRUTE (co14/co15), sans le
+ * repli de disponibilité globale (le forfait garde l'intention du produit).
+ *
+ * @param  int $productId
+ * @return int Id du nouveau forfait (>0) ou 0 en cas d'échec.
+ */
+function _sm_billing_convertProduct(int $productId): int
+{
+    if ($productId <= 0) {
+        return 0;
+    }
+    try {
+        $p = Capsule::table('tblproducts')
+            ->where('id', $productId)
+            ->where('servertype', 'smartermail')
+            ->first();
+        if (!$p) {
+            return 0;
+        }
+
+        $co = [];
+        for ($i = 1; $i <= 24; $i++) {
+            $k = 'configoption' . $i;
+            $co[$k] = $p->$k ?? null;
+        }
+
+        // Config normalisée (champs non-offre + sous-forme disque via product_settings).
+        $norm = _sm_legacyConfigToPackage($co, ['pid' => $productId]);
+        $plan = ($norm['overage_mode'] === 'block')
+            ? 'blocked'
+            : (($norm['overage_mode'] === 'bill') ? 'usage_bill' : 'usage_notify');
+
+        $data = [
+            'name'                   => mb_substr('Converti — ' . (string) $p->name, 0, 190),
+            'offer_eas'              => (($co['configoption14'] ?? 'on') === 'on') ? 1 : 0,
+            'offer_mapi'             => (($co['configoption15'] ?? 'on') === 'on') ? 1 : 0,
+            'price_eas'              => $norm['price_eas'],
+            'price_mapi'             => $norm['price_mapi'],
+            'price_bundle'           => $norm['price_bundle'],
+            'billing_threshold_days' => (int) ($co['configoption16'] ?? 0),
+            'gb_per_tier'            => max(1, (int) ($co['configoption1'] ?? 10)),
+            'domain_path'            => $norm['domain_path'],
+            'outbound_ip'            => $norm['outbound_ip'],
+            'max_users'              => $norm['max_users'],
+            'max_domain_aliases'     => $norm['max_domain_aliases'],
+            'delete_on_terminate'    => $norm['delete_on_terminate'] ? 1 : 0,
+            'pwd_min_len'            => $norm['pwd_min_len'],
+            'pwd_require_upper'      => $norm['pwd_require_upper'] ? 1 : 0,
+            'pwd_require_lower'      => 0,
+            'pwd_require_digit'      => $norm['pwd_require_digit'] ? 1 : 0,
+            'pwd_require_special'    => $norm['pwd_require_special'] ? 1 : 0,
+            'spf_primary'            => $norm['spf_primary'],
+            'spf_secondary'          => $norm['spf_secondary'],
+            'autodiscover_host'      => $norm['autodiscover_host'],
+            'srv_target'             => $norm['srv_target'],
+            'dmarc_check'            => $norm['dmarc_check'] ? 1 : 0,
+            'dmarc_rua'              => $norm['dmarc_rua'],
+            'dmarc_policy'           => $norm['dmarc_policy'],
+            'plan_type'              => $plan,
+            'quota_gb'               => $norm['quota_gb'],
+            'max_mailbox_size_gb'    => 0,
+            'overage_price'          => $norm['overage_price'],
+            'notify_threshold_pct'   => $norm['notify_threshold_pct'],
+        ];
+
+        $newId = _sm_savePackage(null, $data);
+        if ($newId <= 0) {
+            return 0;
+        }
+
+        // Lier le produit au forfait SEULEMENT s'il n'en référence pas déjà un.
+        if (_sm_parsePackageId((string) ($co['configoption24'] ?? '')) <= 0) {
+            Capsule::table('tblproducts')->where('id', $productId)->update(['configoption24' => (string) $newId]);
+        }
+        logActivity('SmarterMail [forfaits] Produit #' . $productId . ' converti en forfait #' . $newId . '.');
+        return $newId;
+    } catch (\Throwable $e) {
+        logActivity('SmarterMail [forfaits] conversion produit #' . $productId . ' échouée : ' . $e->getMessage());
+        return 0;
+    }
 }
 
 
@@ -625,6 +722,14 @@ function smartermail_billing_output($vars)
                         sprintf('Limites appliquées : %d OK, %d échec(s) sur %d service(s) actif(s).', $r['ok'], $r['fail'], $r['total'])
                     );
                 }
+
+            } elseif ($action === 'convertproduct') {
+                $pid   = (int) ($_POST['product_id'] ?? 0);
+                $newId = _sm_billing_convertProduct($pid);
+                $notice = $newId > 0
+                    ? _sm_billing_alert('success', 'Produit #' . $pid . ' converti en forfait #' . $newId
+                        . ' (lié au produit si aucun forfait n\'était sélectionné). À vérifier dans l\'onglet « Forfaits ».')
+                    : _sm_billing_alert('danger', 'Échec de la conversion (voir le journal d\'activité).');
             }
         }
     }

@@ -226,17 +226,26 @@ function _sm_ensureSettingsTable(): void
  */
 function _sm_getGlobalSetting(string $key, $default = null)
 {
-    try {
-        _sm_ensureSettingsTable();
-        $val = Capsule::table('mod_sm_settings')->where('setting_key', $key)->value('setting_value');
-        if ($val === null) {
-            return $default;
+    // Cache statique par clé : la valeur décodée est mémorisée (enveloppée dans
+    // ['v'=>…] pour distinguer « absent » d'une valeur false/null réellement stockée).
+    // Évite une requête par appel — le resolver lit ce réglage à chaque résolution.
+    static $cache = [];
+    if (!array_key_exists($key, $cache)) {
+        $cache[$key] = null;
+        try {
+            _sm_ensureSettingsTable();
+            $val = Capsule::table('mod_sm_settings')->where('setting_key', $key)->value('setting_value');
+            if ($val !== null) {
+                $decoded = json_decode((string) $val, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $cache[$key] = ['v' => $decoded];
+                }
+            }
+        } catch (\Throwable $e) {
+            $cache[$key] = null;
         }
-        $decoded = json_decode((string) $val, true);
-        return (json_last_error() === JSON_ERROR_NONE) ? $decoded : $default;
-    } catch (\Throwable $e) {
-        return $default;
     }
+    return is_array($cache[$key]) ? $cache[$key]['v'] : $default;
 }
 
 /**
@@ -287,11 +296,15 @@ function _sm_legacyConfigToPackage(array $co, array $ctx = []): array
     $pid = (int) ($ctx['pid'] ?? 0);
     $ps  = _sm_getProductSettings($pid);
 
+    // Disponibilité EAS/MAPI globale (réglage revendeur ; défaut true → byte-identique).
+    // Si le serveur ne propose pas EAS/MAPI, l'offre est forcée à false partout.
+    $easMapiOk = (bool) _sm_getGlobalSetting('eas_mapi_available', true);
+
     return [
         // ── Général / protocoles ──────────────────────────────────────────────
-        // Offres EAS/MAPI : ($x ?? 'on') === 'on'  (smartermail.php:1687-1688,2833-2834,4051-4052,4667-4668)
-        'offer_eas'              => (($g('configoption14') ?? 'on') === 'on'),
-        'offer_mapi'             => (($g('configoption15') ?? 'on') === 'on'),
+        // Offres EAS/MAPI : (($x ?? 'on') === 'on') ET disponibilité globale du serveur.
+        'offer_eas'              => (($g('configoption14') ?? 'on') === 'on') && $easMapiOk,
+        'offer_mapi'             => (($g('configoption15') ?? 'on') === 'on') && $easMapiOk,
         // Prix : (float)($x ?? 0). Le hook lit `?: 0` (hooks.php:355-357) — même
         // résultat que `?? 0` une fois casté en float (les cas limites → 0.0).
         'price_eas'              => (float) ($g('configoption2') ?? 0),
@@ -376,10 +389,13 @@ function _sm_getPackage(int $id): ?array
         $model  = (string) ($row->billing_model ?? 'tiers');
         $mode   = (string) ($row->overage_mode ?? 'notify');
         $policy = (string) ($row->dmarc_policy ?? 'none');
+        // Disponibilité EAS/MAPI globale (défaut true) — masque l'offre partout si
+        // le serveur ne propose pas EAS/MAPI.
+        $easMapiOk = (bool) _sm_getGlobalSetting('eas_mapi_available', true);
 
         return $cache[$id] = [
-            'offer_eas'              => (bool) $row->offer_eas,
-            'offer_mapi'             => (bool) $row->offer_mapi,
+            'offer_eas'              => ((bool) $row->offer_eas) && $easMapiOk,
+            'offer_mapi'             => ((bool) $row->offer_mapi) && $easMapiOk,
             'price_eas'              => max(0.0, (float) $row->price_eas),
             'price_mapi'             => max(0.0, (float) $row->price_mapi),
             'price_bundle'           => max(0.0, (float) $row->price_bundle),

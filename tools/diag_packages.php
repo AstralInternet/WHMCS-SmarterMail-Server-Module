@@ -107,8 +107,9 @@ foreach ($products as $p) {
     $before = $totalMismatch;
 
     // Général / protocoles — reproduction indépendante du code réel.
-    $cmp('offer_eas',           (($co['configoption14'] ?? 'on') === 'on'),          $pkg['offer_eas']);
-    $cmp('offer_mapi',          (($co['configoption15'] ?? 'on') === 'on'),          $pkg['offer_mapi']);
+    $easMapiOk = (bool) _sm_getGlobalSetting('eas_mapi_available', true);
+    $cmp('offer_eas',           (($co['configoption14'] ?? 'on') === 'on') && $easMapiOk, $pkg['offer_eas']);
+    $cmp('offer_mapi',          (($co['configoption15'] ?? 'on') === 'on') && $easMapiOk, $pkg['offer_mapi']);
     $cmp('price_eas',           (float) ($co['configoption2'] ?? 0),                 $pkg['price_eas']);
     $cmp('price_mapi',          (float) ($co['configoption3'] ?? 0),                 $pkg['price_mapi']);
     $cmp('price_bundle',        (float) ($co['configoption4'] ?? 0),                 $pkg['price_bundle']);

@@ -166,6 +166,7 @@ $_lang = [
     'pwd_change_btn'       => 'Change Password',
     'pwd_crit_min'         => 'Minimum %d characters',
     'pwd_crit_upper'       => 'At least one uppercase letter (A-Z)',
+    'pwd_crit_lower'       => 'At least one lowercase letter (a-z)',
     'pwd_crit_number'      => 'At least one number (0-9)',
     'pwd_crit_special'     => 'At least one special character (!@#$...)',
     'pwd_crit_match'       => 'Passwords match',
@@ -484,6 +485,7 @@ $_lang = [
     // %d = minimum length configured in configoption9
     'err_pwd_min_length'       => 'Password must contain at least %d characters.',
     'err_pwd_no_upper'         => 'Password must contain at least one uppercase letter (A-Z).',
+    'err_pwd_no_lower'         => 'Password must contain at least one lowercase letter (a-z).',
     'err_pwd_no_digit'         => 'Password must contain at least one digit (0-9).',
     'err_pwd_no_special'       => 'Password must contain at least one special character (!@#$%^&*-_=+).',
     // %s = username or domain name that must not appear in the password

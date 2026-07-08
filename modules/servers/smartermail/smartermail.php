@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.21.0',
+        'MODVersion' => '1.22.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -913,9 +913,11 @@ function _sm_validateAdminPassword(string $password, string $username, string $d
 {
     // Compte admin secret : plancher absolu de 8 caractères (protège le compte de
     // service utilisé par le module pour l'impersonification).
+    $pkg = _sm_packageFromParams($params);
     return _sm_validatePasswordCore(
         $password, $username, $domain, $params,
-        max(8, (int) ($params['configoption9'] ?? 8))
+        max(8, (int) $pkg['pwd_min_len']),
+        $pkg
     );
 }
 
@@ -940,9 +942,11 @@ function _sm_validateAdminPassword(string $password, string $username, string $d
  */
 function _sm_validateMailboxPassword(string $password, string $username, string $domain, array $params): ?string
 {
+    $pkg = _sm_packageFromParams($params);
     return _sm_validatePasswordCore(
         $password, $username, $domain, $params,
-        max(1, (int) ($params['configoption9'] ?? 8))
+        max(1, (int) $pkg['pwd_min_len']),
+        $pkg
     );
 }
 
@@ -954,11 +958,12 @@ function _sm_validateMailboxPassword(string $password, string $username, string 
  * @param int $minLen Longueur minimale exigée
  * @return string|null null si valide, message d'erreur localisé sinon
  */
-function _sm_validatePasswordCore(string $password, string $username, string $domain, array $params, int $minLen): ?string
+function _sm_validatePasswordCore(string $password, string $username, string $domain, array $params, int $minLen, array $pkg): ?string
 {
-    $requireUpper   = ($params['configoption10'] ?? 'on') === 'on';
-    $requireNumber  = ($params['configoption11'] ?? 'on') === 'on';
-    $requireSpecial = ($params['configoption12'] ?? 'on') === 'on';
+    $requireUpper   = $pkg['pwd_require_upper'];
+    $requireLower   = $pkg['pwd_require_lower'];   // NOUVEAU (défaut legacy : false → no-op)
+    $requireNumber  = $pkg['pwd_require_digit'];
+    $requireSpecial = $pkg['pwd_require_special'];
 
     // Chargement du tableau de langue une seule fois pour cette validation.
     $l = _sm_lang($params);
@@ -971,6 +976,11 @@ function _sm_validatePasswordCore(string $password, string $username, string $do
     // ── Lettre majuscule obligatoire ───────────────────────────────────────
     if ($requireUpper && !preg_match('/[A-Z]/', $password)) {
         return $l['err_pwd_no_upper'] ?? 'Le mot de passe doit contenir au moins une lettre majuscule (A-Z).';
+    }
+
+    // ── Lettre minuscule obligatoire (NOUVEAU — off en legacy) ─────────────
+    if ($requireLower && !preg_match('/[a-z]/', $password)) {
+        return $l['err_pwd_no_lower'] ?? 'Le mot de passe doit contenir au moins une lettre minuscule (a-z).';
     }
 
     // ── Chiffre obligatoire ────────────────────────────────────────────────
@@ -2864,8 +2874,11 @@ function smartermail_ClientArea(array $params): array
     $mapiPriceEnabled = ($pkg['price_mapi'] > 0);
 
     // On fetch les mailboxes si la vente est active ou si un prix est configuré
-    $easEnabled  = $easSalesEnabled  || $easPriceEnabled;
-    $mapiEnabled = $mapiSalesEnabled || $mapiPriceEnabled;
+    // Disponibilité EAS/MAPI globale : si le serveur ne les propose pas, on masque
+    // toute la section EAS/MAPI de l'espace client (défaut true → inchangé).
+    $smEasMapiOk = (bool) _sm_getGlobalSetting('eas_mapi_available', true);
+    $easEnabled  = $smEasMapiOk && ($easSalesEnabled  || $easPriceEnabled);
+    $mapiEnabled = $smEasMapiOk && ($mapiSalesEnabled || $mapiPriceEnabled);
 
     $easMailboxes  = [];
     $mapiMailboxes = [];
@@ -4079,15 +4092,16 @@ function smartermail_adduserpage(array $params): array
             'domainBase'       => $domainBase,
             'lang'             => $lang,
             'serviceid'        => $params['serviceid'],
-            'canEAS'           => ($params['configoption14'] ?? 'on') === 'on',  // configoption14 : offre EAS activée
-            'canMAPI'          => ($params['configoption15'] ?? 'on') === 'on',  // configoption15 : offre MAPI activée
+            'canEAS'           => $pkg['offer_eas'],   // offre EAS (forfait résolu, sinon hérité)
+            'canMAPI'          => $pkg['offer_mapi'],  // offre MAPI (forfait résolu, sinon hérité)
             'currencySymbol'   => _sm_currencySymbol($params),
-            'easPrice'         => (float) ($params['configoption2'] ?? 0),
-            'mapiPrice'        => (float) ($params['configoption3'] ?? 0),
-            'bundlePrice'      => (float) ($params['configoption4'] ?? 0),
-            'lockDays'         => max(1, (int) ($params['configoption16'] ?? 1)),  // Seuil facturation EAS/MAPI
+            'easPrice'         => $pkg['price_eas'],
+            'mapiPrice'        => $pkg['price_mapi'],
+            'bundlePrice'      => $pkg['price_bundle'],
+            'lockDays'         => max(1, (int) ($pkg['billing_threshold_days'] ?? 1)),  // Seuil facturation EAS/MAPI
             'pwdMinLength'     => max(1, (int) $pkg['pwd_min_len']),
             'pwdRequireUpper'  => $pkg['pwd_require_upper'],
+            'pwdRequireLower'  => $pkg['pwd_require_lower'],
             'pwdRequireNumber' => $pkg['pwd_require_digit'],
             'pwdRequireSpecial'=> $pkg['pwd_require_special'],
             // Jeton CSRF — injecté dans le <form> par adduser.tpl pour
@@ -4140,6 +4154,12 @@ function smartermail_createuser(array $params): string
     // (&, <, >, ", ') que WHMCS pourrait avoir HTML-encodés.
     $password = _sm_decodePassword((string) ($_POST['password'] ?? ''));
     $sizeMB   = max(0, min(1048576, (int) ($_POST['mailboxsize_mb'] ?? 0))); // max 1 To
+    // Plafond du forfait (max_mailbox_size_gb ; 0 = illimité) → borne la taille demandée
+    // (client « 0 = illimité » devient le plafond du forfait). Legacy : max=0 → inchangé.
+    $pkgMaxMb = ((int) _sm_packageFromParams($params)['max_mailbox_size_gb']) * 1024;
+    if ($pkgMaxMb > 0) {
+        $sizeMB = ($sizeMB > 0) ? min($sizeMB, $pkgMaxMb) : $pkgMaxMb;
+    }
 
     if ($username === '') {
         $l = _sm_lang($params); return $l['err_user_required'] ?? 'Le nom d\'utilisateur est requis.';
@@ -4239,7 +4259,7 @@ function smartermail_createuser(array $params): string
         // ── Enregistrer l'activation pour la facturation SEULEMENT si l'API a
         //    confirmé l'activation (P0.2). Ne jamais facturer un protocole que
         //    SmarterMail n'a pas réellement activé (échec réseau ou 200+success:false).
-        $thresholdHours = max(1, (int) ($params['configoption16'] ?? 1)) * 24; // Jours → heures
+        $thresholdHours = max(1, (int) (_sm_packageFromParams($params)['billing_threshold_days'] ?? 1)) * 24; // Jours → heures
         if (($easResp['success'] ?? false) && $thresholdHours > 0) {
             _sm_recordProtoActivation((int) $params['serviceid'], $email, 'eas', $thresholdHours);
         } elseif (!($easResp['success'] ?? false)) {
@@ -4260,7 +4280,7 @@ function smartermail_createuser(array $params): string
         $mapiResp = $api->setMapiEnabled($email, true, $daToken);
 
         // ── Enregistrer l'activation MAPI SEULEMENT si l'API l'a confirmée (P0.2) ──
-        $thresholdHours = $thresholdHours ?? (max(1, (int) ($params['configoption16'] ?? 1)) * 24);
+        $thresholdHours = $thresholdHours ?? (max(1, (int) (_sm_packageFromParams($params)['billing_threshold_days'] ?? 1)) * 24);
         if (($mapiResp['success'] ?? false) && $thresholdHours > 0) {
             _sm_recordProtoActivation((int) $params['serviceid'], $email, 'mapi', $thresholdHours);
         } elseif (!($mapiResp['success'] ?? false)) {
@@ -4353,6 +4373,7 @@ function smartermail_edituserpage(array $params): array
     $pkg               = _sm_packageFromParams($params);
     $pwdMinLength      = max(1, (int) $pkg['pwd_min_len']);
     $pwdRequireUpper   = $pkg['pwd_require_upper'];
+    $pwdRequireLower   = $pkg['pwd_require_lower'];
     $pwdRequireNumber  = $pkg['pwd_require_digit'];
     $pwdRequireSpecial = $pkg['pwd_require_special'];
 
@@ -4443,15 +4464,16 @@ function smartermail_edituserpage(array $params): array
             'mapiEnabled'      => $mapiEnabled,
             'easWas'           => $easWas,
             'mapiWas'          => $mapiWas,
-            'canEAS'           => ($params['configoption14'] ?? 'on') === 'on',  // configoption14 : offre EAS activée
-            'canMAPI'          => ($params['configoption15'] ?? 'on') === 'on',  // configoption15 : offre MAPI activée
+            'canEAS'           => $pkg['offer_eas'],   // offre EAS (forfait résolu, sinon hérité)
+            'canMAPI'          => $pkg['offer_mapi'],  // offre MAPI (forfait résolu, sinon hérité)
             'currencySymbol'   => _sm_currencySymbol($params),
-            'easPrice'         => (float) ($params['configoption2'] ?? 0),
-            'mapiPrice'        => (float) ($params['configoption3'] ?? 0),
-            'bundlePrice'      => (float) ($params['configoption4'] ?? 0),  // Prix combiné EAS+MAPI (manquait — causait SM_BUNDLE_PRICE=0)
-            'lockDays'         => max(1, (int) ($params['configoption16'] ?? 1)),  // Seuil facturation EAS/MAPI
+            'easPrice'         => $pkg['price_eas'],
+            'mapiPrice'        => $pkg['price_mapi'],
+            'bundlePrice'      => $pkg['price_bundle'],  // Prix combiné EAS+MAPI (forfait résolu)
+            'lockDays'         => max(1, (int) ($pkg['billing_threshold_days'] ?? 1)),  // Seuil facturation EAS/MAPI
             'pwdMinLength'     => $pwdMinLength,
             'pwdRequireUpper'  => $pwdRequireUpper,
+            'pwdRequireLower'  => $pwdRequireLower,
             'pwdRequireNumber' => $pwdRequireNumber,
             'pwdRequireSpecial'=> $pwdRequireSpecial,
             // Jeton CSRF — injecté dans les <form> par edituser.tpl
@@ -4643,6 +4665,11 @@ function smartermail_saveuser(array $params): string
 
     $email  = $username . '@' . $domain;
     $sizeMB = max(0, min(1048576, (int) ($_POST['mailboxsize_mb'] ?? 0))); // max 1 To (1 048 576 MB)
+    // Plafond du forfait (max_mailbox_size_gb ; 0 = illimité). Legacy : max=0 → inchangé.
+    $pkgMaxMb = ((int) _sm_packageFromParams($params)['max_mailbox_size_gb']) * 1024;
+    if ($pkgMaxMb > 0) {
+        $sizeMB = ($sizeMB > 0) ? min($sizeMB, $pkgMaxMb) : $pkgMaxMb;
+    }
 
     // ── Profil utilisateur ────────────────────────────────────────────────
     // fullName : ordre des transformations volontaire :
@@ -4696,8 +4723,8 @@ function smartermail_saveuser(array $params): string
     //   permission au niveau du domaine via le SA token AVANT d'activer par boîte.
     //   Cette activation domaine n'est déclenchée QUE si le client active le protocole
     //   (pas à chaque sauvegarde) pour minimiser les appels API superflus.
-    $canEAS  = ($params['configoption14'] ?? 'on') === 'on';
-    $canMAPI = ($params['configoption15'] ?? 'on') === 'on';
+    $canEAS  = _sm_packageFromParams($params)['offer_eas'];
+    $canMAPI = _sm_packageFromParams($params)['offer_mapi'];
     $saToken = $init['saToken'] ?? null;
 
     // ── Lire l'état PRÉCÉDENT pour détecter les transitions ON→OFF et OFF→ON ──
@@ -4706,7 +4733,7 @@ function smartermail_saveuser(array $params): string
     // Cette comparaison permet d'enregistrer précisément les activations/désactivations.
     $wasEas  = !empty($_POST['was_eas']);
     $wasMapiPrev = !empty($_POST['was_mapi']);
-    $thresholdHours = max(1, (int) ($params['configoption16'] ?? 1)) * 24; // Jours → heures
+    $thresholdHours = max(1, (int) (_sm_packageFromParams($params)['billing_threshold_days'] ?? 1)) * 24; // Jours → heures
 
     if ($canEAS) {
         $easWanted = !empty($_POST['enable_eas']);
@@ -4952,7 +4979,7 @@ function smartermail_deleteuser(array $params): string
     // son enregistrement est marqué deleted_mailbox=1 pour apparaître sur
     // la prochaine facture avec la plage de dates d'utilisation.
     // Si le seuil n'était pas atteint, l'enregistrement est simplement supprimé.
-    $thresholdHours = max(1, (int) ($params['configoption16'] ?? 1)) * 24; // Jours → heures
+    $thresholdHours = max(1, (int) (_sm_packageFromParams($params)['billing_threshold_days'] ?? 1)) * 24; // Jours → heures
     _sm_markMailboxProtoDeleted((int) $params['serviceid'], $email, $thresholdHours);
 
     return 'success';
@@ -5047,7 +5074,7 @@ function smartermail_syncprotousage(array $params): string
     }
 
     // Seuil en heures depuis configoption16
-    $thresholdHours = max(1, (int) ($params['configoption16'] ?? 1)) * 24;
+    $thresholdHours = max(1, (int) (_sm_packageFromParams($params)['billing_threshold_days'] ?? 1)) * 24;
 
     // activated_at = début de la période courante (on ne connaît pas la vraie date)
     // Pour les comptes existants, on assume qu'ils sont actifs depuis le début

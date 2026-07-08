@@ -169,6 +169,7 @@ $_lang = [
     'pwd_change_btn'       => 'Changer',
     'pwd_crit_min'         => 'Minimum %d caractères',
     'pwd_crit_upper'       => 'Au moins une lettre majuscule (A-Z)',
+    'pwd_crit_lower'       => 'Au moins une lettre minuscule (a-z)',
     'pwd_crit_number'      => 'Au moins un chiffre (0-9)',
     'pwd_crit_special'     => 'Au moins un caractère spécial (!@#$...)',
     'pwd_crit_match'       => 'Les mots de passe correspondent',
@@ -485,6 +486,7 @@ $_lang = [
     // %d = longueur minimale configurée dans configoption9
     'err_pwd_min_length'       => 'Le mot de passe doit contenir au moins %d caractères.',
     'err_pwd_no_upper'         => 'Le mot de passe doit contenir au moins une lettre majuscule (A-Z).',
+    'err_pwd_no_lower'         => 'Le mot de passe doit contenir au moins une lettre minuscule (a-z).',
     'err_pwd_no_digit'         => 'Le mot de passe doit contenir au moins un chiffre (0-9).',
     'err_pwd_no_special'       => 'Le mot de passe doit contenir au moins un caractère spécial (!@#$%^&*-_=+).',
     // %s = nom d'utilisateur ou de domaine qui ne doit pas apparaître dans le mot de passe

@@ -141,6 +141,7 @@ function smCheckPwd() {
 
   var okLen      = pwd.length >= SM_PWD_MIN;
   var okUpper    = !SM_REQ_UPPER || /[A-Z]/.test(pwd);
+  var okLower    = !SM_REQ_LOWER || /[a-z]/.test(pwd);
   var okNum      = !SM_REQ_NUM   || /[0-9]/.test(pwd);
   var okSpec     = !SM_REQ_SPEC  || /[!@#$%^&*\-_=+]/.test(pwd);
   var okNoUser   = username.length === 0 || pwdLower.indexOf(username) === -1;
@@ -151,13 +152,14 @@ function smCheckPwd() {
 
   smCrit('crit-len',       okLen);
   smCrit('crit-upper',     okUpper);
+  smCrit('crit-lower',     okLower);
   smCrit('crit-num',       okNum);
   smCrit('crit-spec',      okSpec);
   smCrit('crit-no-user',   okNoUser);
   smCrit('crit-no-domain', okNoDomain);
   smCrit('crit-match',     okMatch);
 
-  var allOk = okLen && okUpper && okNum && okSpec && okNoUser && okNoDomain && okMatch;
+  var allOk = okLen && okUpper && okLower && okNum && okSpec && okNoUser && okNoDomain && okMatch;
   var score = [okLen, okUpper, okNum, okSpec, okNoUser, okNoDomain, pwd.length >= 16].filter(Boolean).length;
   var pct   = Math.min(100, Math.round(score / 7 * 100));
   var bar   = document.getElementById('sm-pwd-bar');

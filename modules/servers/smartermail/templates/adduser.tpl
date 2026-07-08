@@ -109,6 +109,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
         <ul class="sm-pwd-crit">
           <li id="crit-len"><i class="fa fa-times"></i> {$lang.pwd_crit_min|replace:'%d':$pwdMinLength}</li>
           {if $pwdRequireUpper}  <li id="crit-upper"><i class="fa fa-times"></i> {$lang.pwd_crit_upper}</li>{/if}
+          {if $pwdRequireLower}  <li id="crit-lower"><i class="fa fa-times"></i> {$lang.pwd_crit_lower}</li>{/if}
           {if $pwdRequireNumber} <li id="crit-num"><i class="fa fa-times"></i> {$lang.pwd_crit_number}</li>{/if}
           {if $pwdRequireSpecial}<li id="crit-spec"><i class="fa fa-times"></i> {$lang.pwd_crit_special}</li>{/if}
           <li id="crit-no-user"><i class="fa fa-times"></i> {$lang.pwd_crit_no_user}</li>
@@ -290,6 +291,7 @@ var SM_INITIAL_ALIASES = {$prefillAliases nofilter};
 var SM_INITIAL_FWDS    = {$prefillFwds nofilter};
 {literal}
 var SM_REQ_UPPER = !!document.getElementById('crit-upper');
+var SM_REQ_LOWER = !!document.getElementById('crit-lower');
 var SM_REQ_NUM   = !!document.getElementById('crit-num');
 var SM_REQ_SPEC  = !!document.getElementById('crit-spec');
 

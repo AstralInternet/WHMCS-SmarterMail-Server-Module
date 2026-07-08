@@ -10,6 +10,42 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.22.0] - 2026-07-08
+
+### Ajouté / Modifié — finition des forfaits & nouvelles capacités — P5
+
+Achève la migration vers les forfaits (tous les consommateurs lisent le resolver) et
+ajoute les capacités prévues. **Byte-identique** pour un produit sans forfait avec les
+réglages globaux au défaut (garanti par `diag_packages.php`).
+
+**Finition de la migration (byte-identique) :**
+- **Mot de passe** : l'*enforcement* (`_sm_validatePasswordCore` + wrappers admin / boîte)
+  lit désormais le forfait résolu (l'affichage des critères l'était déjà depuis P3).
+- **Pages ajout / édition de boîte** : prix EAS/MAPI/combiné, seuil, offres EAS/MAPI
+  proviennent du forfait.
+- **Minutage `proto_usage`** (seuil de facturation à l'ajout / édition / suppression de
+  boîte + synchronisation) lit le forfait → la bascule grâce→facturable respecte le seuil
+  du forfait.
+
+**Nouvelles capacités :**
+- **Mot de passe « minuscule obligatoire »** (`pwd_require_lower`) de bout en bout :
+  validation serveur (`/[a-z]/`), critère live JS, affichage conditionnel, i18n FR/EN
+  (`pwd_crit_lower`, `err_pwd_no_lower`). Désactivée par défaut (aucune règle historique).
+- **Taille max par boîte** (`max_mailbox_size_gb`) : plafonne la taille demandée à la
+  création / édition d'une boîte (un « illimité » client devient le plafond du forfait).
+  0 = illimité.
+- **Disponibilité EAS/MAPI globale** : si le serveur ne propose pas EAS/MAPI (Réglages
+  globaux de l'addon), la section EAS/MAPI est masquée partout dans l'espace client —
+  replié dans `offer_eas` / `offer_mapi` du resolver + gate de l'espace client. Défaut :
+  disponible (inchangé).
+- **Bouton « Convertir en forfait »** (addon, par produit) : crée un forfait reflétant la
+  configuration héritée actuelle et lie le produit s'il n'en a pas déjà un — la voie de
+  migration 1-clic du parc existant.
+
+Le chantier « forfaits » (P0 → P5) est **complet** : couche données + resolver, GUI à
+onglets, et tous les consommateurs (provisioning, facturation, DNS, mot de passe,
+affichage) sur la configuration résolue.
+
 ## [1.21.0] - 2026-07-08
 
 ### Modifié — facturation sur les forfaits : hook + estimé client — P4b
