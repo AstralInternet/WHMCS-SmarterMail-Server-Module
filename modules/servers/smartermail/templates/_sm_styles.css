@@ -137,6 +137,16 @@
 .sm-btn-add{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px dashed var(--sm-primary);color:var(--sm-primary);border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
 .sm-btn-add:hover{background:var(--sm-primary);color:#fff;border-style:solid}
 
+/* Saisie inline (alias / redirections / cibles) — remplace les micro-modales.
+   L'input garde son id (sm-alias-input / sm-fwd-input / sm-target-input) : les
+   fonctions partagées smAdd* le lisent directement (le smClose est un no-op). */
+.sm-inline-add{display:flex;align-items:center;gap:6px;margin-top:8px}
+.sm-inline-add input[type="text"]{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px;font-size:13px}
+.sm-inline-add input[type="text"]:focus{border-color:var(--sm-primary);outline:none}
+.sm-inline-suffix{font-size:12px;color:#888;white-space:nowrap}
+.sm-inline-btn{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;padding:7px 12px;background:var(--sm-primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600}
+.sm-inline-btn:hover{background:var(--sm-primary-dark)}
+
 /* Étiquettes de formulaire + champ nombre */
 .sm-form-label{display:block;font-size:12px;color:var(--sm-text-2);margin-bottom:4px;font-weight:600}
 input.sm-number{width:100%;max-width:160px;padding:7px 10px;border:1px solid var(--sm-border-input);border-radius:4px;font-size:13px;box-sizing:border-box}

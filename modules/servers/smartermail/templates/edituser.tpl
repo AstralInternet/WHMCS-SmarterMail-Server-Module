@@ -129,11 +129,14 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
           <span class="sm-pills-empty">{$lang.eu_alias_empty}</span>
         {/foreach}
       </div>
-      <div class="sm-add-trigger">
-        <button type="button" class="sm-btn-add" onclick="smOpen('sm-alias-modal')">
-          <i class="fa fa-plus"></i> {$lang.eu_btn_add}
-        </button>
+      <div class="sm-inline-add">
+        <input type="text" id="sm-alias-input" placeholder="{$lang.eu_alias_ph}"
+               pattern="[a-zA-Z0-9._-]+" autocomplete="off"
+               data-errchars="{$lang.eu_alias_err_chars}" data-errdup="{$lang.eu_alias_err_dup}">
+        <span class="sm-inline-suffix">@{$domain|escape}</span>
+        <button type="button" class="sm-inline-btn" onclick="smAddAlias()" title="{$lang.eu_btn_add}"><i class="fa fa-plus"></i></button>
       </div>
+      <div class="sm-merr" id="sm-alias-err"></div>
       {* Champs cachés *}
       <div id="sm-alias-hidden">
         {foreach $userAliases as $a}
@@ -160,11 +163,13 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
           <span class="sm-pills-empty">{$lang.eu_fwd_empty}</span>
         {/foreach}
       </div>
-      <div class="sm-add-trigger">
-        <button type="button" class="sm-btn-add" onclick="smOpen('sm-fwd-modal')">
-          <i class="fa fa-plus"></i> {$lang.eu_btn_add}
-        </button>
+      <div class="sm-inline-add">
+        <input type="text" id="sm-fwd-input" placeholder="{$lang.eu_fwd_ph}"
+               autocomplete="off"
+               data-errinvalid="{$lang.eu_fwd_err_invalid}" data-errdup="{$lang.eu_fwd_err_dup}">
+        <button type="button" class="sm-inline-btn" onclick="smAddFwd()" title="{$lang.eu_btn_add}"><i class="fa fa-plus"></i></button>
       </div>
+      <div class="sm-merr" id="sm-fwd-err"></div>
       <div class="sm-fwd-opts">
         <label><input type="checkbox" name="fwd_keep"   id="fwd_keep"   {if $fwdKeep}checked{/if}   onchange="smMarkDirty()"> {$lang.eu_fwd_keep}</label>
         <label><input type="checkbox" name="fwd_delete" id="fwd_delete" {if $fwdDelete}checked{/if} onchange="smMarkDirty()"> {$lang.eu_fwd_delete}</label>
@@ -296,58 +301,9 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
 
 {* ════════ MODALES ════════════════════════════════════════════════════ *}
 
-{* ── Ajouter alias ───────────────────────────────────────────────────── *}
-<div class="sm-overlay" id="sm-alias-modal" onclick="smBg(event,'sm-alias-modal')">
-  <div class="sm-mbox">
-    <div class="sm-mhead">
-      <h4><i class="fa fa-at" style="color:#3949ab;"></i> {$lang.eu_alias_title}</h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-alias-modal')">&times;</button>
-    </div>
-    <div class="sm-mbody">
-      <label class="sm-mlabel">{$lang.eu_alias_ph|default:'Nom de l\'alias'}</label>
-      <div class="sm-minput-row">
-        <input type="text" id="sm-alias-input"
-               placeholder="{$lang.eu_alias_ph}"
-               pattern="[a-zA-Z0-9._-]+" autocomplete="off"
-               data-errchars="{$lang.eu_alias_err_chars}"
-               data-errdup="{$lang.eu_alias_err_dup}">
-        <span class="sm-minput-suffix">@{$domain|escape}</span>
-      </div>
-      <div class="sm-merr" id="sm-alias-err"></div>
-    </div>
-    <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-alias-modal')">{$lang.btn_cancel}</button>
-      <button type="button" class="btn btn-primary btn-sm" onclick="smAddAlias()">
-        <i class="fa fa-plus"></i> {$lang.eu_btn_add}
-      </button>
-    </div>
-  </div>
-</div>
+{* Ajout d'alias : désormais INLINE dans la carte (plus de modale). *}
 
-{* ── Ajouter redirection ─────────────────────────────────────────────── *}
-<div class="sm-overlay" id="sm-fwd-modal" onclick="smBg(event,'sm-fwd-modal')">
-  <div class="sm-mbox">
-    <div class="sm-mhead">
-      <h4><i class="fa fa-share" style="color:#2e7d32;"></i> {$lang.eu_fwd_title}</h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-fwd-modal')">&times;</button>
-    </div>
-    <div class="sm-mbody">
-      <label class="sm-mlabel">{$lang.eu_fwd_ph}</label>
-      <input type="text" class="sm-minput-full" id="sm-fwd-input"
-             placeholder="{$lang.eu_fwd_ph}"
-             autocomplete="off"
-             data-errinvalid="{$lang.eu_fwd_err_invalid}"
-             data-errdup="{$lang.eu_fwd_err_dup}">
-      <div class="sm-merr" id="sm-fwd-err"></div>
-    </div>
-    <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-fwd-modal')">{$lang.btn_cancel}</button>
-      <button type="button" class="btn btn-success btn-sm" onclick="smAddFwd()">
-        <i class="fa fa-plus"></i> {$lang.eu_btn_add}
-      </button>
-    </div>
-  </div>
-</div>
+{* Ajout de redirection : désormais INLINE dans la carte (plus de modale). *}
 
 {* ── Info : ActiveSync ───────────────────────────────────────────────── *}
 <div class="sm-overlay" id="sm-info-eas" onclick="smBg(event,'sm-info-eas')">

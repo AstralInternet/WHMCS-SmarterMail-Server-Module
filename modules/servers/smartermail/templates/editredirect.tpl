@@ -129,11 +129,13 @@
         </span>
       </div>
 
-      <div class="sm-add-trigger">
-        <button type="button" class="sm-btn-add" onclick="smOpen('sm-target-modal')">
-          <i class="fa fa-plus"></i> {$lang.add_redirect_dest_add}
-        </button>
+      <div class="sm-inline-add">
+        <input type="text" id="sm-target-input" placeholder="{$lang.add_redirect_modal_ph}"
+               autocomplete="off"
+               data-errinvalid="{$lang.err_redirect_invalid_target_js|escape}" data-errdup="{$lang.err_redirect_dup_target|escape}">
+        <button type="button" class="sm-inline-btn" onclick="smAddTarget()" title="{$lang.add_redirect_dest_add}"><i class="fa fa-plus"></i></button>
       </div>
+      <div class="sm-merr" id="sm-target-err"></div>
 
       <div id="sm-targets-hidden"></div>
     </div>
@@ -178,34 +180,7 @@
 
 {* ════ MODALES ═══════════════════════════════════════════════════════════ *}
 
-{* ── Modale : Ajouter une destination ─────────────────────────────────── *}
-<div class="sm-overlay" id="sm-target-modal" onclick="smBg(event,'sm-target-modal')">
-  <div class="sm-mbox">
-    <div class="sm-mhead info">
-      <h4><i class="fa fa-share"></i> {$lang.add_redirect_modal_title}</h4>
-      <button type="button" class="sm-mclose" onclick="smClose('sm-target-modal')">&times;</button>
-    </div>
-    <div class="sm-mbody">
-      <label class="sm-mlabel">{$lang.add_redirect_modal_label}</label>
-      <input type="text"
-             class="sm-minput-full"
-             id="sm-target-input"
-             placeholder="{$lang.add_redirect_modal_ph}"
-             autocomplete="off"
-             data-errinvalid="{$lang.err_redirect_invalid_target_js|escape}"
-             data-errdup="{$lang.err_redirect_dup_target|escape}">
-      <div class="sm-merr" id="sm-target-err"></div>
-    </div>
-    <div class="sm-mfoot">
-      <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-target-modal')">
-        {$lang.btn_cancel}
-      </button>
-      <button type="button" class="btn btn-success btn-sm" onclick="smAddTarget()">
-        <i class="fa fa-plus"></i> {$lang.eu_btn_add}
-      </button>
-    </div>
-  </div>
-</div>
+{* Ajout de destination : désormais INLINE dans la carte (plus de modale). *}
 
 {* ── Modale : Confirmer la suppression ─────────────────────────────────── *}
 {*

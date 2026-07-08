@@ -10,17 +10,42 @@
  *  Le retrait progressif des copies locales est donc sans risque de conflit.
  * ============================================================================ */
 
-/* ── Kit modale ─────────────────────────────────────────────────────────── */
+/* ── Kit modale ─────────────────────────────────────────────────────────────
+   Accessibilité : la boîte reçoit role="dialog" + aria-modal + aria-labelledby
+   (posés une seule fois) ; le focus est déplacé dans la modale à l'ouverture,
+   PIÉGÉ tant qu'elle est ouverte (Tab cyclique), et RESTAURÉ sur l'élément
+   déclencheur à la fermeture. */
+
+/* Liste des éléments focusables VISIBLES d'un conteneur. */
+function smFocusable(container) {
+  var sel = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),' +
+            'select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  return Array.prototype.filter.call(container.querySelectorAll(sel), function (el) {
+    return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement;
+  });
+}
+
 function smOpen(id) {
   var m = document.getElementById(id);
   if (!m) return;
+  m._smReturn = document.activeElement;          // focus à restaurer à la fermeture
   m.classList.add('open');
   document.body.style.overflow = 'hidden';
-  // Focus du premier champ ÉDITABLE (no-op si la modale n'en a pas — ex. modales
-  // d'information/confirmation du tableau de bord).
+  // ARIA (posé une seule fois) sur la boîte de dialogue.
+  var box = m.querySelector('.sm-mbox') || m;
+  if (!box.getAttribute('role')) {
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    var h = box.querySelector('h4');
+    if (h) {
+      if (!h.id) h.id = id + '-title';
+      box.setAttribute('aria-labelledby', h.id);
+    }
+  }
+  // Focus : premier champ ÉDITABLE, sinon premier élément focusable (bouton…).
   var inp = m.querySelector(
     'input[type="text"]:not([readonly]),input[type="password"],input[type="number"],input[type="email"],textarea:not([readonly])'
-  );
+  ) || smFocusable(box)[0];
   if (inp) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 80);
 }
 
@@ -29,16 +54,29 @@ function smClose(id) {
   if (!m) return;
   m.classList.remove('open');
   document.body.style.overflow = '';
+  var r = m._smReturn;                            // rendre le focus au déclencheur
+  if (r && typeof r.focus === 'function') { try { r.focus(); } catch (e) {} }
 }
 
 function smBg(e, id) {
   if (e.target === document.getElementById(id)) smClose(id);
 }
 
-/* Fermeture à la touche Échap — toutes les modales ouvertes. */
+/* Touche Échap (ferme les modales ouvertes) + piège de focus (Tab cyclique). */
 document.addEventListener('keydown', function (e) {
+  var open = document.querySelector('.sm-overlay.open');
+  if (!open) return;
   if (e.key === 'Escape' || e.keyCode === 27) {
     document.querySelectorAll('.sm-overlay.open').forEach(function (el) { smClose(el.id); });
+    return;
+  }
+  if (e.key === 'Tab' || e.keyCode === 9) {
+    var box = open.querySelector('.sm-mbox') || open;
+    var f = smFocusable(box);
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
 });
 

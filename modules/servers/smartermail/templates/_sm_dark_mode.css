@@ -58,6 +58,10 @@ html.lagom-dark-mode .sm-flash-success{color:#a5d6a7}
 html.lagom-dark-mode .sm-dns-rec-section{border-bottom-color:#3a3d44}
 html.lagom-dark-mode .sm-dns-rec-title{color:#e0e0e0}
 
+/* Saisie inline (alias/redirections) — l'input n'est plus dans une modale */
+html.lagom-dark-mode .sm-inline-add input[type="text"]{background:#1c1f24;color:#e0e0e0;border-color:#3a3d44}
+html.lagom-dark-mode .sm-inline-suffix{color:#999}
+
 /* ── Cartes (sm-card et ses headers/body) ─────────────────────────── */
 html.lagom-dark-mode .sm-card{background:#2a2d34;border-color:#3a3d44;color:#d0d0d0}
 html.lagom-dark-mode .sm-card-header{background:#1f2228;border-bottom-color:#3a3d44;color:#e0e0e0}

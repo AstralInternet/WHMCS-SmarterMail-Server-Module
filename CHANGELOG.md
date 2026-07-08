@@ -10,6 +10,44 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.13.0] - 2026-07-08
+
+### Ajouté — accessibilité des modales (Piste B, ♿)
+
+Toutes les modales du module sont désormais correctement exposées au clavier et
+aux technologies d'assistance, via le kit modale partagé (`_sm_common.js`) — sans
+modifier chaque modale une par une :
+
+- **ARIA** : la boîte de dialogue reçoit `role="dialog"`, `aria-modal="true"` et
+  `aria-labelledby` (vers son titre `<h4>`), posés automatiquement à l'ouverture.
+- **Piège de focus** : tant qu'une modale est ouverte, la tabulation (Tab /
+  Maj+Tab) **cycle** à l'intérieur de la modale au lieu de partir vers la page.
+- **Restauration du focus** : à la fermeture, le focus revient sur l'élément qui
+  avait ouvert la modale. Le focus initial va au premier champ éditable, sinon au
+  premier élément focusable.
+
+*Reste de la passe accessibilité (incrément suivant) : association explicite des
+labels de formulaire (`for` / `id`) et revue des contrastes.*
+
+## [1.12.0] - 2026-07-08
+
+### Modifié — saisie inline des alias / redirections (Piste B, UX)
+
+Ajouter un alias, une redirection de boîte ou une destination de redirection ne
+passe plus par une **micro-modale** : le champ de saisie est désormais
+**directement dans la carte**, sous les pastilles. On tape et on valide (bouton +
+ou touche Entrée) sans ouvrir de fenêtre.
+
+- **6 micro-modales supprimées** (edituser : alias + redirection ; adduser :
+  idem ; addredirect + editredirect : destination), remplacées par un composant
+  partagé `.sm-inline-add` (champ + suffixe @domaine éventuel + bouton +).
+- Les fonctions partagées `smAddAlias` / `smAddFwd` / `smAddTarget` sont
+  **inchangées** (elles lisent le même id d'input ; leur `smClose` devient un
+  no-op inoffensif en l'absence de modale).
+- addredirect : les renvois JS qui ouvraient la modale (Entrée sur le nom
+  d'alias, validation « aucune destination ») **focalisent** désormais le champ
+  inline. Styles `.sm-inline-*` (mode sombre géré).
+
 ## [1.11.0] - 2026-07-08
 
 ### Modifié — panneau DNS unifié : 1 modale au lieu de 4 (Piste B, UX)
