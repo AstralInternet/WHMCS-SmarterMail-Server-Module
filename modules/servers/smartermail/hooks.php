@@ -103,6 +103,8 @@ if (defined('SM_MODULE_LIB')) {
     require_once SM_MODULE_LIB . '/SmarterMailProductSettings.php';
     // Helpers de cache DNS (utilisés par le DailyCronJob pour la purge hebdo)
     require_once SM_MODULE_LIB . '/SmarterMailDnsCheck.php';
+    // Forfaits : forme normalisée + resolver + convertisseur (facturation).
+    require_once SM_MODULE_LIB . '/SmarterMailPackages.php';
 }
 
 use WHMCS\Database\Capsule;
@@ -474,6 +476,7 @@ add_hook('InvoiceCreation', 1, function (array $params) {
                 'tblservers.username  as serverusername',
                 'tblservers.password  as serverpassword',
                 'tblproducts.configoption16',    // Seuil facturation EAS/MAPI (jours)
+                'tblproducts.configoption24',    // Forfait sélectionné (pont resolver)
                 'tblhosting.server  as serverid_raw'  // Clé pour la recherche dans tblserver_tenants
             )
             ->first();
@@ -483,16 +486,20 @@ add_hook('InvoiceCreation', 1, function (array $params) {
             continue;
         }
 
+        // Config résolue : forfait (configoption24) sinon options héritées. Contexte
+        // HOOK (lit $service->configoptionN). Byte-identique pour un produit sans forfait.
+        $pkg = _sm_packageFromServiceRow($service);
+
         // ── Lecture des paramètres de facturation ─────────────────────────────
         //
         // Ces valeurs sont configurées dans l'onglet "Module Settings" du produit.
         // On utilise des valeurs par défaut raisonnables en cas de valeur manquante.
-        $gbPerTier     = max(1, (int) ($service->configoption1 ?: 10));
-        $easPrice      = (float) ($service->configoption2 ?: 0);
-        $mapiPrice     = (float) ($service->configoption3 ?: 0);
-        $combinedPrice = (float) ($service->configoption4 ?: 0);
-        // configoption16 : seuil de facturation EAS/MAPI en jours (0 = désactivé → mode live)
-        $lockDays      = max(0, (int) ($service->configoption16 ?: 0));
+        $gbPerTier     = max(1, ((int) $pkg['gb_per_tier']) ?: 10);
+        $easPrice      = $pkg['price_eas'];
+        $mapiPrice     = $pkg['price_mapi'];
+        $combinedPrice = $pkg['price_bundle'];
+        // billing_threshold_days (co16) : seuil EAS/MAPI en jours (0 = désactivé → mode live)
+        $lockDays      = max(0, (int) $pkg['billing_threshold_days']);
 
         // ── API SmarterMail : connexion pour la facturation EAS/MAPI ──────────
         //
@@ -600,7 +607,7 @@ add_hook('InvoiceCreation', 1, function (array $params) {
         // ligne Hosting réécrite. Un quota/overage ne s'active que si une ligne
         // de réglage existe pour le produit (posée par la page addon, étape 5).
         $baseUnitPrice = (float) $item->amount;  // Prix produit (= prix/tranche ou forfait)
-        $psettings     = _sm_getProductSettings((int) $service->packageid);
+        $psettings     = $pkg;  // sous-forme disque du forfait résolu (= product_settings en legacy)
         $charge        = _sm_computeBaseCharge($psettings, [
             'usageGB'       => $usageGB,
             'gbPerTier'     => $gbPerTier,

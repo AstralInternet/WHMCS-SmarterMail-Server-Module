@@ -10,6 +10,47 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.21.0] - 2026-07-08
+
+### Modifié — facturation sur les forfaits : hook + estimé client — P4b
+
+La **génération de factures** (hook `InvoiceCreation`) et l'**estimé du tableau de bord
+client** lisent désormais la config résolue. **Byte-identique** pour les produits sans
+forfait (garanti par `diag_packages.php`).
+
+⚠️ **À valider en bac-à-sable avant production** — factures WHMCS 9.0 immuables :
+générez une facture pour un produit lié à un forfait ET pour un produit hérité, puis
+comparez les lignes / montants avant-après.
+
+- **Hook `InvoiceCreation`** : le SELECT expose `configoption24` ; prix EAS/MAPI/combiné,
+  seuil de facturation, Go/tranche et sous-forme disque (→ `_sm_computeBaseCharge`)
+  proviennent du forfait résolu (`_sm_packageFromServiceRow()`). Planchers `max(0)` / `max(1)`
+  conservés à l'identique. Le resolver ne lève jamais → repli hérité → défauts (la
+  facturation ne casse jamais).
+- **Estimé du tableau de bord** : Go/tranche, prix, seuil, quota, offres EAS/MAPI tirés du
+  forfait → l'estimé correspond exactement à la facture, pour un forfait comme en hérité.
+
+**Reste sur l'ancien chemin (→ P5)**, sans impact tant qu'aucun forfait ne diverge des
+options du produit : le minutage d'enregistrement `proto_usage` (`configoption16` à
+l'ajout / édition / suppression de boîte), l'affichage des prix EAS/MAPI des pages
+d'ajout / édition de boîte, et l'*enforcement* des règles de mot de passe.
+
+## [1.20.0] - 2026-07-08
+
+### Modifié — provisioning serveur sur les forfaits — P4a
+
+Le provisioning SmarterMail lit désormais la config résolue (`_sm_packageFromParams()`)
+au lieu des configoptions brutes. **Byte-identique** pour les produits sans forfait.
+
+- **CreateAccount** : chemin des domaines, IP de sortie, `userLimit`, `maxSize`
+  (quota bloquant) et activation EAS/MAPI proviennent du forfait résolu.
+- **ChangePackage** : idem (`userLimit` / `maxSize` / `outgoingIP` re-poussés) + le refus
+  « quota bloqué < usage courant » utilise le quota du forfait.
+- **UsageUpdate** : la jauge disque native WHMCS (`disklimit`) reflète le quota résolu.
+
+Un produit lié à un forfait provisionne donc selon le forfait. La **facturation**
+(hook InvoiceCreation) reste sur l'ancien chemin jusqu'à P4b.
+
 ## [1.19.0] - 2026-07-08
 
 ### Modifié — bascule des consommateurs d'affichage sur les forfaits — P3

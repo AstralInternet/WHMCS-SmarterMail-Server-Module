@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.19.0',
+        'MODVersion' => '1.21.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -1589,18 +1589,20 @@ function smartermail_CreateAccount(array $params): string
 
 
     // ── Étape 4 : Créer le domaine dans SmarterMail ───────────────────────
-    $maxUsers = max(0, (int) ($params['configoption7'] ?? 0));
-    $outIP    = $params['configoption6'] ?? 'default';
+    // Config résolue : forfait sélectionné (configoption24) sinon options héritées.
+    // Byte-identique au comportement historique quand aucun forfait n'est lié.
+    $pkg      = _sm_packageFromParams($params);
+    $maxUsers = (int) $pkg['max_users'];
+    $outIP    = $pkg['outbound_ip'];
 
     // (Étape 3) Quota disque : en mode 'block', pousser maxSize = quota×1024³ au
     // serveur (SmarterMail refuse alors le stockage au-delà) ; en 'bill'/'notify',
     // 0 (illimité côté serveur — la facturation gère l'excédent / l'alerte).
-    $psettings    = _sm_getProductSettings((int) ($params['pid'] ?? 0));
-    $maxSizeBytes = _sm_quotaMaxSizeBytes($psettings);
+    $maxSizeBytes = _sm_quotaMaxSizeBytes($pkg);
 
     $domainOptions = [
         // Champs documentés dans domainData (voir doc API domain-put)
-        'path'       => rtrim($params['configoption5'] ?? 'C:\\SmarterMail\\Domains\\', '\\') . '\\' . $domain,
+        'path'       => rtrim($pkg['domain_path'], '\\') . '\\' . $domain,
         'hostname'   => 'mail.' . $domain,
         'userLimit'  => $maxUsers,
         'maxSize'    => $maxSizeBytes,   // 0 = illimité ; >0 = plafond (mode block)
@@ -1705,8 +1707,8 @@ function smartermail_CreateAccount(array $params): string
     //     - D'offrir EAS/MAPI gratuitement (option on, prix = 0)
     //     - De désactiver l'accès client même si un prix est configuré
     //       (pour gérer les activations manuellement)
-    $enableEas  = ($params['configoption14'] ?? 'on') === 'on';
-    $enableMapi = ($params['configoption15'] ?? 'on') === 'on';
+    $enableEas  = $pkg['offer_eas'];
+    $enableMapi = $pkg['offer_mapi'];
 
     $outIPValue = ($outIP === 'default' ? '' : $outIP);
 
@@ -2030,7 +2032,7 @@ function smartermail_UsageUpdate(array $params): array
     // Un log d'activité est émis pour faciliter le diagnostic admin.
     // (Étape 3) Limite disque pour la jauge native WHMCS = quota du produit (Mo),
     // dans tous les modes (block/bill/notify). 0 si aucun quota défini.
-    $diskLimitMB = _sm_quotaDiskLimitMB(_sm_getProductSettings((int) ($params['pid'] ?? 0)));
+    $diskLimitMB = _sm_quotaDiskLimitMB(_sm_packageFromParams($params));
 
     $domain = trim((string) ($params['domain'] ?? ''));
     if ($domain === '') {
@@ -2114,10 +2116,12 @@ function smartermail_ChangePackage(array $params): string
             ?? 'Le service courriel est temporairement indisponible.';
     }
 
-    $psettings    = _sm_getProductSettings((int) ($params['pid'] ?? 0));
+    // Config résolue : forfait (configoption24) sinon options héritées. Contient la
+    // sous-forme disque (quota_gb, overage_mode…) ET max_users/outbound_ip → byte-identique.
+    $psettings    = _sm_packageFromParams($params);
     $maxSizeBytes = _sm_quotaMaxSizeBytes($psettings);
-    $maxUsers     = max(0, (int) ($params['configoption7'] ?? 0));
-    $outIP        = $params['configoption6'] ?? 'default';
+    $maxUsers     = (int) $psettings['max_users'];
+    $outIP        = $psettings['outbound_ip'];
     $outIPValue   = ($outIP === 'default' ? '' : $outIP);
 
     // ── Refus : quota BLOCK inférieur à l'utilisation courante ────────────────
@@ -2780,11 +2784,11 @@ function smartermail_ClientArea(array $params): array
     $sizeMb  = (float) ($domainData['sizeMb'] ?? 0);
     $usageGB = round($sizeMb / 1024, 3);
 
-    $gbPerTier      = max(1, (int) ($params['configoption1'] ?? 10));
+    $gbPerTier      = max(1, (int) ($pkg['gb_per_tier'] ?? 10));
     // (Étape 2) Estimé calculé par la MÊME fonction pure que le hook de
     // facturation → l'estimé affiché au client correspond au montant réellement
     // facturé (modèle + quota). Sans réglage produit : identique à l'historique.
-    $psettings      = _sm_getProductSettings((int) ($params['pid'] ?? 0));
+    $psettings      = $pkg;  // forfait résolu (= _sm_getProductSettings en legacy) → estimé = facture
     $charge         = _sm_computeBaseCharge($psettings, [
         'usageGB'       => $usageGB,
         'gbPerTier'     => $gbPerTier,
@@ -2854,10 +2858,10 @@ function smartermail_ClientArea(array $params): array
     //     → Décide si on récupère les listes EAS/MAPI depuis l'API SmarterMail.
     //       On fetch si la vente est activée OU si un prix est configuré
     //       (un admin peut avoir activé EAS sans le proposer à la vente).
-    $easSalesEnabled  = ($params['configoption14'] ?? 'on') === 'on';
-    $mapiSalesEnabled = ($params['configoption15'] ?? 'on') === 'on';
-    $easPriceEnabled  = ((float) ($params['configoption2'] ?? 0)) > 0;
-    $mapiPriceEnabled = ((float) ($params['configoption3'] ?? 0)) > 0;
+    $easSalesEnabled  = $pkg['offer_eas'];
+    $mapiSalesEnabled = $pkg['offer_mapi'];
+    $easPriceEnabled  = ($pkg['price_eas'] > 0);
+    $mapiPriceEnabled = ($pkg['price_mapi'] > 0);
 
     // On fetch les mailboxes si la vente est active ou si un prix est configuré
     $easEnabled  = $easSalesEnabled  || $easPriceEnabled;
@@ -3059,9 +3063,9 @@ function smartermail_ClientArea(array $params): array
     //   - easOnly    : EAS activé, MAPI non → facturé à easPrice
     //   - mapiOnly   : MAPI activé, EAS non → facturé à mapiPrice
     //   - combined   : EAS + MAPI tous les deux → facturé à bundlePrice (configoption4)
-    $easPrice    = (float) ($params['configoption2'] ?? 0);
-    $mapiPrice   = (float) ($params['configoption3'] ?? 0);
-    $bundlePrice = (float) ($params['configoption4'] ?? 0);
+    $easPrice    = $pkg['price_eas'];
+    $mapiPrice   = $pkg['price_mapi'];
+    $bundlePrice = $pkg['price_bundle'];
     // Si bundlePrice = 0, on cumule les deux prix séparés
     $effectiveBundlePrice = $bundlePrice > 0 ? $bundlePrice : ($easPrice + $mapiPrice);
 
@@ -3543,7 +3547,7 @@ function smartermail_ClientArea(array $params): array
             'billingMapiLines'     => $billingMapiLines,
             'billingEasLines'      => $billingEasLines,
             'billingPeriod'  => _sm_getBillingPeriod((int) $params['serviceid']),
-            'lockDays'       => max(1, (int) ($params['configoption16'] ?? 1)),
+            'lockDays'       => max(1, (int) ($pkg['billing_threshold_days'] ?? 1)),
             'error'          => null,
             // Jeton CSRF — injecté par clientarea.tpl dans les formulaires
             // toggledkim / adddomainalias / deletedomainalias pour bloquer
