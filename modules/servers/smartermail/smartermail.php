@@ -136,7 +136,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.13.0',
+        'MODVersion' => '1.14.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -2272,7 +2272,7 @@ function _sm_flashMessage(array $lang): string
     $key = trim((string) ($_GET['smok'] ?? ''));
     if ($key === '') return '';
     $allowed = [
-        'createuser', 'saveuser', 'savepassword', 'deleteuser',
+        'createuser', 'saveuser', 'savepassword', 'saveautoresponder', 'deleteuser',
         'createredirect', 'saveredirect', 'deleteredirect',
         'adddomainalias', 'deletedomainalias', 'toggledkim',
     ];
@@ -2317,7 +2317,7 @@ function smartermail_ClientArea(array $params): array
     // fonctions sensibles via manipulation d'URL ou injection de paramètre.
     $allowedActions = [
         'edituserpage', 'adduserpage',
-        'createuser', 'saveuser', 'savepassword', 'deleteuser',
+        'createuser', 'saveuser', 'savepassword', 'saveautoresponder', 'deleteuser',
         'toggledkim',       // Activation / désactivation DKIM depuis l'espace client
         // ── Alias de domaine ─────────────────────────────────────────────
         // Gestion des alias de domaine (ex: « client.ca » → « client.com »)
@@ -2425,6 +2425,7 @@ function smartermail_ClientArea(array $params): array
         'createuser'     => 'smartermail_createuser',
         'saveuser'       => 'smartermail_saveuser',
         'savepassword'   => 'smartermail_savepassword',
+        'saveautoresponder' => 'smartermail_saveautoresponder',
         'deleteuser'     => 'smartermail_deleteuser',
         'toggledkim'     => 'smartermail_toggledkim',  // Active/désactive la signature DKIM du domaine
         // ── Alias de domaine ─────────────────────────────────────────────
@@ -2501,7 +2502,7 @@ function smartermail_ClientArea(array $params): array
         // Après savepassword : retour vers edituserpage (le client est encore en mode édition)
         // Après saveuser     : retour vers la page principale du produit (tableau de bord)
         //                      → le client voit la confirmation visuelle de ses modifications
-        if ($customAction === 'savepassword' && $username !== '') {
+        if (($customAction === 'savepassword' || $customAction === 'saveautoresponder') && $username !== '') {
             $redir .= '&customAction=edituserpage&username=' . urlencode($username);
         }
 
@@ -3514,6 +3515,7 @@ function smartermail_ClientAreaAllowedFunctions(): array
         'Create email address'       => 'createuser',
         'Save email address'         => 'saveuser',
         'Change password'            => 'savepassword',
+        'Save auto-responder'        => 'saveautoresponder',
         'Delete email address'       => 'deleteuser',
         'Toggle DKIM signing'        => 'toggledkim',
         // ── Alias de domaine ─────────────────────────────────────────────
@@ -4248,6 +4250,24 @@ function smartermail_edituserpage(array $params): array
     $fwdDelete = (bool)   ($fwdData['deleteOnForward'] ?? false);
     $fwdSpam   = (string) ($fwdData['spamForwardOption'] ?? 'None');
 
+    // ── Répondeur automatique (auto-responder) — token utilisateur requis ──
+    // getAutoResponder renvoie NULL si l'impersonification échoue → carte en mode
+    // dégradé (jamais un formulaire vide qui écraserait une config invisible).
+    $arData      = $api->getAutoResponder($daToken, $username, $domain, $init['saToken'] ?? null);
+    $arAvailable = ($arData !== null);
+    $ar = [
+        'enabled'    => (bool)   ($arData['enabled'] ?? false),
+        'subject'    => (string) ($arData['subject'] ?? ''),
+        'body'       => (string) ($arData['body'] ?? ''),
+        'external'   => (string) ($arData['externalReply'] ?? ''),
+        'audience'   => (int)    ($arData['externalAudience'] ?? 0),
+        'directOnly' => (bool)   ($arData['autoRespondOnDirectMailOnly'] ?? false),
+        'useRange'   => (bool)   ($arData['useActiveDateRange'] ?? false),
+        'startIso'   => _sm_arIsoForJs((string) ($arData['startDateUtc'] ?? '')),
+        'endIso'     => _sm_arIsoForJs((string) ($arData['endDateUtc'] ?? '')),
+        'isHtml'     => (bool)   ($arData['isHTML'] ?? false),
+    ];
+
     // ── Nom du produit (pour le titre de page) ────────────────────────────
     $productName = Capsule::table('tblproducts')
         ->where('id', $params['pid'] ?? 0)
@@ -4304,6 +4324,8 @@ function smartermail_edituserpage(array $params): array
             'fwdKeep'          => $fwdKeep,
             'fwdDelete'        => $fwdDelete,
             'fwdSpam'          => $fwdSpam,
+            'arAvailable'      => $arAvailable,
+            'ar'               => $ar,
             'easEnabled'       => $easEnabled,
             'mapiEnabled'      => $mapiEnabled,
             'easWas'           => $easWas,
@@ -4365,6 +4387,125 @@ function smartermail_savepassword(array $params): string
     if (!$resp['success']) {
         logActivity('SmarterMail [savepassword] Erreur pour ' . $email . ' : ' . _sm_apiError($resp));
         $l = _sm_lang($params); return $l['err_pwd_change_failed'] ?? 'Impossible de changer le mot de passe.';
+    }
+    return 'success';
+}
+
+/**
+ * Normalise une date ISO 8601 (envoyée par le JS en UTC) vers « Y-m-d\TH:i:s\Z ».
+ * Retourne NULL si la chaîne est vide ou non parsable.
+ */
+function _sm_arParseUtc(string $iso): ?string
+{
+    $iso = trim($iso);
+    if ($iso === '') return null;
+    try {
+        $dt = new \DateTime($iso);
+        $dt->setTimezone(new \DateTimeZone('UTC'));
+        return $dt->format('Y-m-d\TH:i:s\Z');
+    } catch (\Throwable $e) {
+        return null;
+    }
+}
+
+/**
+ * Convertit une date renvoyée par l'API (ISO ou .NET) en ISO UTC propre pour le
+ * JS ; chaîne vide si absente/invalide ou si c'est une sentinelle .NET
+ * (DateTime.MinValue/MaxValue), pour ne pas afficher de fausse plage de dates.
+ */
+function _sm_arIsoForJs(string $raw): string
+{
+    $raw = trim($raw);
+    if ($raw === '') return '';
+    $ts = strtotime($raw);
+    if ($ts === false) return '';
+    $year = (int) gmdate('Y', $ts);
+    if ($year <= 1 || $year >= 9999) return '';
+    return gmdate('Y-m-d\TH:i:s\Z', $ts);
+}
+
+/**
+ * Action : enregistre le répondeur automatique (réponse d'absence) d'une boîte.
+ *
+ * Endpoint « User only » → nécessite un token utilisateur (impersonification via
+ * setAutoResponder). Séparé de saveuser : l'auth et les échecs ne doivent pas
+ * contaminer l'enregistrement des autres réglages.
+ *
+ * $_POST : selectuser, ar_enabled, ar_subject, ar_body, ar_external, ar_audience
+ *          (0/1/2), ar_use_range, ar_start / ar_end (ISO UTC), ar_direct_only.
+ *
+ * @return string "success" ou message d'erreur localisé.
+ */
+function smartermail_saveautoresponder(array $params): string
+{
+    $init = _sm_initDomainAdmin($params);
+    if (isset($init['error'])) return $init['error'];
+
+    $l        = _sm_lang($params);
+    $username = trim($_POST['selectuser'] ?? '');
+    if ($username === '' || !preg_match('/^[a-z0-9._\-]+$/i', $username)) {
+        return $l['err_user_required'] ?? 'Utilisateur non spécifié ou invalide.';
+    }
+    $domain = $params['domain'];
+
+    $enabled    = ($_POST['ar_enabled'] ?? '') === '1';
+    $subject    = mb_substr(trim(strip_tags((string) ($_POST['ar_subject'] ?? ''))), 0, 200);
+    $body       = mb_substr((string) ($_POST['ar_body'] ?? ''), 0, 20000);
+    $external   = mb_substr((string) ($_POST['ar_external'] ?? ''), 0, 20000);
+    $audience   = (int) ($_POST['ar_audience'] ?? 0);
+    $useRange   = ($_POST['ar_use_range'] ?? '') === '1';
+    $directOnly = ($_POST['ar_direct_only'] ?? '') === '1';
+
+    if ($audience < 0 || $audience > 2) $audience = 0;
+
+    // Sujet + corps requis pour activer.
+    if ($enabled && ($subject === '' || trim($body) === '')) {
+        return $l['ar_err_content_required'] ?? 'Le sujet et le message sont requis pour activer le répondeur.';
+    }
+    // Réponse externe vide + audience > « personne » → reprendre le corps.
+    if ($external === '' && $audience > 0) {
+        $external = $body;
+    }
+
+    // Plage de dates active (facultative).
+    $startUtc = null; $endUtc = null;
+    if ($useRange) {
+        $startUtc = _sm_arParseUtc((string) ($_POST['ar_start'] ?? ''));
+        $endUtc   = _sm_arParseUtc((string) ($_POST['ar_end'] ?? ''));
+        if ($startUtc === null || $endUtc === null) {
+            return $l['ar_err_dates_invalid'] ?? 'Les dates de la plage active sont invalides.';
+        }
+        if (strtotime($startUtc) >= strtotime($endUtc)) {
+            return $l['ar_err_dates_order'] ?? 'La date de début doit précéder la date de fin.';
+        }
+    }
+
+    $settings = [
+        'enabled'                     => $enabled,
+        'isHTML'                      => false,
+        'subject'                     => $subject,
+        'body'                        => $body,
+        'externalReply'               => $external,
+        'externalAudience'            => $audience,
+        'autoRespondOnDirectMailOnly' => $directOnly,
+        'useActiveDateRange'          => $useRange,
+    ];
+    if ($useRange) {
+        $settings['startDateUtc'] = $startUtc;
+        $settings['endDateUtc']   = $endUtc;
+    }
+
+    $resp = $init['api']->setAutoResponder(
+        $init['token'], $username, $settings, $domain, $init['saToken'] ?? null
+    );
+
+    if (!($resp['success'] ?? false)) {
+        if (($resp['error'] ?? '') === 'USER_TOKEN_UNAVAILABLE') {
+            logActivity('SmarterMail [saveautoresponder] Token utilisateur indisponible pour ' . $username . '@' . $domain);
+            return $l['ar_err_token'] ?? 'Le répondeur automatique n\'est pas accessible pour cette boîte actuellement.';
+        }
+        logActivity('SmarterMail [saveautoresponder] Échec pour ' . $username . '@' . $domain . ' : ' . _sm_apiError($resp));
+        return $l['ar_err_save'] ?? 'Impossible d\'enregistrer le répondeur automatique.';
     }
     return 'success';
 }

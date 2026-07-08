@@ -242,6 +242,30 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
   </div>
 </div>
 
+{* ── Répondeur automatique (réponse d'absence) ─────────────────────────── *}
+<div class="sm-card">
+  <div class="sm-card-header"><i class="fa fa-reply"></i> {$lang.ar_card_title}</div>
+  <div class="sm-card-body">
+    {if !$arAvailable}
+      <p class="sm-form-hint"><i class="fa fa-info-circle"></i> {$lang.ar_unavailable}</p>
+    {else}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;">
+          {if $ar.enabled}
+            <span style="color:var(--sm-success);font-weight:600;white-space:nowrap;"><i class="fa fa-check-circle"></i> {$lang.ar_state_on}</span>
+          {elseif $ar.useRange}
+            <span style="color:var(--sm-warning);font-weight:600;white-space:nowrap;"><i class="fa fa-clock-o"></i> {$lang.ar_state_scheduled}</span>
+          {else}
+            <span style="color:var(--sm-text-muted);white-space:nowrap;"><i class="fa fa-circle-o"></i> {$lang.ar_state_off}</span>
+          {/if}
+          {if $ar.subject}<span class="sm-form-hint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">&laquo; {$ar.subject|escape} &raquo;</span>{/if}
+        </div>
+        <button type="button" class="sm-btn-add" onclick="smArOpen()"><i class="fa fa-cog"></i> {$lang.ar_configure}</button>
+      </div>
+    {/if}
+  </div>
+</div>
+
 {* ── Barre d'actions ─────────────────────────────────────────────────── *}
 {* Supprimer seul à gauche — Mot de passe + Sauvegarder groupés à droite  *}
 <div class="sm-actions">
@@ -481,6 +505,88 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+{* ── Modale : Répondeur automatique (réponse d'absence) ─────────────────── *}
+{if $arAvailable}
+<div class="sm-overlay" id="sm-ar-modal">
+  <div class="sm-mbox" style="max-width:560px;">
+    <div class="sm-mhead info">
+      <h4><i class="fa fa-reply"></i> {$lang.ar_card_title}</h4>
+      <button type="button" class="sm-mclose" onclick="smClose('sm-ar-modal')">&times;</button>
+    </div>
+    <form method="post" action="clientarea.php" id="sm-ar-form" onsubmit="return smArPrepare()">
+      <input type="hidden" name="action"       value="productdetails">
+      <input type="hidden" name="id"           value="{$serviceid}">
+      <input type="hidden" name="customAction" value="saveautoresponder">
+      <input type="hidden" name="token"        value="{$csrfToken|escape}">
+      <input type="hidden" name="selectuser"   value="{$username|escape}">
+      <input type="hidden" name="ar_start" id="ar-start-iso">
+      <input type="hidden" name="ar_end"   id="ar-end-iso">
+      <div class="sm-mbody">
+
+        <div class="sm-chk-row">
+          <input type="checkbox" name="ar_enabled" value="1" id="ar-enabled"{if $ar.enabled} checked{/if}>
+          <label for="ar-enabled">{$lang.ar_enable}</label>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label class="sm-mlabel" for="ar-subject">{$lang.ar_subject}</label>
+          <input type="text" class="sm-minput-full" name="ar_subject" id="ar-subject" maxlength="200" value="{$ar.subject|escape}">
+        </div>
+
+        <div style="margin-top:10px;">
+          <label class="sm-mlabel" for="ar-body">{$lang.ar_message}</label>
+          <textarea class="sm-minput-full" name="ar_body" id="ar-body" rows="5" maxlength="20000">{$ar.body|escape}</textarea>
+          {if $ar.isHtml}<p class="sm-form-hint"><i class="fa fa-exclamation-triangle"></i> {$lang.ar_html_warn}</p>{/if}
+        </div>
+
+        <div class="sm-chk-row" style="margin-top:10px;">
+          <input type="checkbox" name="ar_direct_only" value="1" id="ar-direct"{if $ar.directOnly} checked{/if}>
+          <label for="ar-direct">{$lang.ar_direct_only}</label>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label class="sm-mlabel" for="ar-audience">{$lang.ar_audience}</label>
+          <select class="sm-minput-full" name="ar_audience" id="ar-audience" onchange="smArAudience()">
+            <option value="0"{if $ar.audience == 0} selected{/if}>{$lang.ar_audience_none}</option>
+            <option value="1"{if $ar.audience == 1} selected{/if}>{$lang.ar_audience_contacts}</option>
+            <option value="2"{if $ar.audience == 2} selected{/if}>{$lang.ar_audience_all}</option>
+          </select>
+        </div>
+
+        <div id="ar-external-block" style="margin-top:10px;{if $ar.audience == 0}display:none;{/if}">
+          <label class="sm-mlabel" for="ar-external">{$lang.ar_external}</label>
+          <textarea class="sm-minput-full" name="ar_external" id="ar-external" rows="3" maxlength="20000">{$ar.external|escape}</textarea>
+          <p class="sm-form-hint">{$lang.ar_external_hint}</p>
+        </div>
+
+        <div class="sm-chk-row" style="margin-top:12px;">
+          <input type="checkbox" name="ar_use_range" value="1" id="ar-use-range"{if $ar.useRange} checked{/if} onchange="smArRange()">
+          <label for="ar-use-range">{$lang.ar_use_range}</label>
+        </div>
+        <div id="ar-range-block" style="margin-top:8px;{if !$ar.useRange}display:none;{/if}">
+          <div class="sm-2col">
+            <div>
+              <label class="sm-mlabel" for="ar-start">{$lang.ar_start}</label>
+              <input type="datetime-local" class="sm-minput-full" id="ar-start">
+            </div>
+            <div>
+              <label class="sm-mlabel" for="ar-end">{$lang.ar_end}</label>
+              <input type="datetime-local" class="sm-minput-full" id="ar-end">
+            </div>
+          </div>
+          <p class="sm-form-hint">{$lang.ar_tz_hint}</p>
+        </div>
+
+      </div>
+      <div class="sm-mfoot">
+        <button type="button" class="btn btn-default btn-sm" onclick="smClose('sm-ar-modal')">{$lang.btn_cancel}</button>
+        <button type="submit" class="btn btn-success btn-sm"><i class="fa fa-check"></i> {$lang.ar_save}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{/if}
+
 
 <script>
 var SM_EAS_PRICE    = {$easPrice|default:0};
@@ -488,6 +594,10 @@ var SM_MAPI_PRICE   = {$mapiPrice|default:0};
 var SM_BUNDLE_PRICE = {$bundlePrice|default:0};
 var SM_DOMAIN       = '{$domain|escape:"javascript"}';
 var SM_LOCK_DAYS    = {$lockDays|default:1};
+{* Répondeur auto : dates ISO UTC (vides si non définies) + message d'erreur *}
+var SM_AR_START = '{$ar.startIso|escape:"javascript"}';
+var SM_AR_END   = '{$ar.endIso|escape:"javascript"}';
+var SM_AR_DATES_REQUIRED = '{$lang.ar_err_dates_invalid|escape:"javascript"}';
 
 {literal}
 
@@ -638,5 +748,49 @@ function smUpdatePrice() {
 // ── Utilitaires : escHtml / escAttr → _sm_common.js (head) ────────────────
 
 // ── Mot de passe — fonctions définies ci-dessus (smTogglePwd, smGeneratePwd, smCrit, smCheckPwd)
+
+// ── Répondeur automatique (réponse d'absence) ──────────────────────────────
+function smArOpen() {
+  smOpen('sm-ar-modal');
+  smArAudience();
+  smArRange();
+  // Pré-remplir les datetime-local (heure locale du navigateur) depuis l'ISO UTC.
+  smArSetLocal('ar-start', SM_AR_START);
+  smArSetLocal('ar-end', SM_AR_END);
+}
+function smArAudience() {
+  var a = document.getElementById('ar-audience'), b = document.getElementById('ar-external-block');
+  if (a && b) b.style.display = (a.value === '0') ? 'none' : '';
+}
+function smArRange() {
+  var c = document.getElementById('ar-use-range'), b = document.getElementById('ar-range-block');
+  if (c && b) b.style.display = c.checked ? '' : 'none';
+}
+function smArSetLocal(id, iso) {
+  var el = document.getElementById(id);
+  if (!el || !iso) return;
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return;
+  var p = function (n) { return (n < 10 ? '0' : '') + n; };
+  el.value = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+             'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function smArPrepare() {
+  // Convertit les datetime-local (heure locale) en ISO UTC dans les champs cachés.
+  var use = document.getElementById('ar-use-range');
+  var si = document.getElementById('ar-start-iso'), ei = document.getElementById('ar-end-iso');
+  if (use && use.checked) {
+    var s = document.getElementById('ar-start').value, e = document.getElementById('ar-end').value;
+    var sd = new Date(s), ed = new Date(e);
+    if (!s || !e || isNaN(sd.getTime()) || isNaN(ed.getTime()) || sd >= ed) {
+      alert(SM_AR_DATES_REQUIRED); return false;
+    }
+    si.value = sd.toISOString();
+    ei.value = ed.toISOString();
+  } else {
+    si.value = ''; ei.value = '';
+  }
+  return true;
+}
 {/literal}
 </script>

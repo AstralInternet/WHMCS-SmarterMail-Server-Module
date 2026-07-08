@@ -1413,8 +1413,97 @@ class SmarterMailApi
         return [];
     }
 
+    // ── Répondeur automatique (auto-responder) — endpoints « User only » ──────
+    // Comme getMailboxForwardList, ces appels exigent un token UTILISATEUR obtenu
+    // par impersonification (loginUser). Le mapping externalAudience suit l'enum
+    // OOF Exchange (0=personne, 1=contacts connus, 2=tout le monde).
+    public const AR_AUDIENCE_NONE     = 0;
+    public const AR_AUDIENCE_CONTACTS = 1;
+    public const AR_AUDIENCE_ALL      = 2;
+
     /**
-     * 
+     * Récupère la configuration du répondeur automatique d'une boîte.
+     *
+     * https://mail.smartertools.com/Documentation/api#/reference/SmarterMail.Web.Api.SettingsController/GetAutoResponderSettings/get
+     * GET api/v1/settings/auto-responder/{wantHtml?}  (token utilisateur requis)
+     *
+     * @param string  $daToken  Token Domain Admin
+     * @param string  $username Username seul (sans @domaine)
+     * @param ?string $domain
+     * @param ?string $saToken
+     * @param bool    $wantHtml Demander le corps au format HTML (défaut : texte)
+     * @return ?array  Réglages (endDateUtc, startDateUtc, useActiveDateRange, body,
+     *                 externalReply, enabled, isHTML, subject,
+     *                 autoRespondOnDirectMailOnly, externalAudience) ; NULL si le
+     *                 token utilisateur est indisponible ou l'appel échoue — jamais
+     *                 un tableau vide qui masquerait une config existante.
+     */
+    public function getAutoResponder(string $daToken, string $username, ?string $domain = null, ?string $saToken = null, bool $wantHtml = false): ?array
+    {
+        $userToken = $this->loginUser($daToken, $username, $domain, $saToken);
+        if (!$userToken) return null;
+
+        $ep   = 'api/v1/settings/auto-responder' . ($wantHtml ? '/true' : '');
+        $resp = $this->get($ep, $userToken);
+        if (($resp['success'] ?? false) && isset($resp['data']['autoResponderSettings'])) {
+            return (array) $resp['data']['autoResponderSettings'];
+        }
+        return null;
+    }
+
+    /**
+     * Enregistre la configuration du répondeur automatique d'une boîte.
+     *
+     * https://mail.smartertools.com/Documentation/api#/reference/SmarterMail.Web.Api.SettingsController/SetAutoResponderSettings/post
+     * POST api/v1/settings/auto-responder  (token utilisateur requis)
+     *
+     * Merge best-effort : relit la config existante et ne remplace que les champs
+     * fournis (whitelist stricte des 10 champs officiels) — préserve d'éventuels
+     * champs de versions SM futures.
+     *
+     * @param string  $daToken
+     * @param string  $username
+     * @param array   $settings Sous-ensemble des 10 champs officiels
+     * @param ?string $domain
+     * @param ?string $saToken
+     * @return array   Tableau standardisé ; ['success'=>false,'error'=>'USER_TOKEN_UNAVAILABLE']
+     *                 si l'impersonification échoue (jamais d'écriture aveugle).
+     */
+    public function setAutoResponder(string $daToken, string $username, array $settings, ?string $domain = null, ?string $saToken = null): array
+    {
+        $userToken = $this->loginUser($daToken, $username, $domain, $saToken);
+        if (!$userToken) {
+            return ['success' => false, 'error' => 'USER_TOKEN_UNAVAILABLE'];
+        }
+
+        // Relire l'existant pour le merge (best-effort — ignoré si indisponible).
+        $current = [];
+        $resp = $this->get('api/v1/settings/auto-responder', $userToken);
+        if (($resp['success'] ?? false) && isset($resp['data']['autoResponderSettings'])) {
+            $current = (array) $resp['data']['autoResponderSettings'];
+        }
+
+        $allowed = [
+            'endDateUtc', 'startDateUtc', 'useActiveDateRange', 'body',
+            'externalReply', 'enabled', 'isHTML', 'subject',
+            'autoRespondOnDirectMailOnly', 'externalAudience',
+        ];
+        $payload = $current;
+        foreach ($allowed as $k) {
+            if (array_key_exists($k, $settings)) {
+                $payload[$k] = $settings[$k];
+            }
+        }
+
+        return $this->post(
+            'api/v1/settings/auto-responder',
+            ['autoResponderSettings' => $payload],
+            $userToken
+        );
+    }
+
+    /**
+     *
      * https://mail.smartertools.com/Documentation/api#/reference/SmarterMail.Web.Api.DomainSettingsController/DkimSettings/post
      * https://mail.smartertools.com/Documentation/api#/reference/SmarterMail.Web.Api.DomainSettingsController/SetDkimSettings/post
      * 

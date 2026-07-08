@@ -393,6 +393,36 @@ $_lang = [
 
     // Titre du panneau DNS unifié (modale regroupant SPF/DKIM/DMARC/Autodiscover)
     'dns_records_title'        => 'Enregistrements DNS',
+
+    // ── Répondeur automatique (réponse d'absence) ─────────────────────────────
+    'flash_saveautoresponder'  => 'Répondeur automatique enregistré.',
+    'ar_card_title'            => 'Répondeur automatique',
+    'ar_unavailable'           => 'Le répondeur automatique n\'est pas accessible pour cette boîte actuellement.',
+    'ar_state_on'              => 'Actif',
+    'ar_state_scheduled'       => 'Programmé',
+    'ar_state_off'             => 'Désactivé',
+    'ar_configure'             => 'Configurer',
+    'ar_enable'                => 'Activer la réponse d\'absence',
+    'ar_subject'               => 'Sujet',
+    'ar_message'               => 'Message',
+    'ar_html_warn'             => 'Le message existant est au format HTML ; l\'enregistrer ici le convertira en texte brut.',
+    'ar_direct_only'           => 'Répondre uniquement au courrier qui m\'est directement adressé',
+    'ar_audience'              => 'Expéditeurs externes',
+    'ar_audience_none'         => 'Aucun (interne seulement)',
+    'ar_audience_contacts'     => 'Contacts connus',
+    'ar_audience_all'          => 'Tout le monde',
+    'ar_external'              => 'Réponse pour les expéditeurs externes',
+    'ar_external_hint'         => 'Laissez vide pour réutiliser le message ci-dessus.',
+    'ar_use_range'             => 'Limiter à une plage de dates',
+    'ar_start'                 => 'Début',
+    'ar_end'                   => 'Fin',
+    'ar_tz_hint'               => 'Heures dans votre fuseau horaire local.',
+    'ar_save'                  => 'Enregistrer',
+    'ar_err_content_required'  => 'Le sujet et le message sont requis pour activer le répondeur.',
+    'ar_err_dates_invalid'     => 'Les dates de la plage active sont invalides.',
+    'ar_err_dates_order'       => 'La date de début doit précéder la date de fin.',
+    'ar_err_token'             => 'Le répondeur automatique n\'est pas accessible pour cette boîte actuellement.',
+    'ar_err_save'              => 'Impossible d\'enregistrer le répondeur automatique.',
     'err_label'                => 'Erreur :',
 
     // ── Messages d'erreur PHP visibles par le client ──────────────────────────

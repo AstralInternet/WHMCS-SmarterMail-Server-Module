@@ -10,6 +10,36 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.14.0] - 2026-07-08
+
+### Ajouté — répondeur automatique / réponse d'absence par boîte (Phase 4)
+
+Chaque boîte peut désormais configurer un **répondeur automatique** (réponse
+d'absence) depuis l'espace client, via l'endpoint dédié SmarterMail
+`api/v1/settings/auto-responder` (token utilisateur, obtenu par impersonification
+comme la liste de redirection).
+
+- **API** : `getAutoResponder()` / `setAutoResponder()` (`SmarterMailApi.php`) —
+  `null` si le token utilisateur est indisponible (jamais de formulaire vide
+  écrasant une config invisible) ; whitelist stricte des 10 champs officiels +
+  merge best-effort ; constantes `AR_AUDIENCE_*`.
+- **Action** `saveautoresponder` (séparée de saveuser) + handler
+  `smartermail_saveautoresponder()` : validation (sujet ≤ 200, corps/externe
+  ≤ 20 000, audience 0-2, sujet+corps requis si activé, plage de dates
+  début < fin), dates normalisées en UTC, repli corps → réponse externe.
+  PRG + flash de succès.
+- **UI** (edituser) : carte d'état (Actif / Programmé / Désactivé + aperçu) et
+  modale de configuration (sujet, message texte, plage de dates saisie en heure
+  locale → convertie en ISO UTC, destinataires externes, courrier direct
+  uniquement). Mode dégradé si le répondeur est inaccessible. Accessibilité et
+  anti double-soumission hérités du kit modale.
+- **i18n** : 28 clés `ar_*` FR/EN (parité stricte). Stratégie texte brut
+  (avertissement si un message HTML existant est détecté).
+
+⚠️ Le mapping `externalAudience` (0 = personne / 1 = contacts / 2 = tout le
+monde) est déduit de l'enum OOF Exchange — **à confirmer sur un serveur de test**
+avant mise en production (centralisé dans `AR_AUDIENCE_*`).
+
 ## [1.13.0] - 2026-07-08
 
 ### Ajouté — accessibilité : modales + labels de formulaire (Piste B, ♿)
