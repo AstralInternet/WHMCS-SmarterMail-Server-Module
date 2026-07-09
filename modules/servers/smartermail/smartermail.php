@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.24.3',
+        'MODVersion' => '1.25.1',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -4394,7 +4394,7 @@ function smartermail_edituserpage(array $params): array
     $ar = [
         'enabled'    => (bool)   ($arData['enabled'] ?? false),
         'subject'    => (string) ($arData['subject'] ?? ''),
-        'body'       => (string) ($arData['body'] ?? ''),
+        'body'       => _sm_sanitizeHtml((string) ($arData['body'] ?? '')),
         'external'   => (string) ($arData['externalReply'] ?? ''),
         'audience'   => (int)    ($arData['externalAudience'] ?? 0),
         'directOnly' => (bool)   ($arData['autoRespondOnDirectMailOnly'] ?? false),
@@ -4563,6 +4563,115 @@ function _sm_arIsoForJs(string $raw): string
 }
 
 /**
+ * Assainit du HTML pour le répondeur : conserve une allowlist de balises/attributs de
+ * mise en forme et SUPPRIME tout le reste (script, gestionnaires d'événements on*,
+ * iframe/object/form, protocoles javascript:/vbscript:/data:, styles dangereux).
+ * Permet du HTML riche SANS injection. Parse via DOMDocument ; repli sûr (texte échappé)
+ * si le parse échoue.
+ *
+ * @param  string $html
+ * @return string
+ */
+function _sm_sanitizeHtml(string $html): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '';
+    }
+
+    // Balises autorisées → attributs autorisés (tout le reste est retiré).
+    static $allowed = [
+        'a' => ['href', 'title', 'target', 'rel', 'style'],
+        'b' => ['style'], 'strong' => ['style'], 'i' => ['style'], 'em' => ['style'],
+        'u' => ['style'], 's' => ['style'], 'strike' => ['style'], 'sub' => ['style'], 'sup' => ['style'],
+        'p' => ['style', 'align'], 'div' => ['style', 'align'], 'span' => ['style'],
+        'br' => [], 'hr' => ['style'],
+        'ul' => ['style'], 'ol' => ['style', 'start', 'type'], 'li' => ['style'],
+        'blockquote' => ['style'],
+        'h1' => ['style'], 'h2' => ['style'], 'h3' => ['style'], 'h4' => ['style'],
+        'h5' => ['style'], 'h6' => ['style'], 'pre' => ['style'],
+        'font' => ['color', 'face', 'size', 'style'],
+        'table' => ['style', 'border', 'cellpadding', 'cellspacing', 'width', 'align'],
+        'thead' => ['style'], 'tbody' => ['style'], 'tr' => ['style'],
+        'td' => ['style', 'colspan', 'rowspan', 'align', 'valign', 'width'],
+        'th' => ['style', 'colspan', 'rowspan', 'align', 'valign', 'width'],
+        'img' => ['src', 'alt', 'title', 'width', 'height', 'style'],
+    ];
+
+    $prev = libxml_use_internal_errors(true);
+    $doc  = new DOMDocument('1.0', 'UTF-8');
+    $loaded = $doc->loadHTML(
+        '<?xml encoding="utf-8"?><div id="sm-sanitize-root">' . $html . '</div>',
+        LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR | LIBXML_NOWARNING
+    );
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+
+    if (!$loaded) {
+        return htmlspecialchars(strip_tags($html), ENT_QUOTES, 'UTF-8'); // repli sûr
+    }
+
+    $root = $doc->getElementById('sm-sanitize-root') ?: $doc->getElementsByTagName('div')->item(0);
+    if ($root === null) {
+        return '';
+    }
+
+    $walk = function (\DOMNode $node) use (&$walk, $allowed): void {
+        $children = [];
+        foreach ($node->childNodes as $c) {
+            $children[] = $c;
+        }
+        foreach ($children as $child) {
+            if ($child->nodeType === XML_COMMENT_NODE) {
+                $node->removeChild($child);
+                continue;
+            }
+            if ($child->nodeType !== XML_ELEMENT_NODE) {
+                continue; // nœud texte : conservé (échappé à la sérialisation)
+            }
+            $tag = strtolower($child->nodeName);
+            if (!isset($allowed[$tag])) {
+                $node->removeChild($child); // balise interdite → retirée EN ENTIER
+                continue;
+            }
+            $allowAttrs = $allowed[$tag];
+            $names = [];
+            foreach ($child->attributes as $a) {
+                $names[] = $a->nodeName;
+            }
+            foreach ($names as $attr) {
+                $an  = strtolower($attr);
+                $val = $child->getAttribute($attr);
+                if (!in_array($an, $allowAttrs, true)) {
+                    $child->removeAttribute($attr); // retire on*, id/class non listés, etc.
+                    continue;
+                }
+                if ($an === 'href' || $an === 'src') {
+                    $v = ltrim(html_entity_decode($val, ENT_QUOTES, 'UTF-8'));
+                    $isDataImg = ($an === 'src' && preg_match('#^data:image/(png|jpe?g|gif|webp);base64,#i', $v));
+                    if (!$isDataImg && preg_match('/^(javascript|vbscript|data|file):/i', $v)) {
+                        $child->removeAttribute($attr);
+                        continue;
+                    }
+                }
+                if ($an === 'style' && preg_match('/expression\s*\(|javascript\s*:|vbscript\s*:|-moz-binding|behavior\s*:|@import|url\s*\(\s*["\']?\s*(?:javascript|data|vbscript)/i', $val)) {
+                    $child->removeAttribute($attr);
+                    continue;
+                }
+            }
+            $walk($child);
+        }
+    };
+    $walk($root);
+
+    $out = '';
+    foreach ($root->childNodes as $c) {
+        $out .= $doc->saveHTML($c);
+    }
+    return trim($out);
+}
+
+/**
  * Action : enregistre le répondeur automatique (réponse d'absence) d'une boîte.
  *
  * Endpoint « User only » → nécessite un token utilisateur (impersonification via
@@ -4588,7 +4697,9 @@ function smartermail_saveautoresponder(array $params): string
 
     $enabled    = ($_POST['ar_enabled'] ?? '') === '1';
     $subject    = mb_substr(trim(strip_tags((string) ($_POST['ar_subject'] ?? ''))), 0, 200);
-    $body       = mb_substr((string) ($_POST['ar_body'] ?? ''), 0, 20000);
+    // Assainissement : autorise le HTML de mise en forme, bloque l'injection (script,
+    // on*, javascript:…). Le message est saisi via l'éditeur riche de l'espace client.
+    $body       = _sm_sanitizeHtml(mb_substr((string) ($_POST['ar_body'] ?? ''), 0, 20000));
     $audience   = (int) ($_POST['ar_audience'] ?? 0);
     $useRange   = ($_POST['ar_use_range'] ?? '') === '1';
     $directOnly = ($_POST['ar_direct_only'] ?? '') === '1';
@@ -4596,7 +4707,7 @@ function smartermail_saveautoresponder(array $params): string
     if ($audience < 0 || $audience > 2) $audience = 0;
 
     // Sujet + corps requis pour activer.
-    if ($enabled && ($subject === '' || trim($body) === '')) {
+    if ($enabled && ($subject === '' || (trim(strip_tags($body)) === '' && stripos($body, '<img') === false))) {
         return $l['ar_err_content_required'] ?? 'Le sujet et le message sont requis pour activer le répondeur.';
     }
     // Message UNIQUE : la réponse externe est TOUJOURS identique au corps (le champ

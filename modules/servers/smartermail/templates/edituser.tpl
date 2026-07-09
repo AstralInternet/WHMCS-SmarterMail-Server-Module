@@ -536,9 +536,33 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
 
         <div style="margin-top:10px;">
-          <label class="sm-mlabel" for="ar-body">{$lang.ar_message}</label>
-          <textarea class="sm-minput-full" name="ar_body" id="ar-body" rows="5" maxlength="20000">{$ar.body|escape}</textarea>
-          {if $ar.isHtml}<p class="sm-form-hint"><i class="fa fa-exclamation-triangle"></i> {$lang.ar_html_warn}</p>{/if}
+          <label class="sm-mlabel">{$lang.ar_message}</label>
+          <div class="sm-rte" id="ar-rte">
+            <div class="sm-rte-tb">
+              <button type="button" class="sm-rte-btn" title="Gras" onmousedown="return smRteCmd(event,'bold')"><b>B</b></button>
+              <button type="button" class="sm-rte-btn" title="Italique" onmousedown="return smRteCmd(event,'italic')"><i>I</i></button>
+              <button type="button" class="sm-rte-btn" title="Souligné" onmousedown="return smRteCmd(event,'underline')"><u>U</u></button>
+              <button type="button" class="sm-rte-btn" title="Barré" onmousedown="return smRteCmd(event,'strikeThrough')"><s>S</s></button>
+              <span class="sm-rte-sep"></span>
+              <label class="sm-rte-btn" title="Couleur du texte" style="position:relative"><span style="border-bottom:3px solid #e74c3c">A</span><input type="color" class="sm-rte-color" value="#000000" onmousedown="smRteSaveSel()" onchange="smRteColor('foreColor',this.value)"></label>
+              <label class="sm-rte-btn" title="Surlignage" style="position:relative"><span style="background:#f9e79f;padding:0 1px">A</span><input type="color" class="sm-rte-color" value="#ffff00" onmousedown="smRteSaveSel()" onchange="smRteColor('hiliteColor',this.value)"></label>
+              <span class="sm-rte-sep"></span>
+              <button type="button" class="sm-rte-btn" title="Liste à puces" onmousedown="return smRteCmd(event,'insertUnorderedList')"><i class="fa fa-list-ul"></i></button>
+              <button type="button" class="sm-rte-btn" title="Liste numérotée" onmousedown="return smRteCmd(event,'insertOrderedList')"><i class="fa fa-list-ol"></i></button>
+              <span class="sm-rte-sep"></span>
+              <button type="button" class="sm-rte-btn" title="Aligner à gauche" onmousedown="return smRteCmd(event,'justifyLeft')"><i class="fa fa-align-left"></i></button>
+              <button type="button" class="sm-rte-btn" title="Centrer" onmousedown="return smRteCmd(event,'justifyCenter')"><i class="fa fa-align-center"></i></button>
+              <button type="button" class="sm-rte-btn" title="Aligner à droite" onmousedown="return smRteCmd(event,'justifyRight')"><i class="fa fa-align-right"></i></button>
+              <span class="sm-rte-sep"></span>
+              <button type="button" class="sm-rte-btn" title="Lien" onmousedown="return smRteLink(event)"><i class="fa fa-link"></i></button>
+              <button type="button" class="sm-rte-btn" title="Effacer la mise en forme" onmousedown="return smRteCmd(event,'removeFormat')"><i class="fa fa-eraser"></i></button>
+              <span class="sm-rte-sep"></span>
+              <button type="button" class="sm-rte-btn" id="ar-rte-codebtn" title="Vue code HTML" onclick="smRteToggleCode()"><i class="fa fa-code"></i></button>
+            </div>
+            <div class="sm-rte-area" id="ar-editor" contenteditable="true" oninput="smRteSync()">{$ar.body}</div>
+            <textarea class="sm-rte-src" id="ar-source" style="display:none" rows="6" oninput="smRteSync()"></textarea>
+          </div>
+          <input type="hidden" name="ar_body" id="ar-body">
         </div>
 
         <div class="sm-chk-row" style="margin-top:10px;">
@@ -758,6 +782,7 @@ function smArOpen() {
   // Pré-remplir les datetime-local (heure locale du navigateur) depuis l'ISO UTC.
   smArSetLocal('ar-start', SM_AR_START);
   smArSetLocal('ar-end', SM_AR_END);
+  smRteSync(); // synchro initiale de l'éditeur → champ caché ar_body
 }
 function smArRange() {
   var c = document.getElementById('ar-use-range'), b = document.getElementById('ar-range-block');
@@ -773,6 +798,7 @@ function smArSetLocal(id, iso) {
              'T' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 function smArPrepare() {
+  smRteSync(); // garantir que ar_body reflète l'éditeur avant l'envoi
   // Convertit les datetime-local (heure locale) en ISO UTC dans les champs cachés.
   var use = document.getElementById('ar-use-range');
   var si = document.getElementById('ar-start-iso'), ei = document.getElementById('ar-end-iso');
@@ -788,6 +814,58 @@ function smArPrepare() {
     si.value = ''; ei.value = '';
   }
   return true;
+}
+
+// ── Éditeur riche du répondeur (contenteditable + execCommand) ──────────────
+var smRteSel = null;
+function smRteSaveSel() {
+  var s = window.getSelection();
+  if (s && s.rangeCount) { smRteSel = s.getRangeAt(0); }
+}
+function smRteRestoreSel() {
+  if (!smRteSel) return;
+  var s = window.getSelection(); s.removeAllRanges(); s.addRange(smRteSel);
+}
+function smRteSync() {
+  var ed = document.getElementById('ar-editor'),
+      src = document.getElementById('ar-source'),
+      hid = document.getElementById('ar-body');
+  if (!hid) return;
+  if (src && src.style.display !== 'none') { hid.value = src.value; }
+  else if (ed) { hid.value = ed.innerHTML; }
+}
+function smRteCmd(ev, cmd, val) {
+  if (ev && ev.preventDefault) ev.preventDefault(); // garde la sélection dans l'éditeur
+  var ed = document.getElementById('ar-editor'); if (ed) ed.focus();
+  try { document.execCommand(cmd, false, val || null); } catch (e) {}
+  smRteSync(); return false;
+}
+function smRteColor(cmd, val) {
+  var ed = document.getElementById('ar-editor'); if (ed) ed.focus();
+  smRteRestoreSel();
+  try { document.execCommand(cmd, false, val); } catch (e) {}
+  smRteSync();
+}
+function smRteLink(ev) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  var ed = document.getElementById('ar-editor'); if (ed) ed.focus();
+  var url = prompt('Adresse du lien (https://…) :', 'https://');
+  if (url) { try { document.execCommand('createLink', false, url); } catch (e) {} }
+  smRteSync(); return false;
+}
+function smRteToggleCode() {
+  var ed = document.getElementById('ar-editor'),
+      src = document.getElementById('ar-source'),
+      btn = document.getElementById('ar-rte-codebtn');
+  if (!ed || !src) return;
+  if (src.style.display === 'none') {          // éditeur → vue code
+    src.value = ed.innerHTML; ed.style.display = 'none'; src.style.display = '';
+    if (btn) btn.classList.add('active');
+  } else {                                      // vue code → éditeur
+    ed.innerHTML = src.value; src.style.display = 'none'; ed.style.display = '';
+    if (btn) btn.classList.remove('active');
+  }
+  smRteSync();
 }
 {/literal}
 </script>

@@ -1544,7 +1544,25 @@ class SmarterMailApi
         // SmarterMail ENVELOPPE l'objet sous 'autoResponderSettings' (confirmé par la
         // réponse GET réelle : { "autoResponderSettings": {…}, "success": true }).
         // Le corps POST utilise donc le même enveloppement.
-        return $this->post('api/v1/settings/auto-responder', ['autoResponderSettings' => $payload], $userToken);
+        //
+        // Le segment {wantHtml} de la route décide de l'INTERPRÉTATION du corps, tout
+        // comme au GET : « /true » => le corps est traité comme HTML ; sans segment =>
+        // texte, et SmarterMail échappe alors les balises (« <div> » → « &lt;div&gt; »),
+        // d'où le code affiché en toutes lettres dans la réponse d'absence. On aligne
+        // donc le segment sur isHTML.
+        $wantHtml = !empty($payload['isHTML']);
+        $ep = 'api/v1/settings/auto-responder' . ($wantHtml ? '/true' : '');
+        $resp = $this->post($ep, ['autoResponderSettings' => $payload], $userToken);
+        // Repli si un build refuse le segment sur le POST (404/405) : réémettre sans
+        // segment (comportement antérieur — au pire enregistré comme avant, jamais
+        // d'échec dur pour l'utilisateur).
+        if ($wantHtml && !($resp['success'] ?? false) && in_array((int) ($resp['code'] ?? 0), [404, 405], true)) {
+            $resp = $this->post('api/v1/settings/auto-responder', ['autoResponderSettings' => $payload], $userToken);
+        }
+        // DEBUG TEMPORAIRE — à retirer une fois le rendu HTML confirmé côté SmarterMail.
+        logActivity('SmarterMail [setAR DEBUG] ep=' . $ep . ' isHTML=' . ($wantHtml ? 1 : 0)
+            . ' code=' . ($resp['code'] ?? '?') . ' ok=' . (($resp['success'] ?? false) ? 1 : 0));
+        return $resp;
     }
 
     /**

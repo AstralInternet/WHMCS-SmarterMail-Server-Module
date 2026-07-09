@@ -10,6 +10,39 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.25.1] - 2026-07-09
+
+### Corrigé — répondeur : le corps HTML s'affichait en code côté SmarterMail
+
+- Le **POST** du répondeur allait sur `api/v1/settings/auto-responder` **sans segment**
+  `{wantHtml}`. Or ce segment décide de l'**interprétation du corps** (comme au GET) :
+  sans `/true`, SmarterMail traite le corps comme **texte** et échappe les balises
+  (`<div>` → `&lt;div&gt;`) — la réponse d'absence affichait donc le HTML **en toutes
+  lettres**, même avec `isHTML: true` dans le payload.
+- Le segment est désormais **aligné sur `isHTML`** : corps HTML ⇒ `POST …/auto-responder/true`.
+  Repli automatique sans segment si un build refuse la route (404/405) — jamais d'échec dur.
+- Débug temporaire (`[setAR DEBUG]`, endpoint + isHTML + code) pour confirmer le rendu, à retirer ensuite.
+
+## [1.25.0] - 2026-07-09
+
+### Ajouté — répondeur : assainissement HTML + éditeur riche
+
+- **Assainisseur HTML** (`_sm_sanitizeHtml`, DOMDocument + allowlist) : le message du
+  répondeur autorise le HTML de **mise en forme** (gras, couleurs, listes, liens, tableaux…)
+  mais **bloque l'injection** — `<script>`, gestionnaires `on*`, `<iframe>`/`<object>`/`<form>`,
+  protocoles `javascript:`/`vbscript:`/`data:` (hors images), styles dangereux
+  (`expression()`, `url(javascript:)`, `@import`…). Appliqué à l'**enregistrement ET à la
+  lecture**. 13 vecteurs d'attaque vérifiés (script / onclick / onerror / iframe / svg onload…
+  neutralisés ; mise en forme conservée).
+- **Éditeur riche** dans la modale du répondeur (`contenteditable` + `execCommand`, vanilla JS,
+  **aucune dépendance**) : gras / italique / souligné / barré, couleur de texte et surlignage,
+  listes à puces / numérotées, alignement gauche / centre / droite, lien, effacer la mise en
+  forme, et une **vue code HTML**. Remplace la zone de texte brute. Styles `.sm-rte-*`
+  (clair + sombre). Synchronisé vers un champ caché `ar_body` à la saisie et à l'envoi.
+
+Le client compose un message formaté sans écrire de HTML, et le serveur garantit qu'aucun
+contenu dangereux n'est stocké ni envoyé.
+
 ## [1.24.3] - 2026-07-09
 
 ### Corrigé — répondeur : HTML envoyé comme HTML (fin du double-échappement)
