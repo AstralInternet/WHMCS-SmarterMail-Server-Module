@@ -143,7 +143,12 @@ function _sm_ensurePackagesTable(): void
                 $t->decimal('price_bundle', 10, 2)->default(0);
                 $t->integer('billing_threshold_days')->unsigned()->default(0);
                 $t->integer('gb_per_tier')->unsigned()->default(10);
-                $t->string('domain_path', 191)->default('C:\\SmarterMail\\Domains\\');
+                // ⚠️ AUCUN backslash dans ce DEFAULT SQL : MySQL interprète « \ » comme
+                // un échappement — un « \ » final échappe le guillemet fermant et casse le
+                // CREATE TABLE (SQLSTATE 42000). La valeur réelle est TOUJOURS écrite par
+                // _sm_savePackage() ; ce défaut de colonne n'est jamais la valeur effective
+                // (le resolver lit la ligne enregistrée, ou convertit la config héritée).
+                $t->string('domain_path', 191)->default('');
                 $t->string('outbound_ip', 64)->default('default');
                 $t->integer('max_users')->unsigned()->default(0);
                 $t->integer('max_domain_aliases')->unsigned()->default(0);

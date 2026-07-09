@@ -10,6 +10,22 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.22.1] - 2026-07-09
+
+### Corrigé — échec de création de `mod_sm_packages` (trouvé au test bac-à-sable)
+
+- **`CREATE TABLE mod_sm_packages` échouait** (SQLSTATE 42000, erreur de syntaxe SQL) :
+  le `DEFAULT` de la colonne `domain_path` valait `C:\SmarterMail\Domains\`. MySQL
+  interprète `\` comme un caractère d'échappement — le backslash **final** échappait le
+  guillemet fermant et corrompait tout le `CREATE`. Le défaut SQL de `domain_path` passe
+  à **chaîne vide** (la valeur réelle est toujours écrite par `_sm_savePackage()` ; ce
+  défaut de colonne n'est jamais la valeur effective). Seul le `DDL` était touché — les
+  `INSERT`/`UPDATE` (bindings paramétrés) étaient déjà sûrs.
+- **Impact** : sans la table, les forfaits étaient inutilisables — mais le module
+  **retombait proprement sur la config héritée** (aucune régression pour les produits sans
+  forfait : le garde-fou byte-identique a tenu). Après correctif, la table se crée
+  automatiquement à la prochaine ouverture de l'addon.
+
 ## [1.22.0] - 2026-07-08
 
 ### Ajouté / Modifié — finition des forfaits & nouvelles capacités — P5
