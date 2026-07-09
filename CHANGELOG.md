@@ -10,6 +10,62 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.25.5] - 2026-07-09
+
+### Corrigé/diagnostic — détection HTML robuste + sondes non ambiguës
+
+- Détection `isHTML` durcie : `preg_match` **OU** `strip_tags` (filet si PCRE flanche selon
+  la libxml/l'encodage du php-fpm). Si l'un des deux voit des balises → HTML.
+- Débug `[saveAR DEBUG]` réécrit en **rawurlencode** + sondes `hasLt`/`hasEnt`/`isHtmlRe` :
+  le rendu HTML du journal WHMCS masquait si `$body` contenait un vrai `<` ou un `&lt;`.
+
+## [1.25.4] - 2026-07-09
+
+### Corrigé — LA vraie cause : assainisseur HTML fragile selon la version de libxml
+
+- Le débug l'a tranché : le POST contenait de **vraies balises** (`<div style="box-sizing…">`)
+  mais `isHtml=0` — car `isHtml` est calculé sur la **sortie de `_sm_sanitizeHtml`**, et
+  celle-ci renvoyait du texte échappé/dénudé sur le **php-fpm de production** (libxml plus
+  ancienne), alors qu'elle conservait tout en CLI (libxml récente).
+- Cause : `loadHTML(..., LIBXML_HTML_NOIMPLIED …)` + `getElementById` — tous deux **peu
+  fiables sur d'anciennes libxml** (le drapeau `NOIMPLIED` est bogué, `getElementById` exige
+  une DTD). Le corps ressortait donc échappé → détection ratée → SmarterMail ré-affichait le code.
+- Correctif : parse **portable toutes versions** — enveloppe explicite `<html><body>…</body></html>`
+  (sans `NOIMPLIED`) et extraction du `<body>` via `getElementsByTagName`. Repli sûr conservé.
+- Validé : **16 cas** (12 sécurité + 3 cas réels Froala `box-sizing` + sonde `isHtml`) — la mise
+  en forme est conservée (`isHtml=1`), les injections toujours neutralisées.
+- Débug `[saveAR DEBUG]` enrichi (tête de `$body` **après** assainissement) pour confirmer en prod.
+
+## [1.25.3] - 2026-07-09
+
+### Corrigé — LA cause : auto-échappement Smarty du corps dans l'éditeur
+
+- Le débug l'a prouvé : `getAutoResponder` renvoie bien du **HTML brut** (`<div>…`).
+  L'échappement se produisait **à la sortie Smarty** — l'espace client WHMCS active
+  `escape_html`, donc `{$ar.body}` était transformé en `&lt;div&gt;`. L'éditeur
+  `contenteditable` affichait alors le **code**, le renvoyait échappé, la détection voyait
+  « aucune balise » (`isHTML=0`) et SmarterMail ré-affichait les balises en clair.
+- Correctif : **`{$ar.body nofilter}`** dans la zone d'édition. Le corps y est du HTML
+  **déjà assaini côté serveur** (`_sm_sanitizeHtml`), donc le sortir non-échappé est sûr.
+- Explique le pattern observé : répondeur **neuf** (corps vide → rien à échapper) = OK ;
+  répondeur **existant** (corps rempli → échappé) = code affiché.
+- Débug temporaire `[saveAR DEBUG]` (longueur + tête du POST) pour confirmer le round-trip.
+
+## [1.25.2] - 2026-07-09
+
+### Corrigé — répondeur existant : le corps revenait entity-encodé (code affiché)
+
+- **Pattern isolé** (merci au test utilisateur) : un répondeur **créé dans le webmail
+  SmarterMail** (balises Froala `box-sizing`) puis **édité dans WHMCS** ressortait en code ;
+  un répondeur **neuf** posé depuis WHMCS fonctionnait.
+- Cause : pour ces répondeurs, `getAutoResponder` (wantHtml=true) renvoie le corps **déjà
+  entity-encodé** (`&lt;div&gt;`). L'éditeur affichait alors le code, le renvoyait échappé,
+  la détection voyait « aucune balise » (`isHTML=0`) et SmarterMail ré-affichait les balises.
+- Correctif **côté lecture** : décodage HTML **conditionnel** — uniquement si `&lt;` est
+  présent **sans aucune vraie balise** (le HTML brut, qui a de vraies balises, reste intact).
+  L'éditeur reçoit donc du HTML réel, le round-trip repart en `isHTML=1` (`/true`).
+- Débug temporaire `[getAR DEBUG]` (tête du corps renvoyé par l'API) pour confirmer, à retirer ensuite.
+
 ## [1.25.1] - 2026-07-09
 
 ### Corrigé — répondeur : le corps HTML s'affichait en code côté SmarterMail

@@ -559,7 +559,11 @@ document.addEventListener('DOMContentLoaded', function() {
               <span class="sm-rte-sep"></span>
               <button type="button" class="sm-rte-btn" id="ar-rte-codebtn" title="Vue code HTML" onclick="smRteToggleCode()"><i class="fa fa-code"></i></button>
             </div>
-            <div class="sm-rte-area" id="ar-editor" contenteditable="true" oninput="smRteSync()">{$ar.body}</div>
+            {* nofilter : le corps est du HTML DÉJÀ ASSAINI côté serveur (_sm_sanitizeHtml).
+               Sans nofilter, l'auto-échappement Smarty (escape_html de l'espace client WHMCS)
+               le transforme en « &lt;div&gt; » → l'éditeur affiche le code et le renvoie
+               échappé (isHTML=0 → SmarterMail ré-affiche les balises en clair). *}
+            <div class="sm-rte-area" id="ar-editor" contenteditable="true" oninput="smRteSync()">{$ar.body nofilter}</div>
             <textarea class="sm-rte-src" id="ar-source" style="display:none" rows="6" oninput="smRteSync()"></textarea>
           </div>
           <input type="hidden" name="ar_body" id="ar-body">

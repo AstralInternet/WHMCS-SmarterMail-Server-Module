@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.25.1',
+        'MODVersion' => '1.25.5',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -4391,10 +4391,24 @@ function smartermail_edituserpage(array $params): array
     // affiché = ce qui est réellement stocké côté SmarterMail).
     $arData      = $api->getAutoResponder($daToken, $username, $domain, $init['saToken'] ?? null, true);
     $arAvailable = ($arData !== null);
+
+    // Corps du répondeur : certains builds SmarterMail renvoient le HTML déjà
+    // ENTITY-ENCODÉ (« &lt;div&gt; ») même en wantHtml=true — typiquement un répondeur
+    // créé dans le webmail (Froala, balises « box-sizing »). Sans décodage, l'éditeur
+    // afficherait le code et le renverrait échappé (→ isHTML=0 → SmarterMail ré-affiche
+    // les balises en clair). Heuristique sûre : « &lt; » présent SANS aucune vraie
+    // balise ⇒ décoder une fois (le HTML brut, lui, a de vraies balises → intact).
+    $arApiBody = (string) ($arData['body'] ?? '');
+    if ($arApiBody !== '') {
+        logActivity('SmarterMail [getAR DEBUG] apiBodyHead=' . substr($arApiBody, 0, 180)); // TEMP — à retirer
+    }
+    if (stripos($arApiBody, '&lt;') !== false && !preg_match('/<[a-z!\/][^>]*>/i', $arApiBody)) {
+        $arApiBody = html_entity_decode($arApiBody, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
     $ar = [
         'enabled'    => (bool)   ($arData['enabled'] ?? false),
         'subject'    => (string) ($arData['subject'] ?? ''),
-        'body'       => _sm_sanitizeHtml((string) ($arData['body'] ?? '')),
+        'body'       => _sm_sanitizeHtml($arApiBody),
         'external'   => (string) ($arData['externalReply'] ?? ''),
         'audience'   => (int)    ($arData['externalAudience'] ?? 0),
         'directOnly' => (bool)   ($arData['autoRespondOnDirectMailOnly'] ?? false),
@@ -4598,11 +4612,16 @@ function _sm_sanitizeHtml(string $html): string
         'img' => ['src', 'alt', 'title', 'width', 'height', 'style'],
     ];
 
+    // Parse robuste et PORTABLE entre versions de libxml : on enveloppe explicitement
+    // dans <html><body> (on N'utilise PAS LIBXML_HTML_NOIMPLIED, bogué sur d'anciennes
+    // libxml — le php-fpm de prod — qui renvoyaient alors le corps échappé/dénudé, d'où
+    // « isHTML=0 » et le code affiché) et on récupère le <body> via getElementsByTagName
+    // (getElementById est peu fiable sans DTD). Le préfixe <?xml encoding> évite le mojibake.
     $prev = libxml_use_internal_errors(true);
     $doc  = new DOMDocument('1.0', 'UTF-8');
     $loaded = $doc->loadHTML(
-        '<?xml encoding="utf-8"?><div id="sm-sanitize-root">' . $html . '</div>',
-        LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR | LIBXML_NOWARNING
+        '<?xml encoding="utf-8"?><html><body>' . $html . '</body></html>',
+        LIBXML_NOERROR | LIBXML_NOWARNING
     );
     libxml_clear_errors();
     libxml_use_internal_errors($prev);
@@ -4611,9 +4630,9 @@ function _sm_sanitizeHtml(string $html): string
         return htmlspecialchars(strip_tags($html), ENT_QUOTES, 'UTF-8'); // repli sûr
     }
 
-    $root = $doc->getElementById('sm-sanitize-root') ?: $doc->getElementsByTagName('div')->item(0);
+    $root = $doc->getElementsByTagName('body')->item(0);
     if ($root === null) {
-        return '';
+        return htmlspecialchars(strip_tags($html), ENT_QUOTES, 'UTF-8'); // repli sûr
     }
 
     $walk = function (\DOMNode $node) use (&$walk, $allowed): void {
@@ -4731,7 +4750,15 @@ function smartermail_saveautoresponder(array $params): string
     // → isHTML=true (envoyé TEL QUEL, sans échappement par le serveur) ; sinon texte
     // brut (isHTML=false). Sans ça, un message HTML était échappé (« <div> » → « &lt;div&gt; »)
     // et apparaissait en toutes lettres dans la réponse d'absence.
-    $isHtml = (bool) preg_match('/<[a-z!\/][^>]*>/i', $body);
+    // Détection ROBUSTE : le regex OU strip_tags (filet si PCRE flanche selon libxml/encodage).
+    // Si l'un des deux voit des balises → c'est du HTML.
+    $isHtmlRe = (bool) preg_match('/<[a-z!\/][^>]*>/i', $body);
+    $isHtml   = $isHtmlRe || ($body !== strip_tags($body));
+    // DEBUG TEMPORAIRE — octets NON ambigus de $body (rawurlencode) + sondes. À retirer.
+    logActivity('SmarterMail [saveAR DEBUG] isHtmlRe=' . ((int) $isHtmlRe) . ' isHtml=' . ((int) $isHtml)
+        . ' hasLt=' . (int) (strpos($body, '<') !== false)
+        . ' hasEnt=' . (int) (stripos($body, '&lt;') !== false)
+        . ' enc=' . rawurlencode(substr($body, 0, 140)));
 
     $settings = [
         'enabled'                     => $enabled,
