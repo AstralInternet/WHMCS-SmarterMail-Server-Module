@@ -243,6 +243,11 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
 </div>
 
 {* ── Répondeur automatique (réponse d'absence) ─────────────────────────── *}
+{* MASQUÉ CÔTÉ CLIENT (temporaire) : le round-trip HTML du répondeur n'est pas encore
+   fiable (échappement Smarty / rendu SmarterMail). Tout le code (modale, éditeur, handlers,
+   API) RESTE en place. Pour réactiver : retirer ce « {if false} » et le « {/if} » qui ferme
+   la carte juste avant « Barre d'actions ». *}
+{if false}
 <div class="sm-card">
   <div class="sm-card-header"><i class="fa fa-reply"></i> {$lang.ar_card_title}</div>
   <div class="sm-card-body">
@@ -265,6 +270,7 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
     {/if}
   </div>
 </div>
+{/if}{* fin du masquage temporaire du répondeur *}
 
 {* ── Barre d'actions ─────────────────────────────────────────────────── *}
 {* Supprimer seul à gauche — Mot de passe + Sauvegarder groupés à droite  *}
@@ -563,7 +569,10 @@ document.addEventListener('DOMContentLoaded', function() {
                Sans nofilter, l'auto-échappement Smarty (escape_html de l'espace client WHMCS)
                le transforme en « &lt;div&gt; » → l'éditeur affiche le code et le renvoie
                échappé (isHTML=0 → SmarterMail ré-affiche les balises en clair). *}
-            <div class="sm-rte-area" id="ar-editor" contenteditable="true" oninput="smRteSync()">{$ar.body nofilter}</div>
+            {* Contenu injecté par JS (SM_AR_BODY) pour contourner l'auto-échappement HTML de
+               Smarty (escape_html de l'espace client WHMCS), qui transformait « <div> » en
+               « &lt;div&gt; » : l'éditeur affichait alors le code et le renvoyait échappé. *}
+            <div class="sm-rte-area" id="ar-editor" contenteditable="true" oninput="smRteSync()"></div>
             <textarea class="sm-rte-src" id="ar-source" style="display:none" rows="6" oninput="smRteSync()"></textarea>
           </div>
           <input type="hidden" name="ar_body" id="ar-body">
@@ -628,6 +637,9 @@ var SM_LOCK_DAYS    = {$lockDays|default:1};
 var SM_AR_START = '{$ar.startIso|escape:"javascript"}';
 var SM_AR_END   = '{$ar.endIso|escape:"javascript"}';
 var SM_AR_DATES_REQUIRED = '{$lang.ar_err_dates_invalid|escape:"javascript"}';
+{* Corps du répondeur en chaîne JS (échappement JS, PAS HTML) : le HTML réel arrive intact
+   dans l'éditeur — même technique que SM_AR_START, insensible à l'auto-échappement Smarty. *}
+var SM_AR_BODY = '{$ar.body|escape:"javascript"}';
 
 {literal}
 
@@ -783,6 +795,14 @@ function smUpdatePrice() {
 function smArOpen() {
   smOpen('sm-ar-modal');
   smArRange();
+  // Injecter le corps HTML dans l'éditeur (une seule fois) via la chaîne JS — immunisé
+  // contre l'auto-échappement Smarty. Sans ça, l'éditeur recevait « &lt;div&gt; » et
+  // renvoyait du code au lieu du HTML.
+  var ed = document.getElementById('ar-editor');
+  if (ed && !ed.getAttribute('data-sm-init')) {
+    ed.innerHTML = SM_AR_BODY;
+    ed.setAttribute('data-sm-init', '1');
+  }
   // Pré-remplir les datetime-local (heure locale du navigateur) depuis l'ISO UTC.
   smArSetLocal('ar-start', SM_AR_START);
   smArSetLocal('ar-end', SM_AR_END);

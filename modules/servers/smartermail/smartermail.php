@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.26.0',
+        'MODVersion' => '1.27.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -4757,16 +4757,10 @@ function smartermail_saveautoresponder(array $params): string
         }
     }
 
-    // Le répondeur SmarterMail stocke du HTML. Si le message contient des balises HTML
-    // → isHTML=true (envoyé TEL QUEL, sans échappement par le serveur) ; sinon texte
-    // brut (isHTML=false). Sans ça, un message HTML était échappé (« <div> » → « &lt;div&gt; »)
-    // et apparaissait en toutes lettres dans la réponse d'absence.
     // SmarterMail (éditeur Froala) traite TOUJOURS le corps comme du HTML — il n'y a pas de
     // mode « texte » dans son interface. On envoie donc toujours isHTML=true ; le corps est
     // du HTML déjà assaini. Fini la détection fragile (regex/strip_tags).
     $isHtml = true;
-    // DEBUG TEMPORAIRE — confirmer que $body reste du HTML RÉEL (pas de &lt;). À retirer.
-    logActivity('SmarterMail [saveAR DEBUG] bodyEnc=' . rawurlencode(substr($body, 0, 140)));
 
     $settings = [
         'enabled'                     => $enabled,

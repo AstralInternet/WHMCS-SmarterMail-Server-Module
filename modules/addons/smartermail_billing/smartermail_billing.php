@@ -39,7 +39,7 @@ function smartermail_billing_config()
         'description' => 'Crée et gère les forfaits SmarterMail (protocoles, mot de passe, DNS, '
             . 'disque & facturation) dans une interface moderne, plus les réglages globaux '
             . 'et les réglages de facturation par produit (hérité).',
-        'version'     => '2.1',
+        'version'     => '2.2',
         'author'      => 'Astral Internet',
         'fields'      => [],
     ];
@@ -156,11 +156,15 @@ function smxToggle(id){
   if(c)c.style.transform=open?'rotate(0deg)':'rotate(180deg)';
 }
 function smxAll(open){
-  ['proto','server','pwd','dns','disk'].forEach(function(id){
+  ['quota','proto','dns','server'].forEach(function(id){
     var b=document.getElementById('smx-b-'+id),c=document.getElementById('smx-c-'+id);
     if(b)b.style.display=open?'block':'none';
     if(c)c.style.transform=open?'rotate(180deg)':'rotate(0deg)';
   });
+}
+function smxPlan(v){
+  var w=document.getElementById('smx-tierwrap');
+  if(w)w.style.display=(v==='usage')?'block':'none';
 }
 </script>
 HTML;
@@ -252,9 +256,7 @@ function _sm_billing_packagesList(string $csrf): string
         . '<th>#</th><th>Nom</th><th>Type</th><th>Quota</th><th>Boîte max</th><th>Produits liés</th><th></th>'
         . '</tr></thead><tbody>';
     foreach ($packages as $p) {
-        $type = ($p->overage_mode === 'block')
-            ? 'Espace bloqué'
-            : (($p->overage_mode === 'bill') ? 'À l\'usage (+ excédent)' : 'À l\'usage');
+        $type = (($p->billing_model ?? 'tiers') === 'flat') ? 'Fixe' : 'À l\'usage';
         $quota = ((int) $p->quota_gb > 0) ? ((int) $p->quota_gb . ' Go') : 'illimité';
         $mbox  = ((int) $p->max_mailbox_size_gb > 0) ? ((int) $p->max_mailbox_size_gb . ' Go') : 'illimité';
         $used  = (int) ($tally[(int) $p->id] ?? 0);
@@ -331,8 +333,8 @@ function _sm_billing_packageEditor(?object $row, string $csrf, bool $easMapiAvai
     };
 
     // ── Projections d'affichage ──────────────────────────────────────────────
-    $om       = $row->overage_mode ?? 'notify';
-    $planType = ($om === 'block') ? 'blocked' : (($om === 'bill') ? 'usage_bill' : 'usage_notify');
+    $bm       = $row->billing_model ?? 'tiers';
+    $planType = ($bm === 'flat') ? 'fixe' : 'usage';
     $ptOpt = function (string $val, string $label) use ($planType) {
         return '<option value="' . $val . '"' . ($planType === $val ? ' selected' : '') . '>' . _sm_billing_h($label) . '</option>';
     };
@@ -359,8 +361,8 @@ function _sm_billing_packageEditor(?object $row, string $csrf, bool $easMapiAvai
                 'Délai avant de facturer un protocole (période d\'essai). 0 = facturer immédiatement (mode live).')
             . '</div>';
     } else {
-        $proto = _sm_billing_alert('info', 'EAS/MAPI est désactivé globalement (Réglages globaux) — les champs EAS/MAPI sont masqués et ignorés.')
-            . '<input type="hidden" name="offer_eas" value="' . (isset($row->offer_eas) ? (int) $row->offer_eas : 1) . '">'
+        // EAS/MAPI désactivé globalement : section entièrement masquée, valeurs préservées.
+        $proto = '<input type="hidden" name="offer_eas" value="' . (isset($row->offer_eas) ? (int) $row->offer_eas : 1) . '">'
             . '<input type="hidden" name="offer_mapi" value="' . (isset($row->offer_mapi) ? (int) $row->offer_mapi : 1) . '">'
             . '<input type="hidden" name="price_eas" value="' . $v('price_eas', '0') . '">'
             . '<input type="hidden" name="price_mapi" value="' . $v('price_mapi', '0') . '">'
@@ -368,7 +370,8 @@ function _sm_billing_packageEditor(?object $row, string $csrf, bool $easMapiAvai
             . '<input type="hidden" name="billing_threshold_days" value="' . $v('billing_threshold_days', '0') . '">';
     }
 
-    // ── Section : Serveur ────────────────────────────────────────────────────
+    // ── Section : Serveur (placée en bas) ────────────────────────────────────
+    // Nombre de boîtes / alias déplacés vers « Quota et limitation ».
     $server = '<div style="margin:14px 0 0;">'
         . $fg('Chemin des domaines',
             '<input type="text" name="domain_path" value="' . $v('domain_path', 'C:\\SmarterMail\\Domains\\') . '" class="smx-inp">',
@@ -376,24 +379,11 @@ function _sm_billing_packageEditor(?object $row, string $csrf, bool $easMapiAvai
         . $fg('IP de sortie (outbound)',
             '<input type="text" name="outbound_ip" value="' . $v('outbound_ip', 'default') . '" class="smx-inp">',
             '« default » = IP par défaut du serveur (sinon IP dédiée).')
-        . '<div class="smx-g2">'
-        . '<div>' . $fg('Nombre max de boîtes', '<input type="number" min="0" name="max_users" value="' . $v('max_users', '0') . '" class="smx-inp">', '0 = illimité.') . '</div>'
-        . '<div>' . $fg('Alias de domaine max', '<input type="number" min="0" name="max_domain_aliases" value="' . $v('max_domain_aliases', '0') . '" class="smx-inp">', '0 = fonctionnalité désactivée.') . '</div>'
-        . '</div>'
         . '<div style="margin-top:2px;">' . $chkCard('delete_on_terminate', 'Supprimer le compte SmarterMail à la résiliation', $ck('delete_on_terminate', 1), true) . '</div>'
         . '</div>';
 
-    // ── Section : Mot de passe ───────────────────────────────────────────────
-    $pwd = '<div style="max-width:320px;margin:14px 0 16px;">'
-        . $fg('Longueur minimale', '<input type="number" min="1" name="pwd_min_len" value="' . $v('pwd_min_len', '8') . '" class="smx-inp">',
-            'Doit correspondre à la politique configurée dans SmarterMail.')
-        . '</div>'
-        . '<div class="smx-g2">'
-        . $chkCard('pwd_require_upper', 'Exiger une lettre majuscule', $ck('pwd_require_upper', 1))
-        . $chkCard('pwd_require_lower', 'Exiger une lettre minuscule', $ck('pwd_require_lower', 0))
-        . $chkCard('pwd_require_digit', 'Exiger un chiffre', $ck('pwd_require_digit', 1))
-        . $chkCard('pwd_require_special', 'Exiger un caractère spécial', $ck('pwd_require_special', 1))
-        . '</div>';
+    // (Section « Mot de passe » déplacée vers les Réglages globaux : politique UNIQUE
+    //  pour tout le serveur, plus par forfait.)
 
     // ── Section : DNS ────────────────────────────────────────────────────────
     $dns = '<div style="margin:14px 0 0;">'
@@ -407,30 +397,33 @@ function _sm_billing_packageEditor(?object $row, string $csrf, bool $easMapiAvai
         . '<div>' . $fg('Cible SRV Autodiscover', '<input type="text" name="srv_target" value="' . $v('srv_target') . '" class="smx-inp">', 'Vide = nom d\'hôte du serveur.') . '</div>'
         . '</div>'
         . '<div style="margin-bottom:16px;">' . $chkCard('dmarc_check', 'Vérifier / suggérer DMARC', $ck('dmarc_check', 1)) . '</div>'
-        . '<div class="smx-g21">'
-        . '<div>' . $fg('RUA DMARC suggéré', '<input type="text" name="dmarc_rua" value="' . $v('dmarc_rua') . '" placeholder="dmarc-reports@example.com" class="smx-inp">') . '</div>'
-        . '<div>' . $fg('Politique DMARC suggérée',
-            '<select name="dmarc_policy" class="smx-inp">' . $polOpt('none') . $polOpt('quarantine') . $polOpt('reject') . '</select>') . '</div>'
-        . '</div>'
+        . '<input type="hidden" name="dmarc_rua" value="' . $v('dmarc_rua') . '">'
+        . $fg('Politique DMARC suggérée',
+            '<select name="dmarc_policy" class="smx-inp">' . $polOpt('none') . $polOpt('quarantine') . $polOpt('reject') . '</select>')
         . '</div>';
 
-    // ── Section : Disque & facturation ───────────────────────────────────────
-    $disk = '<div style="margin:14px 0 0;">'
-        . $fg('Type de forfait',
-            '<select name="plan_type" class="smx-inp">'
-            . $ptOpt('usage_notify', 'À l\'usage — jauge / alerte seulement')
-            . $ptOpt('usage_bill', 'À l\'usage — facturer l\'excédent au-delà du quota')
-            . $ptOpt('blocked', 'Espace maximal bloqué (le serveur refuse au-delà)')
-            . '</select>', 'Détermine comment l\'espace disque est facturé.')
-        . '<div class="smx-g3">'
-        . '<div>' . $fg('Go par tranche', '<input type="number" min="1" name="gb_per_tier" value="' . $v('gb_per_tier', '10') . '" class="smx-inp">', 'Incrément de facturation à l\'usage.') . '</div>'
-        . '<div>' . $fg('Quota / espace max (Go)', '<input type="number" min="0" name="quota_gb" value="' . $v('quota_gb', '0') . '" class="smx-inp">', '0 = illimité. Requis pour « bloqué » et « excédent ».') . '</div>'
-        . '<div>' . $fg('Prix tranche excédentaire', $money('overage_price', $v('overage_price', '0.00')), 'Utilisé par « facturer l\'excédent ».') . '</div>'
+    // ── Section : Quota et limitation ────────────────────────────────────────
+    // « Tranche de facturation » n'apparaît qu'en mode « À l'usage » (JS smxPlan()).
+    $tierStyle = 'max-width:340px;margin-bottom:14px;' . ($planType === 'usage' ? '' : 'display:none;');
+    $quota = '<div style="margin:14px 0 0;">'
+        . $fg('Type de facturation',
+            '<select name="plan_type" class="smx-inp" onchange="smxPlan(this.value)">'
+            . $ptOpt('fixe',  'Fixe — espace maximal bloqué (le serveur refuse au-delà)')
+            . $ptOpt('usage', 'À l\'usage — facturer l\'usage réel (plafonné à l\'espace max)')
+            . '</select>')
+        . '<div id="smx-tierwrap" style="' . $tierStyle . '">'
+        . $fg('Tranche de facturation (Go)',
+            '<input type="number" min="1" name="gb_per_tier" value="' . $v('gb_per_tier', '10') . '" class="smx-inp">',
+            'Incrément facturé à l\'usage (ex. 10 Go). Le prix d\'une tranche = le prix du produit dans WHMCS.')
         . '</div>'
-        . '<div class="smx-g2" style="margin-top:2px;">'
-        . '<div>' . $fg('Taille max par boîte (Go)', '<input type="number" min="0" name="max_mailbox_size_gb" value="' . $v('max_mailbox_size_gb', '0') . '" class="smx-inp">', '0 = illimité.') . '</div>'
-        . '<div>' . $fg('Seuil d\'alerte (%)', '<input type="number" min="1" max="100" name="notify_threshold_pct" value="' . $v('notify_threshold_pct', '90') . '" class="smx-inp">') . '</div>'
+        . '<div class="smx-g2">'
+        . '<div>' . $fg('Espace disque maximal (Go)', '<input type="number" min="0" name="quota_gb" value="' . $v('quota_gb', '0') . '" class="smx-inp">',
+            '0 = illimité. Poussé comme limite dans SmarterMail ; en « à l\'usage », plafonne aussi la facturation (jamais au-delà).') . '</div>'
+        . '<div>' . $fg('Espace disque max par boîte (Go)', '<input type="number" min="0" name="max_mailbox_size_gb" value="' . $v('max_mailbox_size_gb', '0') . '" class="smx-inp">', '0 = illimité.') . '</div>'
+        . '<div>' . $fg('Nombre de comptes courriel', '<input type="number" min="0" name="max_users" value="' . $v('max_users', '0') . '" class="smx-inp">', '0 = illimité.') . '</div>'
+        . '<div>' . $fg('Nombre d\'alias de domaine', '<input type="number" min="0" name="max_domain_aliases" value="' . $v('max_domain_aliases', '0') . '" class="smx-inp">', '0 = fonctionnalité désactivée.') . '</div>'
         . '</div>'
+        . '<input type="hidden" name="notify_threshold_pct" value="' . $v('notify_threshold_pct', '90') . '">'
         . '</div>';
 
     // ── Assemblage ───────────────────────────────────────────────────────────
@@ -455,11 +448,14 @@ function _sm_billing_packageEditor(?object $row, string $csrf, bool $easMapiAvai
         . '<span class="smx-toollink" onclick="smxAll(true)">Tout déplier</span>'
         . '<span style="color:#cbd5e1;">·</span>'
         . '<span class="smx-toollink mut" onclick="smxAll(false)">Tout replier</span></div>';
-    $h .= $section('proto', 'fa-envelope-open-text', 'Protocoles &amp; tarifs', 'ActiveSync (EAS), MAPI/Exchange et facturation des protocoles', $proto, true);
-    $h .= $section('server', 'fa-server', 'Serveur', 'Chemins, IP de sortie, limites de boîtes et d\'alias', $server, false);
-    $h .= $section('pwd', 'fa-lock', 'Mot de passe', 'Politique de complexité des mots de passe', $pwd, false);
+    $h .= $section('quota', 'fa-hdd', 'Quota et limitation', 'Type de facturation, espace disque, comptes et alias', $quota, true);
+    if ($easMapiAvailable) {
+        $h .= $section('proto', 'fa-envelope-open-text', 'Protocole MAPI et EAS', 'ActiveSync (EAS), MAPI/Exchange et leur tarification', $proto, false);
+    } else {
+        $h .= $proto; // EAS/MAPI désactivé globalement : uniquement les champs cachés, pas de section visible
+    }
     $h .= $section('dns', 'fa-globe', 'DNS', 'SPF, Autodiscover et suggestions DMARC', $dns, false);
-    $h .= $section('disk', 'fa-hdd', 'Disque &amp; facturation', 'Quotas, tarification à l\'usage et alertes', $disk, false);
+    $h .= $section('server', 'fa-server', 'Serveur', 'Chemins, IP de sortie, résiliation', $server, false);
     $h .= '</div>'; // acc-body-outer
     $h .= '<div class="smx-actionbar">'
         . '<button type="submit" class="smx-btn smx-btn-primary"><i class="fas fa-save"></i> ' . ($isEdit ? 'Enregistrer' : 'Créer le forfait') . '</button>'
@@ -476,6 +472,7 @@ function _sm_billing_packageEditor(?object $row, string $csrf, bool $easMapiAvai
 function _sm_billing_globalForm(string $csrf): string
 {
     $easMapi = (bool) _sm_getGlobalSetting('eas_mapi_available', true);
+    $pw      = _sm_globalPasswordPolicy();
     $ns      = _sm_getGlobalSetting('provider_nameservers', _sm_defaultNameservers());
     if (!is_array($ns)) {
         $ns = _sm_defaultNameservers();
@@ -494,6 +491,19 @@ function _sm_billing_globalForm(string $csrf): string
         . ($easMapi ? ' checked' : '') . '><span>Le serveur SmarterMail propose <strong>EAS / MAPI</strong></span></label>'
         . '<p class="smx-hint">Décochez si votre licence n\'inclut pas ActiveSync/MAPI : la section EAS/MAPI sera masquée '
         . 'dans les forfaits et l\'espace client.</p></div>';
+
+    // ── Politique de mot de passe (GLOBALE — déplacée hors des forfaits) ──────
+    $h .= '<div style="font-size:15px;font-weight:700;margin:4px 0 4px;">Politique de mot de passe (toutes les boîtes)</div>';
+    $h .= '<p class="smx-hint" style="margin:0 0 12px;">Règles appliquées à la création et au changement de mot de passe des boîtes, pour <strong>tous les forfaits</strong>. '
+        . 'Doit correspondre à la politique configurée dans SmarterMail.</p>';
+    $h .= '<div style="max-width:320px;margin-bottom:12px;"><label class="smx-lbl">Longueur minimale</label>'
+        . '<input type="number" min="1" name="pwd_min_len" value="' . (int) $pw['pwd_min_len'] . '" class="smx-inp"></div>';
+    $h .= '<div class="smx-g2" style="margin-bottom:22px;">'
+        . '<label class="smx-chk"><input type="checkbox" name="pwd_require_upper" value="1"' . ($pw['pwd_require_upper'] ? ' checked' : '') . '><span>Exiger une lettre majuscule</span></label>'
+        . '<label class="smx-chk"><input type="checkbox" name="pwd_require_lower" value="1"' . ($pw['pwd_require_lower'] ? ' checked' : '') . '><span>Exiger une lettre minuscule</span></label>'
+        . '<label class="smx-chk"><input type="checkbox" name="pwd_require_digit" value="1"' . ($pw['pwd_require_digit'] ? ' checked' : '') . '><span>Exiger un chiffre</span></label>'
+        . '<label class="smx-chk"><input type="checkbox" name="pwd_require_special" value="1"' . ($pw['pwd_require_special'] ? ' checked' : '') . '><span>Exiger un caractère spécial</span></label>'
+        . '</div>';
 
     $h .= '<div style="font-size:15px;font-weight:700;margin:4px 0 4px;">Nameservers (pré-sélection de l\'onglet du guide DNS)</div>';
     $h .= '<p class="smx-hint" style="margin:0 0 16px;">Un nom de serveur par ligne. Sert uniquement à pré-sélectionner le bon '
@@ -719,6 +729,13 @@ function smartermail_billing_output($vars)
                 }
                 _sm_setGlobalSetting('eas_mapi_available', !empty($_POST['eas_mapi_available']));
                 _sm_setGlobalSetting('provider_nameservers', $ns);
+                _sm_setGlobalSetting('password_policy', [
+                    'pwd_min_len'         => max(1, (int) ($_POST['pwd_min_len'] ?? 8)),
+                    'pwd_require_upper'   => !empty($_POST['pwd_require_upper']),
+                    'pwd_require_lower'   => !empty($_POST['pwd_require_lower']),
+                    'pwd_require_digit'   => !empty($_POST['pwd_require_digit']),
+                    'pwd_require_special' => !empty($_POST['pwd_require_special']),
+                ]);
                 $notice = _sm_billing_alert('success', 'Réglages globaux enregistrés.');
 
             } elseif ($action === 'savesettings') {
@@ -835,9 +852,8 @@ function _sm_billing_convertProduct(int $productId): int
 
         // Config normalisée (champs non-offre + sous-forme disque via product_settings).
         $norm = _sm_legacyConfigToPackage($co, ['pid' => $productId]);
-        $plan = ($norm['overage_mode'] === 'block')
-            ? 'blocked'
-            : (($norm['overage_mode'] === 'bill') ? 'usage_bill' : 'usage_notify');
+        // Les produits hérités sont TOUJOURS à l'usage (billing_model 'tiers') → 'usage'.
+        $plan = 'usage';
 
         $data = [
             'name'                   => mb_substr('Converti — ' . (string) $p->name, 0, 190),

@@ -275,6 +275,37 @@ function _sm_setGlobalSetting(string $key, $value): bool
     }
 }
 
+/**
+ * Politique de mot de passe GLOBALE (déplacée hors des forfaits : UNE seule politique
+ * pour tout le serveur). Lue depuis le réglage global 'password_policy' ; défauts =
+ * politique standard (min 8, majuscule/chiffre/spécial requis, minuscule optionnelle,
+ * identiques à _sm_packageDefaults()). Ne lève jamais.
+ *
+ * @return array ['pwd_min_len'=>int, 'pwd_require_upper'=>bool, 'pwd_require_lower'=>bool,
+ *                'pwd_require_digit'=>bool, 'pwd_require_special'=>bool]
+ */
+function _sm_globalPasswordPolicy(): array
+{
+    $def = [
+        'pwd_min_len'         => 8,
+        'pwd_require_upper'   => true,
+        'pwd_require_lower'   => false,
+        'pwd_require_digit'   => true,
+        'pwd_require_special' => true,
+    ];
+    $stored = _sm_getGlobalSetting('password_policy', null);
+    if (!is_array($stored)) {
+        return $def;
+    }
+    return [
+        'pwd_min_len'         => max(1, (int) ($stored['pwd_min_len'] ?? $def['pwd_min_len'])),
+        'pwd_require_upper'   => (bool) ($stored['pwd_require_upper']   ?? $def['pwd_require_upper']),
+        'pwd_require_lower'   => (bool) ($stored['pwd_require_lower']   ?? $def['pwd_require_lower']),
+        'pwd_require_digit'   => (bool) ($stored['pwd_require_digit']   ?? $def['pwd_require_digit']),
+        'pwd_require_special' => (bool) ($stored['pwd_require_special'] ?? $def['pwd_require_special']),
+    ];
+}
+
 
 // ============================================================================
 //  CONVERTISSEUR legacy → forme normalisée (BYTE-IDENTIQUE)
@@ -475,26 +506,34 @@ function _sm_parsePackageId(string $raw): int
  */
 function _sm_resolvePackage(array $co, array $ctx = []): array
 {
+    $resolved = null;
     try {
         $pkgId = _sm_parsePackageId((string) ($co['configoption24'] ?? ''));
         if ($pkgId > 0) {
             $pkg = _sm_getPackage($pkgId);
             if ($pkg !== null) {
-                return $pkg;
+                $resolved = $pkg;
+            } else {
+                // Forfait référencé mais absent/supprimé → repli legacy (journalisé 1×).
+                logActivity('SmarterMail [packages] forfait #' . $pkgId
+                    . ' référencé mais introuvable → repli sur la config héritée.');
             }
-            // Forfait référencé mais absent/supprimé → repli legacy (journalisé 1×).
-            logActivity('SmarterMail [packages] forfait #' . $pkgId
-                . ' référencé mais introuvable → repli sur la config héritée.');
         }
-        return _sm_legacyConfigToPackage($co, $ctx);
+        if ($resolved === null) {
+            $resolved = _sm_legacyConfigToPackage($co, $ctx);
+        }
     } catch (\Throwable $e) {
         logActivity('SmarterMail [packages] resolve EXCEPTION → repli : ' . $e->getMessage());
         try {
-            return _sm_legacyConfigToPackage($co, $ctx);
+            $resolved = _sm_legacyConfigToPackage($co, $ctx);
         } catch (\Throwable $e2) {
-            return _sm_packageDefaults();
+            $resolved = _sm_packageDefaults();
         }
     }
+    // Politique de mot de passe = GLOBALE (déplacée hors des forfaits) : on la superpose
+    // à la forme résolue quelle que soit sa source (forfait OU hérité). Ainsi tous les
+    // consommateurs ($pkg['pwd_*']) restent inchangés, seule la SOURCE change.
+    return array_merge($resolved, _sm_globalPasswordPolicy());
 }
 
 /**
@@ -613,14 +652,14 @@ function _sm_savePackage(?int $id, array $data): int
         return 0; // nom obligatoire
     }
 
-    // Type de forfait (usage_notify / usage_bill / blocked) → overage_mode.
-    $planType    = (string) ($data['plan_type'] ?? 'usage_notify');
-    $overageMode = 'notify';
-    if ($planType === 'blocked') {
-        $overageMode = 'block';
-    } elseif ($planType === 'usage_bill') {
-        $overageMode = 'bill';
-    }
+    // Type de facturation → (billing_model, overage_mode). Les DEUX bloquent le disque au
+    // quota côté SmarterMail (overage_mode='block' → _sm_quotaMaxSizeBytes pousse maxSize) :
+    //   • 'fixe'  : prix fixe du produit (flat) + disque bloqué au quota.
+    //   • 'usage' : facturation à l'usage (tiers × prix WHMCS), plafonnée par le disque
+    //               bloqué (l'usage ne peut dépasser le quota → jamais facturé au-delà).
+    $planType     = (string) ($data['plan_type'] ?? 'usage');
+    $billingModel = ($planType === 'fixe') ? 'flat' : 'tiers';
+    $overageMode  = 'block';
 
     $dmarcPolicy = (string) ($data['dmarc_policy'] ?? 'none');
 
@@ -654,7 +693,7 @@ function _sm_savePackage(?int $id, array $data): int
         'dmarc_rua'              => mb_substr(trim((string) ($data['dmarc_rua'] ?? '')), 0, 190),
         'dmarc_policy'           => in_array($dmarcPolicy, SM_DMARC_POLICIES, true) ? $dmarcPolicy : 'none',
         // Disque & facturation
-        'billing_model'          => 'tiers',
+        'billing_model'          => $billingModel,
         'quota_gb'               => max(0, (int) ($data['quota_gb'] ?? 0)),
         'max_mailbox_size_gb'    => max(0, (int) ($data['max_mailbox_size_gb'] ?? 0)),
         'overage_mode'           => $overageMode,

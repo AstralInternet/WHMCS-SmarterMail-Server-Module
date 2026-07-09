@@ -10,6 +10,73 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.27.0] - 2026-07-09
+
+### Modifié — refonte des catégories du forfait (facturation) + mot de passe global
+
+**Éditeur de forfait** (addon `smartermail_billing`, v2.2) réorganisé :
+
+- **Mot de passe → Réglages globaux** : politique **unique pour tout le serveur** (plus par
+  forfait). La section quitte l'éditeur ; elle vit dans « Réglages globaux » (clé
+  `password_policy`). Superposée à la forme résolue dans `_sm_resolvePackage` → **tous les
+  consommateurs `$pkg['pwd_*']` restent inchangés**, seule la source change.
+- **« Quota et limitation »** (ex-« Disque & facturation ») :
+  - Type de facturation à **2 choix** : **Fixe** (prix produit fixe, disque **bloqué** au max)
+    ou **À l'usage** (facturer l'usage réel au **prix du produit WHMCS**, **plafonné** par le
+    disque bloqué → jamais au-delà du max).
+  - « Tranche de facturation (Go) » affichée **uniquement** en mode « À l'usage » (JS `smxPlan`).
+  - Regroupe : espace disque max, espace max/boîte, **nombre de comptes** et **nombre d'alias**
+    (déplacés de « Serveur »).
+  - **Retrait de « Prix tranche excédentaire »** : plus de champ ni de ligne d'excédent ; à
+    l'usage, chaque tranche est facturée au **prix du produit WHMCS** (comme avant les forfaits).
+    Le max est **poussé dans SmarterMail** (limite physique) → aucun calcul de plafond côté module.
+- **« Protocole MAPI et EAS »** (ex-« Protocoles & tarifs ») : renommé, **entièrement masqué**
+  si EAS/MAPI est désactivé globalement (valeurs conservées en champs cachés).
+- **DNS** : retrait du champ « RUA DMARC suggéré » (valeur conservée en caché).
+- **Serveur** : allégé (chemin, IP de sortie, résiliation) et **placé en bas**.
+
+**Mapping** : Fixe → `billing_model='flat'` + `overage_mode='block'` ; À l'usage →
+`billing_model='tiers'` + `overage_mode='block'`. **`_sm_computeBaseCharge` et
+`_sm_quotaMaxSizeBytes` INCHANGÉS** → **byte-identique préservé** pour les produits hérités
+(tiers + quota 0 + notify). La ligne d'excédent du hook (`overageLine`) n'est jamais émise en
+mode `block`.
+
+## [1.26.3] - 2026-07-09
+
+### Nettoyé — retrait des logs de débogage temporaires du répondeur
+
+- Suppression de la ligne `logActivity('SmarterMail [saveAR DEBUG] …')` (dernier débug
+  restant) et d'un commentaire périmé décrivant l'ancienne détection `isHTML`.
+- Plus aucun log de débogage du répondeur dans le module (`saveAR`/`getAR`/`setAR`/`loginUser`
+  tous retirés). Le mécanisme préexistant `SMARTERMAIL_DEBUG` (MetricsProvider) est conservé.
+
+## [1.26.2] - 2026-07-09
+
+### Modifié — répondeur automatique masqué côté client (temporaire)
+
+- La carte « Répondeur automatique » de l'espace client est **masquée** (`{if false}` dans
+  `edituser.tpl`) : le round-trip HTML n'est pas encore fiable, on y reviendra plus tard.
+- **Tout le code reste en place** (modale, éditeur riche, assainisseur sans DOM, handlers,
+  endpoints API, correctifs 1.24→1.26.1). Réactivation = retirer le `{if false}`/`{/if}`
+  qui entoure la carte. Aucun autre déclencheur (le bouton est le seul point d'entrée).
+
+## [1.26.1] - 2026-07-09
+
+### Corrigé — l'éditeur recevait le HTML échappé par Smarty (`{$ar.body nofilter}` ignoré)
+
+Débug décisif : même un contenu **frais** (« test test test » gras) ressortait échappé
+(`test &lt;b&gt;test&lt;/b&gt; test`). L'assainisseur sans DOM ne pouvant PAS échapper, la
+source était en amont : **Smarty auto-échappait `{$ar.body}` en l'injectant dans l'éditeur**
+(le `nofilter` n'est pas honoré dans ce contexte WHMCS). L'éditeur affichait donc le code et
+le renvoyait échappé.
+
+- Le corps est désormais injecté dans l'éditeur via une **chaîne JavaScript**
+  (`var SM_AR_BODY = '{$ar.body|escape:"javascript"}'` puis `ed.innerHTML = SM_AR_BODY`) —
+  **même technique que `SM_AR_START`**, qui, elle, fonctionne. L'échappement `javascript`
+  produit une chaîne JS avec le HTML **réel** (`<div>`), insensible à l'auto-échappement HTML.
+- Débug `[saveAR DEBUG]` séparant `rawPost` (octets envoyés par l'éditeur) de `body` (sortie
+  assainie), en rawurlencode, pour confirmer sans ambiguïté.
+
 ## [1.26.0] - 2026-07-09
 
 ### Corrigé (définitif) — répondeur HTML : assainisseur SANS DOM + toujours HTML
