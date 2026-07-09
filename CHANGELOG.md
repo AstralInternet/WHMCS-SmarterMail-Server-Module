@@ -10,6 +10,27 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.23.0] - 2026-07-09
+
+### Modifié — refonte visuelle de l'addon « Forfaits »
+
+Nouvelle présentation moderne de l'interface d'administration des forfaits, **sans
+aucun changement de logique** (mêmes champs `name`, mêmes actions, même CSRF, même
+enregistrement) :
+
+- **Éditeur en accordéon** (au lieu d'onglets Bootstrap) : sections Protocoles & tarifs ·
+  Serveur · Mot de passe · DNS · Disque & facturation, dépliables individuellement, avec
+  « Tout déplier / Tout replier ». En-tête à badge dégradé, carte arrondie, champs
+  monétaires à adornement `$`, cases à cocher en « cartes », barre d'action collante.
+- **Liste, réglages globaux et réglages produits (hérité)** alignés sur le même langage
+  visuel (cartes, tableau, boutons, champs).
+- Styles **scopés `.smx-*`** + police Inter (CDN, repli system-ui) + FontAwesome fourni
+  par WHMCS (noms d'icônes compatibles FA5/6) ; accordéon piloté par un petit JS vanilla
+  (`smxToggle`/`smxAll`). Aucune dépendance de build.
+
+Fonctionnellement identique à 1.22.x — purement présentation. Version interne de l'addon
+portée à `2.1`.
+
 ## [1.22.1] - 2026-07-09
 
 ### Corrigé — échec de création de `mod_sm_packages` (trouvé au test bac-à-sable)
