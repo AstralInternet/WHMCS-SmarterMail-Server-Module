@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.25.5',
+        'MODVersion' => '1.26.0',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -4399,10 +4399,10 @@ function smartermail_edituserpage(array $params): array
     // les balises en clair). Heuristique sûre : « &lt; » présent SANS aucune vraie
     // balise ⇒ décoder une fois (le HTML brut, lui, a de vraies balises → intact).
     $arApiBody = (string) ($arData['body'] ?? '');
-    if ($arApiBody !== '') {
-        logActivity('SmarterMail [getAR DEBUG] apiBodyHead=' . substr($arApiBody, 0, 180)); // TEMP — à retirer
-    }
-    if (stripos($arApiBody, '&lt;') !== false && !preg_match('/<[a-z!\/][^>]*>/i', $arApiBody)) {
+    // Récupération des corps hérités d'un ancien bug d'échappement : s'ils contiennent des
+    // balises ÉCHAPPÉES (« &lt;div&gt; »…), on décode UNE fois pour retrouver le HTML réel.
+    // On NE décode pas un simple « prix &lt; 100 » (aucun nom de balise après « &lt; »).
+    if (preg_match('/&lt;\/?[a-z][a-z0-9]*/i', $arApiBody)) {
         $arApiBody = html_entity_decode($arApiBody, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
     $ar = [
@@ -4577,11 +4577,62 @@ function _sm_arIsoForJs(string $raw): string
 }
 
 /**
+ * Nettoie la liste d'attributs d'UNE balise : ne garde que ceux de l'allowlist, retire
+ * les gestionnaires on*, neutralise href/src (javascript:/vbscript:/data: hors image) et
+ * les styles dangereux. Utilisé par _sm_sanitizeHtml.
+ *
+ * @param  string $attrs   Le texte des attributs (ce qui suit le nom de balise).
+ * @param  array  $allowed Attributs autorisés pour cette balise.
+ * @return string          Attributs nettoyés, préfixés d'un espace (ou '').
+ */
+function _sm_sanitizeAttrs(string $attrs, array $allowed): string
+{
+    $attrs = trim($attrs);
+    if ($attrs === '' || $attrs === '/') {
+        return '';
+    }
+    if (!preg_match_all(
+        '#([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*("[^"]*"|\'[^\']*\'|[^\s"\'>]+))?#s',
+        $attrs, $mm, PREG_SET_ORDER
+    )) {
+        return '';
+    }
+    $out = '';
+    foreach ($mm as $a) {
+        $name = strtolower($a[1] ?? '');
+        if ($name === '' || !in_array($name, $allowed, true)) {
+            continue; // retire on*, id/class non listés, attributs Froala (fr-*), etc.
+        }
+        $val = $a[2] ?? '';
+        if ($val !== '' && ($val[0] === '"' || $val[0] === "'")) {
+            $val = substr($val, 1, -1);
+        }
+        if ($name === 'href' || $name === 'src') {
+            $v = ltrim(html_entity_decode($val, ENT_QUOTES, 'UTF-8'));
+            $isDataImg = ($name === 'src' && preg_match('#^data:image/(png|jpe?g|gif|webp);base64,#i', $v));
+            if (!$isDataImg && preg_match('#^\s*(javascript|vbscript|data|file)\s*:#i', $v)) {
+                continue; // protocole dangereux → attribut retiré
+            }
+        }
+        if ($name === 'style' && preg_match('/expression\s*\(|javascript\s*:|vbscript\s*:|-moz-binding|behavior\s*:|@import|url\s*\(\s*["\']?\s*(?:javascript|data|vbscript)/i', $val)) {
+            continue;
+        }
+        $val = str_replace('"', '&quot;', $val);
+        $out .= ' ' . $name . '="' . $val . '"';
+    }
+    return $out;
+}
+
+/**
  * Assainit du HTML pour le répondeur : conserve une allowlist de balises/attributs de
  * mise en forme et SUPPRIME tout le reste (script, gestionnaires d'événements on*,
  * iframe/object/form, protocoles javascript:/vbscript:/data:, styles dangereux).
- * Permet du HTML riche SANS injection. Parse via DOMDocument ; repli sûr (texte échappé)
- * si le parse échoue.
+ * Permet du HTML riche SANS injection.
+ *
+ * IMPORTANT : implémentation SANS DOMDocument (100 % chaînes/regex). L'approche DOM
+ * s'est révélée non portable — sur d'anciennes libxml (php-fpm de prod) elle ré-échappait
+ * tout le corps (« <div> » → « &lt;div&gt; »), ce qui cassait le rendu HTML du répondeur.
+ * Le comportement de cette version est identique en CLI et en prod (aucune dépendance libxml).
  *
  * @param  string $html
  * @return string
@@ -4612,82 +4663,42 @@ function _sm_sanitizeHtml(string $html): string
         'img' => ['src', 'alt', 'title', 'width', 'height', 'style'],
     ];
 
-    // Parse robuste et PORTABLE entre versions de libxml : on enveloppe explicitement
-    // dans <html><body> (on N'utilise PAS LIBXML_HTML_NOIMPLIED, bogué sur d'anciennes
-    // libxml — le php-fpm de prod — qui renvoyaient alors le corps échappé/dénudé, d'où
-    // « isHTML=0 » et le code affiché) et on récupère le <body> via getElementsByTagName
-    // (getElementById est peu fiable sans DTD). Le préfixe <?xml encoding> évite le mojibake.
-    $prev = libxml_use_internal_errors(true);
-    $doc  = new DOMDocument('1.0', 'UTF-8');
-    $loaded = $doc->loadHTML(
-        '<?xml encoding="utf-8"?><html><body>' . $html . '</body></html>',
-        LIBXML_NOERROR | LIBXML_NOWARNING
-    );
-    libxml_clear_errors();
-    libxml_use_internal_errors($prev);
-
-    if (!$loaded) {
-        return htmlspecialchars(strip_tags($html), ENT_QUOTES, 'UTF-8'); // repli sûr
+    // 1→3. Retirer les blocs dangereux AVEC leur contenu (script/style/iframe/object/…),
+    //       leurs restes ouvrants/fermants, puis commentaires / PI / doctype / CDATA.
+    //       (`?? $html` : si une regex échoue, on conserve la valeur précédente.)
+    $patterns = [
+        '#<(script|style|iframe|object|embed|form|svg|math|noscript|applet|template|head|title)\b[^>]*>.*?</\s*\1\s*>#is',
+        '#</?\s*(script|style|iframe|object|embed|form|svg|math|noscript|applet|template|base|link|meta|title|head|body|html)\b[^>]*>#is',
+        '#<!--.*?-->#s',
+        '#<!\[CDATA\[.*?\]\]>#is',
+        '#<\?.*?\?>#s',
+        '#<!doctype[^>]*>#i',
+    ];
+    foreach ($patterns as $p) {
+        $html = preg_replace($p, '', $html) ?? $html;
     }
 
-    $root = $doc->getElementsByTagName('body')->item(0);
-    if ($root === null) {
-        return htmlspecialchars(strip_tags($html), ENT_QUOTES, 'UTF-8'); // repli sûr
+    // 4. Allowlist de balises : strip_tags retire toute balise hors liste en CONSERVANT le
+    //    contenu texte. Natif, fiable, SANS libxml (contrairement à DOMDocument).
+    $tagList = '';
+    foreach (array_keys($allowed) as $t) {
+        $tagList .= '<' . $t . '>';
     }
+    $html = strip_tags($html, $tagList);
 
-    $walk = function (\DOMNode $node) use (&$walk, $allowed): void {
-        $children = [];
-        foreach ($node->childNodes as $c) {
-            $children[] = $c;
+    // 5. Nettoyer les attributs de chaque balise conservée (on*, protocoles, styles dangereux).
+    $html = preg_replace_callback('#<(/?)([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>#s', function ($m) use ($allowed) {
+        $tag = strtolower($m[2]);
+        if ($m[1] === '/') {
+            return '</' . $tag . '>';
         }
-        foreach ($children as $child) {
-            if ($child->nodeType === XML_COMMENT_NODE) {
-                $node->removeChild($child);
-                continue;
-            }
-            if ($child->nodeType !== XML_ELEMENT_NODE) {
-                continue; // nœud texte : conservé (échappé à la sérialisation)
-            }
-            $tag = strtolower($child->nodeName);
-            if (!isset($allowed[$tag])) {
-                $node->removeChild($child); // balise interdite → retirée EN ENTIER
-                continue;
-            }
-            $allowAttrs = $allowed[$tag];
-            $names = [];
-            foreach ($child->attributes as $a) {
-                $names[] = $a->nodeName;
-            }
-            foreach ($names as $attr) {
-                $an  = strtolower($attr);
-                $val = $child->getAttribute($attr);
-                if (!in_array($an, $allowAttrs, true)) {
-                    $child->removeAttribute($attr); // retire on*, id/class non listés, etc.
-                    continue;
-                }
-                if ($an === 'href' || $an === 'src') {
-                    $v = ltrim(html_entity_decode($val, ENT_QUOTES, 'UTF-8'));
-                    $isDataImg = ($an === 'src' && preg_match('#^data:image/(png|jpe?g|gif|webp);base64,#i', $v));
-                    if (!$isDataImg && preg_match('/^(javascript|vbscript|data|file):/i', $v)) {
-                        $child->removeAttribute($attr);
-                        continue;
-                    }
-                }
-                if ($an === 'style' && preg_match('/expression\s*\(|javascript\s*:|vbscript\s*:|-moz-binding|behavior\s*:|@import|url\s*\(\s*["\']?\s*(?:javascript|data|vbscript)/i', $val)) {
-                    $child->removeAttribute($attr);
-                    continue;
-                }
-            }
-            $walk($child);
+        if (!isset($allowed[$tag])) {
+            return '<' . $tag . '>';
         }
-    };
-    $walk($root);
+        return '<' . $tag . _sm_sanitizeAttrs($m[3], $allowed[$tag]) . '>';
+    }, $html);
 
-    $out = '';
-    foreach ($root->childNodes as $c) {
-        $out .= $doc->saveHTML($c);
-    }
-    return trim($out);
+    return is_string($html) ? trim($html) : '';
 }
 
 /**
@@ -4750,15 +4761,12 @@ function smartermail_saveautoresponder(array $params): string
     // → isHTML=true (envoyé TEL QUEL, sans échappement par le serveur) ; sinon texte
     // brut (isHTML=false). Sans ça, un message HTML était échappé (« <div> » → « &lt;div&gt; »)
     // et apparaissait en toutes lettres dans la réponse d'absence.
-    // Détection ROBUSTE : le regex OU strip_tags (filet si PCRE flanche selon libxml/encodage).
-    // Si l'un des deux voit des balises → c'est du HTML.
-    $isHtmlRe = (bool) preg_match('/<[a-z!\/][^>]*>/i', $body);
-    $isHtml   = $isHtmlRe || ($body !== strip_tags($body));
-    // DEBUG TEMPORAIRE — octets NON ambigus de $body (rawurlencode) + sondes. À retirer.
-    logActivity('SmarterMail [saveAR DEBUG] isHtmlRe=' . ((int) $isHtmlRe) . ' isHtml=' . ((int) $isHtml)
-        . ' hasLt=' . (int) (strpos($body, '<') !== false)
-        . ' hasEnt=' . (int) (stripos($body, '&lt;') !== false)
-        . ' enc=' . rawurlencode(substr($body, 0, 140)));
+    // SmarterMail (éditeur Froala) traite TOUJOURS le corps comme du HTML — il n'y a pas de
+    // mode « texte » dans son interface. On envoie donc toujours isHTML=true ; le corps est
+    // du HTML déjà assaini. Fini la détection fragile (regex/strip_tags).
+    $isHtml = true;
+    // DEBUG TEMPORAIRE — confirmer que $body reste du HTML RÉEL (pas de &lt;). À retirer.
+    logActivity('SmarterMail [saveAR DEBUG] bodyEnc=' . rawurlencode(substr($body, 0, 140)));
 
     $settings = [
         'enabled'                     => $enabled,

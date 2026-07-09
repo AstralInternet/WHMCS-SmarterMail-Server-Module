@@ -1304,17 +1304,6 @@ class SmarterMailApi
 
         $email = ($domain !== null && $domain !== '') ? ($username . '@' . $domain) : $username;
 
-        // ── DÉBUG TEMPORAIRE (confirmation) — retirer une fois validé ─────────────
-        $trace = [];
-        $fmt = function (string $ctx, array $resp, $tk): string {
-            $data = (array) ($resp['data'] ?? []);
-            $msg  = (string) ($data['message'] ?? $resp['error'] ?? '');
-            return sprintf('%s code=%s ok=%s keys=[%s]%s%s', $ctx,
-                $resp['code'] ?? '?', ($resp['success'] ?? false) ? '1' : '0',
-                implode(',', array_keys($data)), $tk ? ' TOKEN-OK' : '',
-                $msg !== '' ? ' msg="' . mb_substr($msg, 0, 140) . '"' : '');
-        };
-
         // Endpoint CONFIRMÉ (doc SmarterMail + wrapper de référence) : l'email va dans le
         // CORPS, pas dans l'URL. L'impersonification est un privilège SYSADMIN (à activer
         // dans SmarterMail : System Admin → Settings) → token SA d'abord, DA en repli.
@@ -1327,15 +1316,11 @@ class SmarterMailApi
         foreach ($attempts as [$ctx, $token]) {
             $resp = $this->request('POST', 'api/v1/settings/domain/impersonate-user', ['email' => $email], $token);
             $tk   = $extractToken($resp['data'] ?? []);
-            $trace[] = $fmt($ctx . ' domain/impersonate-user', $resp, $tk);
             if ($tk) {
-                logActivity('SmarterMail [loginUser DEBUG] OK (' . $email . ') — ' . implode(' || ', $trace));
                 return $tk;
             }
         }
 
-        logActivity('SmarterMail [loginUser DEBUG] ÉCHEC ' . $email . ' — ' . implode(' || ', $trace)
-            . ' — NB : impersonification = SysAdmin avec la permission activée dans SmarterMail.');
         return null;
     }
 
@@ -1559,9 +1544,6 @@ class SmarterMailApi
         if ($wantHtml && !($resp['success'] ?? false) && in_array((int) ($resp['code'] ?? 0), [404, 405], true)) {
             $resp = $this->post('api/v1/settings/auto-responder', ['autoResponderSettings' => $payload], $userToken);
         }
-        // DEBUG TEMPORAIRE — à retirer une fois le rendu HTML confirmé côté SmarterMail.
-        logActivity('SmarterMail [setAR DEBUG] ep=' . $ep . ' isHTML=' . ($wantHtml ? 1 : 0)
-            . ' code=' . ($resp['code'] ?? '?') . ' ok=' . (($resp['success'] ?? false) ? 1 : 0));
         return $resp;
     }
 

@@ -10,6 +10,28 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.26.0] - 2026-07-09
+
+### Corrigé (définitif) — répondeur HTML : assainisseur SANS DOM + toujours HTML
+
+Le payload réel de SmarterMail l'a montré : notre module envoyait le corps **échappé**
+(`&lt;div&gt;`) avec `isHTML: false`. En cause, `_sm_sanitizeHtml` basé sur **DOMDocument** :
+non portable, il ré-échappait tout le corps sur la **libxml du php-fpm de prod** (alors qu'il
+fonctionnait en CLI). Deux corrections de fond :
+
+- **Assainisseur réécrit SANS DOMDocument** (100 % chaînes/regex, `strip_tags` pour l'allowlist
+  de balises + nettoyage regex des attributs). Aucune dépendance libxml ⇒ **comportement
+  identique en CLI et en prod**. Conserve le HTML de mise en forme, neutralise
+  script/on*/iframe/`javascript:`/styles dangereux. **20 cas** vérifiés (sécurité + cas réels
+  Froala `box-sizing` + récupération).
+- **Toujours `isHTML: true`** (constaté avec l'utilisateur : SmarterMail/Froala n'a **pas** de
+  mode « texte »). Fin de la détection fragile ; le POST part toujours sur `…/auto-responder/true`.
+- **Récupération à la lecture** des répondeurs hérités d'un ancien bug d'échappement : si le
+  corps contient des balises **échappées** (`&lt;div&gt;`…), on décode une fois pour retrouver
+  le HTML réel (sans faux-décoder un simple « prix &lt; 100 »). Un ré-enregistrement les nettoie.
+- Nettoyage des débugs `loginUser` (impersonification confirmée) et `setAR`. Reste un unique
+  débug `saveAR` (octets de `$body` en rawurlencode) pour confirmation, à retirer ensuite.
+
 ## [1.25.5] - 2026-07-09
 
 ### Corrigé/diagnostic — détection HTML robuste + sondes non ambiguës
