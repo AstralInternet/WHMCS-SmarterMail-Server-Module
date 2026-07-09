@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.27.0',
+        'MODVersion' => '1.27.3',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -4392,18 +4392,17 @@ function smartermail_edituserpage(array $params): array
     $arData      = $api->getAutoResponder($daToken, $username, $domain, $init['saToken'] ?? null, true);
     $arAvailable = ($arData !== null);
 
-    // Corps du répondeur : certains builds SmarterMail renvoient le HTML déjà
-    // ENTITY-ENCODÉ (« &lt;div&gt; ») même en wantHtml=true — typiquement un répondeur
-    // créé dans le webmail (Froala, balises « box-sizing »). Sans décodage, l'éditeur
-    // afficherait le code et le renverrait échappé (→ isHTML=0 → SmarterMail ré-affiche
-    // les balises en clair). Heuristique sûre : « &lt; » présent SANS aucune vraie
-    // balise ⇒ décoder une fois (le HTML brut, lui, a de vraies balises → intact).
     $arApiBody = (string) ($arData['body'] ?? '');
-    // Récupération des corps hérités d'un ancien bug d'échappement : s'ils contiennent des
-    // balises ÉCHAPPÉES (« &lt;div&gt; »…), on décode UNE fois pour retrouver le HTML réel.
-    // On NE décode pas un simple « prix &lt; 100 » (aucun nom de balise après « &lt; »).
+    _sm_arTrace('read.api.body', $arApiBody); // R1 — ce que SmarterMail renvoie (GET /true)
+    // RÉCUPÉRATION des corps corrompus par l'ancien bug (POST échappé par la couche
+    // d'assainissement d'entrée WHMCS, corrigé au save par _sm_whmcsInputDecode) : si le
+    // corps stocké contient des balises ÉCHAPPÉES (« &lt;div&gt; »…), on décode UNE fois
+    // pour retrouver le HTML réel — un ré-enregistrement le nettoie définitivement.
+    // On NE décode pas un simple « prix &lt; 100 » (pas de nom de balise après « &lt; »).
+    // À RETIRER une fois le parc de répondeurs assaini.
     if (preg_match('/&lt;\/?[a-z][a-z0-9]*/i', $arApiBody)) {
         $arApiBody = html_entity_decode($arApiBody, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        _sm_arTrace('read.recovered', $arApiBody); // R2 — après décodage de récupération
     }
     $ar = [
         'enabled'    => (bool)   ($arData['enabled'] ?? false),
@@ -4417,6 +4416,15 @@ function smartermail_edituserpage(array $params): array
         'endIso'     => _sm_arIsoForJs((string) ($arData['endDateUtc'] ?? '')),
         'isHtml'     => (bool)   ($arData['isHTML'] ?? false),
     ];
+    _sm_arTrace('read.final', $ar['body']); // R3 — ce qui part vers l'éditeur
+    // Transport lecture → éditeur INATTAQUABLE : le corps voyage en rawurlencode (alphabet
+    // A-Za-z0-9-_.~% uniquement — aucun « <>&"' ») et le JS le décode via decodeURIComponent.
+    // Résultat identique que l'auto-échappement Smarty soit actif ou non, nofilter honoré
+    // ou non : il n'y a tout simplement RIEN à échapper dans ce qui traverse le template.
+    $ar['bodyJs'] = rawurlencode($ar['body']);
+    // Phase de validation : carte visible + sondes actives (interrupteur unique
+    // _sm_arTraceOn(), actuellement forcé à vrai — voir sa doc pour regater ensuite).
+    $arDebug = _sm_arTraceOn();
 
     // ── Nom du produit (pour le titre de page) ────────────────────────────
     $productName = Capsule::table('tblproducts')
@@ -4476,6 +4484,7 @@ function smartermail_edituserpage(array $params): array
             'fwdSpam'          => $fwdSpam,
             'arAvailable'      => $arAvailable,
             'ar'               => $ar,
+            'arDebug'          => $arDebug,
             'easEnabled'       => $easEnabled,
             'mapiEnabled'      => $mapiEnabled,
             'easWas'           => $easWas,
@@ -4574,6 +4583,68 @@ function _sm_arIsoForJs(string $raw): string
     $year = (int) gmdate('Y', $ts);
     if ($year <= 1 || $year >= 9999) return '';
     return gmdate('Y-m-d\TH:i:s\Z', $ts);
+}
+
+/**
+ * Décode l'assainissement d'entrée de WHMCS. Le cœur WHMCS passe TOUT $_POST/$_GET par
+ * htmlspecialchars (ENT_QUOTES) au démarrage, AVANT le code des modules : un corps HTML
+ * envoyé par le navigateur (« <b>x</b> ») arrive donc TOUJOURS échappé (« &lt;b&gt;x&lt;/b&gt; »).
+ * C'était LA cause du répondeur affiché en code — aucune de nos couches (éditeur, Smarty,
+ * assainisseur, API) n'échappait : l'entrée était déjà échappée en amont.
+ *
+ * Sans risque par construction : si l'entrée n'est PAS échappée (installation qui ne
+ * sanitize pas), il n'y a pas d'entités à décoder → no-op. Un « < » littéral tapé par
+ * l'utilisateur est représenté « &lt; » par innerHTML, sur-échappé « &amp;lt; » par WHMCS,
+ * et le décodage unique redonne exactement « &lt; » — la représentation HTML correcte.
+ *
+ * @param  string $value Valeur brute de $_POST.
+ * @return string        Valeur telle qu'envoyée par le navigateur.
+ */
+function _sm_whmcsInputDecode(string $value): string
+{
+    if (class_exists('\\WHMCS\\Input\\Sanitize')
+        && method_exists('\\WHMCS\\Input\\Sanitize', 'decode')) {
+        $decoded = \WHMCS\Input\Sanitize::decode($value);
+        if (is_string($decoded)) {
+            return $decoded;
+        }
+    }
+    // Repli : inverse exact de htmlspecialchars ENT_QUOTES (chirurgical — ne touche
+    // que &amp; &lt; &gt; &quot; &#039;, contrairement à html_entity_decode).
+    return htmlspecialchars_decode($value, ENT_QUOTES);
+}
+
+/**
+ * Interrupteur UNIQUE du diagnostic répondeur (traces AR-TRACE + sondes navigateur
+ * + relecture S5). Correctif « décodage entrée WHMCS » VALIDÉ le 2026-07-09 (traces
+ * S0→S5 : couche WHMCS prouvée, round-trip stable, aucun empilement de div).
+ *
+ * Pour réactiver le diagnostic au besoin, ajouter dans configuration.php :
+ *   define('SMARTERMAIL_DEBUG', true);
+ *
+ * @return bool
+ */
+function _sm_arTraceOn(): bool
+{
+    return defined('SMARTERMAIL_DEBUG') && SMARTERMAIL_DEBUG;
+}
+
+/**
+ * Trace de diagnostic du répondeur (AR-TRACE) — voir _sm_arTraceOn(). Chaque valeur est
+ * journalisée en rawurlencode → octets NON ambigus dans le journal d'activité :
+ * « %3C » = vrai « < » ; « %26lt%3B » = « &lt; » échappé.
+ *
+ * @param string $stage          Étape (ex. save.post.raw).
+ * @param string $data           Donnée à tracer.
+ * @param bool   $alreadyEncoded true si $data est déjà encodée/lisible telle quelle.
+ */
+function _sm_arTrace(string $stage, string $data, bool $alreadyEncoded = false): void
+{
+    if (!_sm_arTraceOn()) {
+        return;
+    }
+    $payload = $alreadyEncoded ? $data : rawurlencode($data);
+    logActivity('SmarterMail [AR-TRACE] ' . $stage . ' | ' . substr($payload, 0, 600));
 }
 
 /**
@@ -4726,10 +4797,30 @@ function smartermail_saveautoresponder(array $params): string
     $domain = $params['domain'];
 
     $enabled    = ($_POST['ar_enabled'] ?? '') === '1';
-    $subject    = mb_substr(trim(strip_tags((string) ($_POST['ar_subject'] ?? ''))), 0, 200);
+
+    // S0 — ce que le NAVIGATEUR affirme avoir envoyé (champ miroir ar_diag, rempli par le
+    // JS en encodeURIComponent : alphabet URL-safe → traverse l'assainisseur WHMCS intact).
+    // Comparé à S1, il mesure directement la couche WHMCS (et tout WAF éventuel).
+    $diag = (string) ($_POST['ar_diag'] ?? '');
+    if ($diag !== '') {
+        _sm_arTrace('save.browser.claims', substr($diag, 0, 600), true);
+    }
+    $rawPost = (string) ($_POST['ar_body'] ?? '');
+    _sm_arTrace('save.post.raw', $rawPost); // S1 — $_POST tel que reçu (assaini par WHMCS)
+
+    // CŒUR DU CORRECTIF : WHMCS échappe TOUT $_POST (htmlspecialchars) avant le module —
+    // le HTML de l'éditeur arrivait donc TOUJOURS en « &lt;div&gt; » et était stocké tel
+    // quel dans SmarterMail, qui affichait le code. On décode cette couche (no-op si
+    // l'entrée n'est pas échappée), PUIS on assainit le HTML réel.
+    $decoded = _sm_whmcsInputDecode($rawPost);
+    _sm_arTrace('save.post.decoded', $decoded); // S2 — après décodage de la couche WHMCS
+
+    $subject = mb_substr(trim(strip_tags(_sm_whmcsInputDecode((string) ($_POST['ar_subject'] ?? '')))), 0, 200);
     // Assainissement : autorise le HTML de mise en forme, bloque l'injection (script,
     // on*, javascript:…). Le message est saisi via l'éditeur riche de l'espace client.
-    $body       = _sm_sanitizeHtml(mb_substr((string) ($_POST['ar_body'] ?? ''), 0, 20000));
+    $body    = _sm_sanitizeHtml(mb_substr($decoded, 0, 20000));
+    _sm_arTrace('save.body.final', $body); // S3 — après assainissement (ce qu'on envoie)
+
     $audience   = (int) ($_POST['ar_audience'] ?? 0);
     $useRange   = ($_POST['ar_use_range'] ?? '') === '1';
     $directOnly = ($_POST['ar_direct_only'] ?? '') === '1';
@@ -4780,6 +4871,16 @@ function smartermail_saveautoresponder(array $params): string
     $resp = $init['api']->setAutoResponder(
         $init['token'], $username, $settings, $domain, $init['saToken'] ?? null
     );
+    _sm_arTrace('save.api.result', 'code=' . ($resp['code'] ?? '?')
+        . ' ok=' . (int) ($resp['success'] ?? false), true); // S4
+
+    // S5 — RELECTURE immédiate (diagnostic uniquement) : ce que SmarterMail a réellement
+    // stocké, sans devoir ouvrir le webmail. Boucle fermée en un seul enregistrement.
+    if (_sm_arTraceOn()) {
+        $chk = $init['api']->getAutoResponder($init['token'], $username, $domain, $init['saToken'] ?? null, true);
+        _sm_arTrace('save.readback', 'isHTML=' . (int) ($chk['isHTML'] ?? -1)
+            . ' body=' . rawurlencode(substr((string) ($chk['body'] ?? ''), 0, 400)), true);
+    }
 
     if (!($resp['success'] ?? false)) {
         if (($resp['error'] ?? '') === 'USER_TOKEN_UNAVAILABLE') {

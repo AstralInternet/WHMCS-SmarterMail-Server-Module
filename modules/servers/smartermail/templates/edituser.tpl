@@ -243,11 +243,6 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
 </div>
 
 {* ── Répondeur automatique (réponse d'absence) ─────────────────────────── *}
-{* MASQUÉ CÔTÉ CLIENT (temporaire) : le round-trip HTML du répondeur n'est pas encore
-   fiable (échappement Smarty / rendu SmarterMail). Tout le code (modale, éditeur, handlers,
-   API) RESTE en place. Pour réactiver : retirer ce « {if false} » et le « {/if} » qui ferme
-   la carte juste avant « Barre d'actions ». *}
-{if false}
 <div class="sm-card">
   <div class="sm-card-header"><i class="fa fa-reply"></i> {$lang.ar_card_title}</div>
   <div class="sm-card-body">
@@ -270,7 +265,6 @@ var SM_LANG_BTN_REMOVE    = '{$lang.btn_remove|escape:"html"}';
     {/if}
   </div>
 </div>
-{/if}{* fin du masquage temporaire du répondeur *}
 
 {* ── Barre d'actions ─────────────────────────────────────────────────── *}
 {* Supprimer seul à gauche — Mot de passe + Sauvegarder groupés à droite  *}
@@ -576,6 +570,10 @@ document.addEventListener('DOMContentLoaded', function() {
             <textarea class="sm-rte-src" id="ar-source" style="display:none" rows="6" oninput="smRteSync()"></textarea>
           </div>
           <input type="hidden" name="ar_body" id="ar-body">
+          {* Champ miroir diagnostic : rempli par le JS (encodeURIComponent de l'éditeur).
+             Son alphabet URL-safe traverse l'assainisseur d'entrée WHMCS intact → permet
+             de comparer « ce que le navigateur a envoyé » vs « ce que PHP a reçu ». *}
+          <input type="hidden" name="ar_diag" id="ar-diag">
         </div>
 
         <div class="sm-chk-row" style="margin-top:10px;">
@@ -637,9 +635,11 @@ var SM_LOCK_DAYS    = {$lockDays|default:1};
 var SM_AR_START = '{$ar.startIso|escape:"javascript"}';
 var SM_AR_END   = '{$ar.endIso|escape:"javascript"}';
 var SM_AR_DATES_REQUIRED = '{$lang.ar_err_dates_invalid|escape:"javascript"}';
-{* Corps du répondeur en chaîne JS (échappement JS, PAS HTML) : le HTML réel arrive intact
-   dans l'éditeur — même technique que SM_AR_START, insensible à l'auto-échappement Smarty. *}
-var SM_AR_BODY = '{$ar.body|escape:"javascript"}';
+{* Corps du répondeur en rawurlencode (PHP) → decodeURIComponent (JS) : la chaîne ne
+   contient QUE A-Za-z0-9-_.~%, donc AUCUN caractère que Smarty/WHMCS puisse échapper —
+   transport inattaquable quelle que soit la config d'échappement des templates. *}
+var SM_AR_BODY = decodeURIComponent('{$ar.bodyJs}');
+var SM_AR_DEBUG = {if !empty($arDebug)}true{else}false{/if};
 
 {literal}
 
@@ -795,13 +795,18 @@ function smUpdatePrice() {
 function smArOpen() {
   smOpen('sm-ar-modal');
   smArRange();
-  // Injecter le corps HTML dans l'éditeur (une seule fois) via la chaîne JS — immunisé
-  // contre l'auto-échappement Smarty. Sans ça, l'éditeur recevait « &lt;div&gt; » et
-  // renvoyait du code au lieu du HTML.
+  // Injecter le corps HTML dans l'éditeur (une seule fois). SM_AR_BODY arrive via
+  // rawurlencode/decodeURIComponent — transport insensible à tout échappement de template.
   var ed = document.getElementById('ar-editor');
   if (ed && !ed.getAttribute('data-sm-init')) {
     ed.innerHTML = SM_AR_BODY;
     ed.setAttribute('data-sm-init', '1');
+  }
+  // Sondes diagnostic (SMARTERMAIL_DEBUG) : C1 = corps reçu par le JS, C2 = état réel de
+  // l'éditeur après injection — en encodeURIComponent (octets non ambigus, %3C = « < »).
+  if (SM_AR_DEBUG && window.console) {
+    console.log('[AR-TRACE C1] SM_AR_BODY =', encodeURIComponent(SM_AR_BODY));
+    if (ed) console.log('[AR-TRACE C2] editor.innerHTML =', encodeURIComponent(ed.innerHTML));
   }
   // Pré-remplir les datetime-local (heure locale du navigateur) depuis l'ISO UTC.
   smArSetLocal('ar-start', SM_AR_START);
@@ -823,6 +828,10 @@ function smArSetLocal(id, iso) {
 }
 function smArPrepare() {
   smRteSync(); // garantir que ar_body reflète l'éditeur avant l'envoi
+  // Champ miroir diagnostic : copie URL-encodée de l'éditeur (traverse l'assainisseur
+  // d'entrée WHMCS intact) → le serveur compare « navigateur » vs « $_POST » (S0 vs S1).
+  var dg = document.getElementById('ar-diag'), edd = document.getElementById('ar-editor');
+  if (dg) dg.value = (SM_AR_DEBUG && edd) ? encodeURIComponent(edd.innerHTML).slice(0, 600) : '';
   // Convertit les datetime-local (heure locale) en ISO UTC dans les champs cachés.
   var use = document.getElementById('ar-use-range');
   var si = document.getElementById('ar-start-iso'), ei = document.getElementById('ar-end-iso');

@@ -1537,6 +1537,14 @@ class SmarterMailApi
         // donc le segment sur isHTML.
         $wantHtml = !empty($payload['isHTML']);
         $ep = 'api/v1/settings/auto-responder' . ($wantHtml ? '/true' : '');
+        // A1 — trace diagnostic (SMARTERMAIL_DEBUG) : payload FINAL réellement posté,
+        // après merge avec l'existant. Le helper vit dans smartermail.php (contexte module) ;
+        // en contexte hook/cron il peut être absent → garde function_exists.
+        if (function_exists('_sm_arTrace')) {
+            _sm_arTrace('setAR.payload', 'ep=' . $ep
+                . ' isHTML=' . (int) $wantHtml
+                . ' body=' . rawurlencode(substr((string) ($payload['body'] ?? ''), 0, 400)), true);
+        }
         $resp = $this->post($ep, ['autoResponderSettings' => $payload], $userToken);
         // Repli si un build refuse le segment sur le POST (404/405) : réémettre sans
         // segment (comportement antérieur — au pire enregistré comme avant, jamais

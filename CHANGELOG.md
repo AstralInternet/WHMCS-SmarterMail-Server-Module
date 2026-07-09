@@ -10,6 +10,64 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.27.3] - 2026-07-09
+
+### Modifié — répondeur VALIDÉ : traces regatées, carte réactivée pour tous
+
+- **Correctif « décodage entrée WHMCS » confirmé en conditions réelles** (traces S0→S5) :
+  la couche WHMCS prouvée (`browser.claims` réel vs `post.raw` échappé), décodage exact,
+  `isHTML=1`, rendu correct dans SmarterMail, round-trip **stable** (aucun empilement de
+  div — l'unique enveloppe `<div>` vient de Froala côté SmarterMail, comportement normal).
+- Traces **AR-TRACE regatées** sur `define('SMARTERMAIL_DEBUG', true);` (configuration.php)
+  — journal silencieux par défaut, diagnostic réactivable en une ligne.
+- **Carte Répondeur réactivée pour tous** les clients (retrait du `{if}` de validation).
+
+## [1.27.2] - 2026-07-09
+
+### Modifié — phase de validation sans friction : carte répondeur + traces actives d'office
+
+- La carte Répondeur est **de nouveau visible** dans l'espace client et les traces
+  **AR-TRACE sont actives sans aucun réglage** (plus besoin d'éditer configuration.php
+  pour tester). Interrupteur **unique** : `_sm_arTraceOn()` — actuellement forcé à vrai ;
+  une fois le correctif confirmé, le regater sur `SMARTERMAIL_DEBUG` (une ligne) et
+  retirer le `{if}` de la carte.
+
+## [1.27.1] - 2026-07-09
+
+### Corrigé — répondeur : cause racine identifiée = assainissement d'entrée WHMCS
+
+**Analyse rétrospective des logs.** La preuve décisive (log 17:27, rawurlencode) : un message
+**frais** tapé dans l'éditeur avec gras arrivait au handler en `test &lt;b&gt;test&lt;/b&gt; test`.
+Or le bouton gras crée un **vrai** `<b>` dans le DOM, `innerHTML` le sérialise en vraies
+balises, le navigateur POST tel quel et l'assainisseur sans DOM ne peut pas échapper
+(20/20 en CLI). La seule couche restante : **le cœur WHMCS passe TOUT `$_POST` par
+`htmlspecialchars` avant le code des modules.** Jamais décodé → chaque save stockait du
+HTML échappé dans SmarterMail, qui affichait le code. Explique TOUT : frais texte-simple OK
+(rien à échapper), frais formaté KO, existant KO, `isHTML=0` (détection sur corps échappé),
+empilement de `<div>` (contenteditable enveloppe le texte littéral à chaque cycle), et la
+fausse piste libxml (les tests CLI recevaient du brut, la prod du pré-échappé).
+
+- **Correctif principal** : `_sm_whmcsInputDecode()` — `\WHMCS\Input\Sanitize::decode()`
+  (inverse exact de la couche WHMCS), repli `htmlspecialchars_decode(ENT_QUOTES)`. Appliqué
+  à `ar_body` **et** `ar_subject` (les apostrophes arrivaient en `&#039;`). **Sans risque
+  par construction** : no-op si l'entrée n'est pas échappée ; un « < » littéral survit
+  exactement (sur-échappé puis décodé une fois). Pipeline complet simulé **7/7** en CLI,
+  y compris la signature exacte du log fautif.
+- **Transport lecture → éditeur inattaquable** : le corps voyage en `rawurlencode` (PHP) et
+  est décodé par `decodeURIComponent` (JS). Alphabet `A-Za-z0-9-_.~%` : rien à échapper,
+  résultat identique quelle que soit la config Smarty. Remplace l'injection
+  `|escape:"javascript"`.
+- **Télémétrie AR-TRACE permanente** (activée par `define('SMARTERMAIL_DEBUG', true);` dans
+  configuration.php — même mécanisme que le MetricsProvider) : trace hop-par-hop en
+  rawurlencode — lecture R1→R3, sauvegarde S0 (champ miroir `ar_diag` : ce que le
+  navigateur affirme avoir envoyé, insensible à la couche WHMCS) → S1 ($_POST reçu) →
+  S2 (décodé) → S3 (assaini) → A1 (payload API final) → S4 (résultat) → **S5 relecture
+  immédiate** (ce que SmarterMail a réellement stocké — boucle fermée sans webmail).
+  Sondes console C1/C2 côté navigateur. S0 vs S1 mesure directement la couche WHMCS.
+- **Carte répondeur visible en mode diagnostic uniquement** (`{if $arDebug}`) pendant la
+  validation — testable côté dev, masquée pour les clients. Réactivation générale une fois
+  confirmé.
+
 ## [1.27.0] - 2026-07-09
 
 ### Modifié — refonte des catégories du forfait (facturation) + mot de passe global
