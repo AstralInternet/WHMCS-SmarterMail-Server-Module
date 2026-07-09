@@ -10,6 +10,41 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.27.5] - 2026-07-09
+
+### Ajouté — banc d'essai REVENU des nouveaux produits (`tools/test_billing_forfaits.php`)
+
+- Prouve la **chaîne complète d'un produit lié à un forfait** avec le **vrai code de
+  production** à chaque maillon (seule la couche BD est simulée en mémoire) :
+  POST GUI → `_sm_savePackage` → `_sm_getPackage` → pont `configoption24`
+  (`_sm_packageFromServiceRow`/`_sm_resolvePackage`) → clamps du hook (répliqués) →
+  `_sm_computeBaseCharge`/`_sm_quotaMaxSizeBytes` → **montants**.
+- Couverture : mapping/clamps de sauvegarde (usage→tiers+block, fixe→flat+block,
+  `plan_type` inconnu → usage, valeurs hostiles → planchers) ; pont co24 (id nu, libellé
+  « #id — nom », forfait inexistant → repli hérité journalisé, vide → hérité, supprimé →
+  hérité — le forfait **gagne** sur des configoptions héritées volontairement différentes) ;
+  bout-en-bout « À l'usage » (montants exacts 1/4/5 tranches, plafonné au-delà du quota,
+  plafond 50 Go poussé au serveur, lignes EAS/MAPI combiné/EAS/MAPI = 13,50 + 5,00 + 3,00,
+  éclatement combiné→2 lignes si prix combiné 0) ; « Fixe » (Hosting jamais réécrit) ;
+  **mode masqué** (`masked`) : EAS/MAPI désactivé globalement ⇒ offres masquées mais **prix
+  intacts** ⇒ la facturation n'est jamais supprimée.
+- 59 + 64 assertions ✓. Usage : `php tools/test_billing_forfaits.php [masked]`.
+
+## [1.27.4] - 2026-07-09
+
+### Ajouté — banc d'essai REVENU (`tools/test_billing_logic.php`)
+
+- Banc d'essai **pur CLI** (aucune BD/WHMCS requise, lecture seule) qui charge le **vrai code
+  de production** (`_sm_computeBaseCharge`, `_sm_quotaMaxSizeBytes`) et le confronte à la
+  formule historique (`max(1, ceil(usage/tranche)) × prix`) sur **53 143 assertions** :
+  hérité byte-identique (balayage fin 0→300 Go × 4 tailles de tranche × 4 prix + bornes),
+  forfait « À l'usage » (== historique sous quota, plafonné au-delà, quota 0 = illimité),
+  forfait « Fixe » (Hosting intact, aucune ligne ajoutée), anciens forfaits « bill »
+  préservés (math d'excédent exacte), maxSize poussé uniquement en `block`, clamp
+  `gb_per_tier` du hook, mapping 1.27.0 `fixe/usage`.
+- Résultat : **✓ aucune perte de revenu détectée**. Usage : `php tools/test_billing_logic.php`
+  (à relancer après tout changement touchant la facturation).
+
 ## [1.27.3] - 2026-07-09
 
 ### Modifié — répondeur VALIDÉ : traces regatées, carte réactivée pour tous
