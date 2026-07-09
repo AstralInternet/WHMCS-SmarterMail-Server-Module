@@ -1296,37 +1296,46 @@ class SmarterMailApi
 
     public function loginUser(string $daToken, string $username, ?string $domain = null, ?string $saToken = null): ?string
     {
-        $extractToken = fn($data) => $data['accessToken']
-            ?? $data['impersonateAccessToken']
+        // Champ de token confirmé : impersonateAccessToken (repli sur les autres).
+        $extractToken = fn($data) => $data['impersonateAccessToken']
+            ?? $data['accessToken']
             ?? $data['userToken']
             ?? null;
 
-        // Tentatives avec le SA token (niveau le plus élevé)
-        if ($saToken && $domain) {
-            $email = $username . '@' . $domain;
-            $saEps = [
-                ['POST', 'api/v1/settings/sysadmin/manage-user/' . urlencode($email)],
-                ['POST', 'api/v1/settings/sysadmin/impersonate-user/' . urlencode($email)],
-                ['POST', 'api/v1/settings/sysadmin/manage-user/' . urlencode($username) . '/' . urlencode($domain)],
-            ];
-            foreach ($saEps as [$method, $ep]) {
-                $resp = $this->request($method, $ep, [], $saToken);
-                $tk = $extractToken($resp['data'] ?? []);
-                if ($tk) return $tk;
+        $email = ($domain !== null && $domain !== '') ? ($username . '@' . $domain) : $username;
+
+        // ── DÉBUG TEMPORAIRE (confirmation) — retirer une fois validé ─────────────
+        $trace = [];
+        $fmt = function (string $ctx, array $resp, $tk): string {
+            $data = (array) ($resp['data'] ?? []);
+            $msg  = (string) ($data['message'] ?? $resp['error'] ?? '');
+            return sprintf('%s code=%s ok=%s keys=[%s]%s%s', $ctx,
+                $resp['code'] ?? '?', ($resp['success'] ?? false) ? '1' : '0',
+                implode(',', array_keys($data)), $tk ? ' TOKEN-OK' : '',
+                $msg !== '' ? ' msg="' . mb_substr($msg, 0, 140) . '"' : '');
+        };
+
+        // Endpoint CONFIRMÉ (doc SmarterMail + wrapper de référence) : l'email va dans le
+        // CORPS, pas dans l'URL. L'impersonification est un privilège SYSADMIN (à activer
+        // dans SmarterMail : System Admin → Settings) → token SA d'abord, DA en repli.
+        $attempts = [];
+        if ($saToken !== null && $saToken !== '') {
+            $attempts[] = ['SA', $saToken];
+        }
+        $attempts[] = ['DA', $daToken];
+
+        foreach ($attempts as [$ctx, $token]) {
+            $resp = $this->request('POST', 'api/v1/settings/domain/impersonate-user', ['email' => $email], $token);
+            $tk   = $extractToken($resp['data'] ?? []);
+            $trace[] = $fmt($ctx . ' domain/impersonate-user', $resp, $tk);
+            if ($tk) {
+                logActivity('SmarterMail [loginUser DEBUG] OK (' . $email . ') — ' . implode(' || ', $trace));
+                return $tk;
             }
         }
 
-        // Tentatives avec le DA token
-        $daEps = [
-            ['POST', 'api/v1/settings/domain/impersonate-user/' . urlencode($username)],
-            ['POST', 'api/v1/settings/domain/manage-user/' . urlencode($username)],
-        ];
-        foreach ($daEps as [$method, $ep]) {
-            $resp = $this->request($method, $ep, [], $daToken);
-            $tk = $extractToken($resp['data'] ?? []);
-            if ($tk) return $tk;
-        }
-
+        logActivity('SmarterMail [loginUser DEBUG] ÉCHEC ' . $email . ' — ' . implode(' || ', $trace)
+            . ' — NB : impersonification = SysAdmin avec la permission activée dans SmarterMail.');
         return null;
     }
 
@@ -1422,6 +1431,33 @@ class SmarterMailApi
     public const AR_AUDIENCE_ALL      = 2;
 
     /**
+     * Extrait l'objet répondeur d'une réponse GET, quelle que soit sa forme :
+     * champs à la RACINE (subject/body/externalReply/enabled…), ou imbriqués sous
+     * 'autoResponderSettings' / 'autoResponder' selon la version SmarterMail.
+     * Retourne null si aucun champ de répondeur reconnu (évite un faux positif).
+     *
+     * @param  mixed $data  $resp['data'] décodé.
+     * @return ?array
+     */
+    private function extractAutoResponder($data): ?array
+    {
+        if (!is_array($data)) {
+            return null;
+        }
+        foreach (['autoResponderSettings', 'autoResponder'] as $key) {
+            if (isset($data[$key]) && is_array($data[$key])) {
+                $data = $data[$key];
+                break;
+            }
+        }
+        if (isset($data['enabled']) || isset($data['subject'])
+            || isset($data['body']) || isset($data['externalReply'])) {
+            return $data;
+        }
+        return null;
+    }
+
+    /**
      * Récupère la configuration du répondeur automatique d'une boîte.
      *
      * https://mail.smartertools.com/Documentation/api#/reference/SmarterMail.Web.Api.SettingsController/GetAutoResponderSettings/get
@@ -1445,10 +1481,12 @@ class SmarterMailApi
 
         $ep   = 'api/v1/settings/auto-responder' . ($wantHtml ? '/true' : '');
         $resp = $this->get($ep, $userToken);
-        if (($resp['success'] ?? false) && isset($resp['data']['autoResponderSettings'])) {
-            return (array) $resp['data']['autoResponderSettings'];
+        if (!($resp['success'] ?? false)) {
+            return null;
         }
-        return null;
+        // SmarterMail renvoie les champs à la RACINE (subject, body, externalReply,
+        // enabled…), pas sous 'autoResponderSettings' → extraction tolérante.
+        return $this->extractAutoResponder($resp['data'] ?? []);
     }
 
     /**
@@ -1479,27 +1517,34 @@ class SmarterMailApi
         // Relire l'existant pour le merge (best-effort — ignoré si indisponible).
         $current = [];
         $resp = $this->get('api/v1/settings/auto-responder', $userToken);
-        if (($resp['success'] ?? false) && isset($resp['data']['autoResponderSettings'])) {
-            $current = (array) $resp['data']['autoResponderSettings'];
+        if ($resp['success'] ?? false) {
+            $ex = $this->extractAutoResponder($resp['data'] ?? []);
+            if ($ex !== null) {
+                $current = $ex;
+            }
         }
 
+        // Payload construit UNIQUEMENT à partir des 10 champs officiels : la valeur
+        // fournie écrase l'existant, sinon on préserve l'existant. On n'inclut aucune
+        // clé inconnue (ex. 'success' renvoyé à la racine par SmarterMail).
         $allowed = [
             'endDateUtc', 'startDateUtc', 'useActiveDateRange', 'body',
             'externalReply', 'enabled', 'isHTML', 'subject',
             'autoRespondOnDirectMailOnly', 'externalAudience',
         ];
-        $payload = $current;
+        $payload = [];
         foreach ($allowed as $k) {
             if (array_key_exists($k, $settings)) {
                 $payload[$k] = $settings[$k];
+            } elseif (array_key_exists($k, $current)) {
+                $payload[$k] = $current[$k];
             }
         }
 
-        return $this->post(
-            'api/v1/settings/auto-responder',
-            ['autoResponderSettings' => $payload],
-            $userToken
-        );
+        // SmarterMail ENVELOPPE l'objet sous 'autoResponderSettings' (confirmé par la
+        // réponse GET réelle : { "autoResponderSettings": {…}, "success": true }).
+        // Le corps POST utilise donc le même enveloppement.
+        return $this->post('api/v1/settings/auto-responder', ['autoResponderSettings' => $payload], $userToken);
     }
 
     /**

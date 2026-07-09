@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.23.0',
+        'MODVersion' => '1.24.3',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -4387,7 +4387,9 @@ function smartermail_edituserpage(array $params): array
     // ── Répondeur automatique (auto-responder) — token utilisateur requis ──
     // getAutoResponder renvoie NULL si l'impersonification échoue → carte en mode
     // dégradé (jamais un formulaire vide qui écraserait une config invisible).
-    $arData      = $api->getAutoResponder($daToken, $username, $domain, $init['saToken'] ?? null);
+    // wantHtml=true : on lit le corps en HTML pour un aller-retour fidèle (le message
+    // affiché = ce qui est réellement stocké côté SmarterMail).
+    $arData      = $api->getAutoResponder($daToken, $username, $domain, $init['saToken'] ?? null, true);
     $arAvailable = ($arData !== null);
     $ar = [
         'enabled'    => (bool)   ($arData['enabled'] ?? false),
@@ -4587,7 +4589,6 @@ function smartermail_saveautoresponder(array $params): string
     $enabled    = ($_POST['ar_enabled'] ?? '') === '1';
     $subject    = mb_substr(trim(strip_tags((string) ($_POST['ar_subject'] ?? ''))), 0, 200);
     $body       = mb_substr((string) ($_POST['ar_body'] ?? ''), 0, 20000);
-    $external   = mb_substr((string) ($_POST['ar_external'] ?? ''), 0, 20000);
     $audience   = (int) ($_POST['ar_audience'] ?? 0);
     $useRange   = ($_POST['ar_use_range'] ?? '') === '1';
     $directOnly = ($_POST['ar_direct_only'] ?? '') === '1';
@@ -4598,10 +4599,9 @@ function smartermail_saveautoresponder(array $params): string
     if ($enabled && ($subject === '' || trim($body) === '')) {
         return $l['ar_err_content_required'] ?? 'Le sujet et le message sont requis pour activer le répondeur.';
     }
-    // Réponse externe vide + audience > « personne » → reprendre le corps.
-    if ($external === '' && $audience > 0) {
-        $external = $body;
-    }
+    // Message UNIQUE : la réponse externe est TOUJOURS identique au corps (le champ
+    // « réponse externe » distinct a été retiré de l'interface — un seul message).
+    $external = $body;
 
     // Plage de dates active (facultative).
     $startUtc = null; $endUtc = null;
@@ -4616,9 +4616,15 @@ function smartermail_saveautoresponder(array $params): string
         }
     }
 
+    // Le répondeur SmarterMail stocke du HTML. Si le message contient des balises HTML
+    // → isHTML=true (envoyé TEL QUEL, sans échappement par le serveur) ; sinon texte
+    // brut (isHTML=false). Sans ça, un message HTML était échappé (« <div> » → « &lt;div&gt; »)
+    // et apparaissait en toutes lettres dans la réponse d'absence.
+    $isHtml = (bool) preg_match('/<[a-z!\/][^>]*>/i', $body);
+
     $settings = [
         'enabled'                     => $enabled,
-        'isHTML'                      => false,
+        'isHTML'                      => $isHtml,
         'subject'                     => $subject,
         'body'                        => $body,
         'externalReply'               => $external,

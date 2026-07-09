@@ -10,6 +10,75 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.24.3] - 2026-07-09
+
+### Corrigé — répondeur : HTML envoyé comme HTML (fin du double-échappement)
+
+Le répondeur envoyait toujours `isHTML: false`. SmarterMail traitait alors un message
+HTML comme du **texte brut** : il échappait les balises (`<div>` → `&lt;div&gt;`) et les
+enveloppait dans un `<div>`, si bien que le HTML s'affichait **en toutes lettres** dans
+la réponse d'absence.
+
+- **`isHTML` auto-détecté** : si le message contient des balises HTML → `isHTML=true`
+  (envoyé **tel quel**, sans échappement serveur) ; sinon texte brut (`isHTML=false`,
+  retours à la ligne préservés). S'applique au corps ET à la réponse externe (message unique).
+- **Lecture en HTML** : `getAutoResponder()` est appelé avec `wantHtml=true` pour un
+  aller-retour fidèle (le message affiché = ce qui est réellement stocké).
+
+## [1.24.2] - 2026-07-09
+
+### Corrigé — impersonification utilisateur : bon endpoint (répondeur enfin accessible)
+
+Le débug a révélé la vraie cause du « non accessible » : `loginUser()` appelait de
+mauvais endpoints d'impersonification (SA `sysadmin/*` → 404 ; DA
+`domain/impersonate-user/{username}` corps vide → 403).
+
+- **Endpoint corrigé** (confirmé via la doc SmarterMail + un wrapper de référence) :
+  `POST api/v1/settings/domain/impersonate-user` avec l'email **dans le corps**
+  (`{"email":"user@domaine"}`), **pas** dans l'URL. Champ de réponse `impersonateAccessToken`.
+- **Token** : l'impersonification est un **privilège SysAdmin** → tentative avec le token
+  SA d'abord, DA en repli.
+- ⚠️ **Prérequis SmarterMail** : le compte SysAdmin utilisé par le module doit avoir la
+  **permission d'impersonification activée** (System Admin → Settings). Sinon le bon
+  endpoint renvoie « Access denied ».
+- Débug `loginUser` **conservé** pour cette passe de confirmation (message `loginUser DEBUG`
+  dans le Journal) — sera retiré une fois validé.
+
+## [1.24.1] - 2026-07-09
+
+### Corrigé — répondeur : POST ré-enveloppé + débug temporaire de l'impersonification
+
+Suite au test : la réponse GET réelle est **enveloppée** sous `autoResponderSettings`
+(`{ "autoResponderSettings": {…}, "success": true }`). Donc :
+
+- **POST ré-enveloppé** : `setAutoResponder()` renvoie de nouveau `{ "autoResponderSettings":
+  {…} }` (mon passage en objet nu de 1.24.0 était une erreur). La lecture reste tolérante
+  (`extractAutoResponder` gère racine ET enveloppe).
+- **Cause probable du « non accessible » = `loginUser()`** : le répondeur est *user-only*
+  (aucun endpoint Domain Admin de repli, contrairement au forwarding) → il exige un token
+  d'impersonification ; si `loginUser` échoue, `getAutoResponder` renvoie `null`.
+- **Débug temporaire** dans `loginUser()` : trace chaque endpoint d'impersonification (code
+  HTTP, clés de réponse, message) dans le Journal d'activité (chercher `loginUser DEBUG`).
+  Aucun token n'est journalisé. **À retirer** une fois le bon endpoint identifié.
+
+## [1.24.0] - 2026-07-09
+
+### Corrigé / Modifié — répondeur automatique (test bac-à-sable)
+
+- **🔴 Répondeur « non accessible » corrigé** : `getAutoResponder()` lisait la réponse GET
+  sous une clé `autoResponderSettings` inexistante — SmarterMail renvoie les champs **à la
+  racine** (subject/body/externalReply/enabled…). Résultat : la carte affichait « Le
+  répondeur automatique n'est pas accessible pour cette boîte » sans aucune option, alors
+  que le répondeur est bien activable dans SmarterMail. Extraction désormais **tolérante**
+  (racine / `autoResponderSettings` / `autoResponder`) ; le **POST** envoie aussi l'objet
+  **à la racine** (sans wrapper), conforme à l'API réelle.
+- **Message unique** : `externalReply` est désormais **toujours identique** au corps. Le
+  champ « réponse externe » distinct est retiré de la modale — un seul message part aux
+  expéditeurs internes et externes ; le sélecteur d'**audience** (0=personne / 1=contacts /
+  2=tout le monde) décide seulement qui reçoit une réponse hors du domaine.
+- **`externalAudience` confirmé** sur serveur de test : `2` = « Everyone » (pas
+  « AllExcept »). Le point « bloquant avant release » de l'audit est **levé**.
+
 ## [1.23.0] - 2026-07-09
 
 ### Modifié — refonte visuelle de l'addon « Forfaits »

@@ -548,18 +548,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <div style="margin-top:10px;">
           <label class="sm-mlabel" for="ar-audience">{$lang.ar_audience}</label>
-          <select class="sm-minput-full" name="ar_audience" id="ar-audience" onchange="smArAudience()">
+          <select class="sm-minput-full" name="ar_audience" id="ar-audience">
             <option value="0"{if $ar.audience == 0} selected{/if}>{$lang.ar_audience_none}</option>
             <option value="1"{if $ar.audience == 1} selected{/if}>{$lang.ar_audience_contacts}</option>
             <option value="2"{if $ar.audience == 2} selected{/if}>{$lang.ar_audience_all}</option>
           </select>
         </div>
 
-        <div id="ar-external-block" style="margin-top:10px;{if $ar.audience == 0}display:none;{/if}">
-          <label class="sm-mlabel" for="ar-external">{$lang.ar_external}</label>
-          <textarea class="sm-minput-full" name="ar_external" id="ar-external" rows="3" maxlength="20000">{$ar.external|escape}</textarea>
-          <p class="sm-form-hint">{$lang.ar_external_hint}</p>
-        </div>
+        {* Réponse externe distincte retirée : un SEUL message (ar_body) est envoyé à
+           tous ; le sélecteur d'audience ci-dessus décide qui reçoit une réponse hors
+           du domaine (0 = personne / 1 = contacts connus / 2 = tout le monde). *}
 
         <div class="sm-chk-row" style="margin-top:12px;">
           <input type="checkbox" name="ar_use_range" value="1" id="ar-use-range"{if $ar.useRange} checked{/if} onchange="smArRange()">
@@ -756,15 +754,10 @@ function smUpdatePrice() {
 // ── Répondeur automatique (réponse d'absence) ──────────────────────────────
 function smArOpen() {
   smOpen('sm-ar-modal');
-  smArAudience();
   smArRange();
   // Pré-remplir les datetime-local (heure locale du navigateur) depuis l'ISO UTC.
   smArSetLocal('ar-start', SM_AR_START);
   smArSetLocal('ar-end', SM_AR_END);
-}
-function smArAudience() {
-  var a = document.getElementById('ar-audience'), b = document.getElementById('ar-external-block');
-  if (a && b) b.style.display = (a.value === '0') ? 'none' : '';
 }
 function smArRange() {
   var c = document.getElementById('ar-use-range'), b = document.getElementById('ar-range-block');

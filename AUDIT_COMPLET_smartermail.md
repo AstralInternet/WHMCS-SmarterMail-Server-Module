@@ -102,7 +102,7 @@ Forfaits **nommés et réutilisables**, gérés dans l'addon, référencés par 
 
 ## ⚠️ Bloquant avant mise en production (à valider en test)
 
-- **Répondeur — mapping `externalAudience`** (`0`=None / `1`=Contacts / `2`=All) : déduit de l'enum OOF Exchange + l'UI SmarterMail, **jamais confirmé sur serveur réel** (§6.6). Correctif en **un seul point** si divergence (constantes `AR_AUDIENCE_*`, `SmarterMailApi.php`).
+- **Répondeur — mapping `externalAudience`** : ✅ **confirmé sur serveur de test (2026-07-09)** — `0`=None / `1`=Contacts / `2`=All (« Everyone »). *(Corrigé au passage en 1.24.0 : le répondeur était « non accessible » car la réponse GET est lue à la RACINE, pas sous `autoResponderSettings` ; message unique `body`=`externalReply`.)*
 - **Facturation sur forfait** : factures WHMCS 9.0 **immuables** → comparer les lignes/montants avant-après pour un produit lié à un forfait ET un produit hérité, avant tout passage en prod.
 
 ---
@@ -457,7 +457,7 @@ Deux voies existaient ; la première est retenue, la seconde rejetée :
 
 1. Token utilisateur JWT courte durée : obtenu et consommé dans la même requête PHP, jamais stocké ni journalisé.
 2. `loginUser` version-dépendant (5 endpoints tentés) : dégradation propre systématique ; jamais d'appel en boucle (dashboard).
-3. `externalAudience` : mapping 0/1/2 déduit (EWS + UI SM) — validation en environnement de test **bloquante avant release**.
+3. `externalAudience` : mapping 0/1/2 **confirmé sur serveur de test (2026-07-09)** — 0=None / 1=Contacts / 2=All (« Everyone »). *(Réponse GET lue à la racine ; POST à la racine — corrigé en 1.24.0.)*
 4. Fuseau : saisie/affichage navigateur ↔ stockage UTC (conversion JS) ; sentinelles .NET ignorées à la lecture.
 5. Messages HTML existants convertis en texte à la sauvegarde → avertissement `ar_html_warning` obligatoire.
 6. Erreur métier sous HTTP 200 : garde locale dans les 2 méthodes tant que P0.2 n'est pas fait.

@@ -74,13 +74,16 @@
 - [ ] **Mot de passe minuscule** : forfait avec « minuscule obligatoire » activé → à l'ajout de boîte, le critère apparaît, la barre/le bouton exigent une minuscule ; un POST direct sans minuscule est **rejeté serveur**.
 - [ ] Forfait **sans** minuscule → aucun critère minuscule (= comportement historique).
 
-## 9. 🚨 BLOQUANT avant prod — mapping `externalAudience` du répondeur
+## 9. ✅ Répondeur automatique (audience confirmée + correctifs 1.24.0)
 
-- [ ] Activer un répondeur avec chaque **audience** via l'espace client, puis vérifier dans le **webmail SmarterMail** que :
-  - `0` = personne (None),
-  - `1` = contacts connus,
-  - `2` = **tout le monde** (et **pas** « tout le monde sauf… »).
-- [ ] Si divergence → corriger les constantes `AR_AUDIENCE_NONE/CONTACTS/ALL` dans `modules/servers/smartermail/lib/SmarterMailApi.php` (point unique).
+**Mapping `externalAudience` confirmé (2026-07-09)** : `0`=None / `1`=Contacts / `2`=All. **Plus bloquant.**
+
+À revérifier après les correctifs **1.24.0** (le répondeur était « non accessible ») :
+- [ ] Éditeur d'une boîte → la carte **Répondeur** propose bien de configurer (fini le « non accessible pour cette boîte »).
+- [ ] Activer un répondeur (sujet + message) → enregistrer → **vérifier dans le webmail SmarterMail** qu'il est actif avec le bon contenu.
+- [ ] Recharger la page client → l'état est **relu** correctement.
+- [ ] Confirmer que **le même message** part en interne ET en externe (`body` = `externalReply`), l'**audience** (0/1/2) ne réglant que qui reçoit une réponse hors du domaine.
+- [ ] Tester une **plage de dates** active (début < fin).
 
 ## 10. 🌍 Devise & langue de facture (si client multidevise disponible)
 
