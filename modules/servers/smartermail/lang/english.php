@@ -473,6 +473,8 @@ $_lang = [
     'err_admin_user_missing'   => 'Admin username not configured in WHMCS.',
     'err_create_failed'        => 'Unable to create email address. Please try again or open a support ticket.',
     'err_save_failed'          => 'Unable to save changes. Please try again or open a support ticket.',
+    // %s = list of aliases that failed. All other settings were saved successfully.
+    'err_alias_save'           => 'Unable to save the following alias(es): %s. All other changes were saved.',
     'err_delete_failed'        => 'Unable to delete account. Please try again or open a support ticket.',
 
     // ── Forwarding ────────────────────────────────────────────────────────────

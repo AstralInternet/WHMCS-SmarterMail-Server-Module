@@ -10,6 +10,40 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.27.6] - 2026-09-16
+
+### Corrigé — alias dont le nom contient un point (ex. `harbour.master`)
+
+**Symptômes (prod)** : l'ajout d'un alias `harbour.master` échouait en
+`USER_ADD_ERROR_NAME_IN_USE` alors que l'alias **existait bien** dans SmarterMail, et
+l'alias **n'apparaissait plus** dans l'espace client.
+
+**Cause unique** : `getAlias()` place le nom dans le **chemin de l'URL**
+(`GET …/domain/alias/{nom}`). Un nom se terminant par ce qui ressemble à une extension
+**protégée ASP.NET/IIS** (`.master`, `.config`, `.asax`, `.cs`, `.resx`…) est **intercepté
+par IIS qui renvoie 404 avant d'atteindre l'API**. La méthode retournait alors `[]` sans
+distinguer « n'existe pas » de « appel échoué », d'où les deux symptômes : le flux d'ajout
+concluait « inexistant » puis tentait une création (→ `NAME_IN_USE`), et l'affichage,
+privé des destinations, retirait l'alias de la liste.
+
+- **`getAlias()` résout désormais en cascade** : (1) route normale ; (2) si le nom contient
+  un point, nouvelle tentative **avec un slash final** (plus d'« extension » apparente pour
+  IIS → les détails complets reviennent) ; (3) repli sur la **liste du domaine**
+  (`account-list-search`, où le nom voyage dans le **corps**) — garantit au minimum un
+  verdict d'**existence fiable**. Un `[]` signifie maintenant réellement « n'existe pas ».
+- **`deleteAlias()`** souffrait du même piège d'URL (suppression silencieusement sans effet)
+  → même nouvelle tentative avec slash final.
+- **Erreurs d'alias enfin visibles** : le retour de `createAlias()`/`updateAlias()` était
+  **ignoré** dans `saveuser` — les échecs sont désormais collectés, journalisés et remontés
+  à l'écran (nouvelle clé i18n `err_alias_save`, FR + EN). Les autres réglages continuent
+  d'être enregistrés normalement.
+- **Sécurité des données** : en cas de `NAME_IN_USE` sur un alias illisible, **aucune mise à
+  jour à l'aveugle** n'est tentée (sans ses destinations actuelles, on les écraserait).
+- **Performance** : cache de la liste d'alias par token (anti N+1), invalidé à chaque
+  création / modification / suppression.
+
+Les alias **sans point** empruntent la voie normale inchangée (aucune régression).
+
 ## [1.27.5] - 2026-07-09
 
 ### Ajouté — banc d'essai REVENU des nouveaux produits (`tools/test_billing_forfaits.php`)

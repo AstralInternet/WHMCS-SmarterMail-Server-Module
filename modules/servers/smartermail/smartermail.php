@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.27.5',
+        'MODVersion' => '1.27.6',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -5096,7 +5096,12 @@ function smartermail_saveuser(array $params): string
         }
     }
 
-    // Ajouter cet utilisateur aux nouveaux alias
+    // Ajouter cet utilisateur aux nouveaux alias.
+    // Les échecs sont COLLECTÉS puis remontés à l'écran : auparavant le retour de
+    // createAlias()/updateAlias() était ignoré, donc une erreur (typiquement
+    // USER_ADD_ERROR_NAME_IN_USE) restait invisible — le client croyait l'ajout
+    // réussi alors que rien n'avait été fait.
+    $aliasErrors = [];
     foreach ($added as $aliasName) {
         $existing = $api->getAlias($aliasName, $daToken);
         if (!empty($existing)) {
@@ -5112,11 +5117,16 @@ function smartermail_saveuser(array $params): string
                     'internalOnly'    => (bool)   ($existing['internalOnly']   ?? false),
                     'aliasTargetList' => $targets,
                 ];
-                $api->updateAlias($aliasName, $safeExisting, $daToken);
+                $res = $api->updateAlias($aliasName, $safeExisting, $daToken);
+                if (!($res['success'] ?? false)) {
+                    $aliasErrors[] = $aliasName;
+                    logActivity('SmarterMail [saveuser] Échec de mise à jour de l\'alias "'
+                        . $aliasName . '" pour ' . $email . ' : ' . _sm_apiError($res));
+                }
             }
         } else {
             // Créer un nouvel alias
-            $api->createAlias([
+            $res = $api->createAlias([
                 'name'            => $aliasName,
                 'displayName'     => $aliasName,
                 'aliasTargetList' => [$email],
@@ -5124,6 +5134,15 @@ function smartermail_saveuser(array $params): string
                 'hideFromGAL'     => false,
                 'internalOnly'    => false,
             ], $daToken);
+
+            if (!($res['success'] ?? false)) {
+                $aliasErrors[] = $aliasName;
+                // NAME_IN_USE alors que getAlias() n'a rien trouvé = l'alias existe
+                // mais reste illisible (nom piégé côté serveur). On NE tente PAS de
+                // mise à jour à l'aveugle : sans ses cibles actuelles, on les écraserait.
+                logActivity('SmarterMail [saveuser] Échec de création de l\'alias "'
+                    . $aliasName . '" pour ' . $email . ' : ' . _sm_apiError($res));
+            }
         }
     }
 
@@ -5142,6 +5161,15 @@ function smartermail_saveuser(array $params): string
                 return in_array($v, $allowed, true) ? $v : 'None';
             })(),
         ]);
+    }
+
+    // Les autres réglages ont été enregistrés ; on signale uniquement les alias
+    // en échec (sinon l'utilisateur croirait à tort que tout est passé).
+    if (!empty($aliasErrors)) {
+        return sprintf(
+            $l['err_alias_save'] ?? 'Impossible d\'enregistrer le ou les alias : %s. Les autres modifications ont bien été enregistrées.',
+            implode(', ', $aliasErrors)
+        );
     }
 
     return 'success';

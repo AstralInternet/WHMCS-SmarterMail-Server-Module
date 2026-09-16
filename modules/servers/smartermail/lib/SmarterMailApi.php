@@ -145,6 +145,14 @@ class SmarterMailApi
      */
     private int $connectTimeout = 10;
 
+    /**
+     * @var array Cache de la liste d'alias par token DA (clé = md5 du token).
+     *            Évite un N+1 quand plusieurs alias doivent être résolus par
+     *            repli sur la liste (voir getAlias()). Invalidé à chaque
+     *            création / modification / suppression d'alias.
+     */
+    private array $aliasListCache = [];
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // Constructeur et factory
@@ -2009,14 +2017,79 @@ class SmarterMailApi
      * Endpoint API : GET api/v1/settings/domain/alias/{aliasName}
      * Token requis : Domain Admin
      *
+     * ⚠️  NOM DANS L'URL — PIÈGE IIS. Cette route met le nom de l'alias dans le
+     * CHEMIN. Si ce nom se termine par ce qui ressemble à une extension protégée
+     * d'ASP.NET/IIS (« .master », « .config », « .asax », « .cs », « .resx »…),
+     * IIS intercepte la requête et renvoie **404 AVANT** d'atteindre l'API — alors
+     * que l'alias existe bel et bien. Retourner « [] » dans ce cas faisait croire
+     * à l'appelant que l'alias n'existait pas : il tentait alors une création qui
+     * échouait en USER_ADD_ERROR_NAME_IN_USE, et l'alias disparaissait du GUI.
+     * D'où la résolution EN CASCADE ci-dessous.
+     *
      * @param string $aliasName Nom de l'alias (sans @domaine, ex: "info")
      * @param string $daToken   Token Domain Admin
-     * @return array            Données de l'alias ou tableau vide si introuvable
+     * @return array            Données de l'alias ou tableau vide si INTROUVABLE
+     *                          (l'absence signifie désormais « n'existe pas »,
+     *                          plus « l'appel a échoué »)
      */
     public function getAlias(string $aliasName, string $daToken): array
     {
+        // 1. Voie normale.
         $resp = $this->get('api/v1/settings/domain/alias/' . urlencode($aliasName), $daToken);
-        return $resp['success'] ? ($resp['data']['alias'] ?? []) : [];
+        if (($resp['success'] ?? false) && !empty($resp['data']['alias'])) {
+            return $resp['data']['alias'];
+        }
+
+        // 2. Nom contenant un point : réessayer avec un SLASH FINAL. Le dernier
+        //    segment devient vide, il n'y a donc plus d'« extension » apparente
+        //    à intercepter pour IIS — la requête atteint l'API et renvoie les
+        //    données complètes (destinations incluses).
+        if (str_contains($aliasName, '.')) {
+            $resp = $this->get('api/v1/settings/domain/alias/' . urlencode($aliasName) . '/', $daToken);
+            if (($resp['success'] ?? false) && !empty($resp['data']['alias'])) {
+                return $resp['data']['alias'];
+            }
+        }
+
+        // 3. Dernier repli : résoudre via la LISTE du domaine, où le nom voyage
+        //    dans le CORPS de la requête (aucun problème d'URL). Garantit au
+        //    minimum un verdict d'EXISTENCE fiable.
+        return $this->findAliasInList($aliasName, $daToken);
+    }
+
+    /**
+     * Retrouve un alias dans la liste du domaine (account-list-search) et le
+     * normalise à la forme de getAlias() — la liste expose « userName » là où le
+     * GET par nom expose « name ». Résultat mis en cache par token (anti N+1).
+     *
+     * @param string $aliasName Nom de l'alias recherché
+     * @param string $daToken   Token Domain Admin
+     * @return array            Alias normalisé, ou [] s'il n'existe pas
+     */
+    private function findAliasInList(string $aliasName, string $daToken): array
+    {
+        $cacheKey = md5($daToken);
+        if (!isset($this->aliasListCache[$cacheKey])) {
+            $this->aliasListCache[$cacheKey] = $this->getAliases($daToken);
+        }
+
+        $needle = strtolower(trim($aliasName));
+        foreach ($this->aliasListCache[$cacheKey] as $entry) {
+            if (strtolower(trim((string) ($entry['userName'] ?? ''))) !== $needle) {
+                continue;
+            }
+
+            return [
+                'name'            => (string) ($entry['userName'] ?? $aliasName),
+                'displayName'     => (string) ($entry['displayName'] ?? $aliasName),
+                'allowSending'    => (bool)   ($entry['allowSending'] ?? false),
+                'hideFromGAL'     => (bool)   ($entry['hideFromGAL']  ?? false),
+                'internalOnly'    => (bool)   ($entry['internalOnly'] ?? false),
+                'aliasTargetList' => (array)  ($entry['aliasTargetList'] ?? []),
+            ];
+        }
+
+        return [];
     }
 
     /**
@@ -2063,6 +2136,8 @@ class SmarterMailApi
             if (isset($safe[$boolField])) $safe[$boolField] = (bool) $safe[$boolField];
         }
 
+        $this->aliasListCache = [];  // la liste change → invalider le cache de repli
+
         return $this->post('api/v1/settings/domain/alias-put/', ['alias' => $safe], $daToken);
     }
 
@@ -2094,6 +2169,10 @@ class SmarterMailApi
             if (isset($safe[$boolField])) $safe[$boolField] = (bool) $safe[$boolField];
         }
 
+        $this->aliasListCache = [];  // la liste change → invalider le cache de repli
+
+        // NB : ici le nom voyage dans le CORPS ('oldName'), donc cette route n'est
+        // PAS sujette au piège d'extension IIS qui affecte getAlias()/deleteAlias().
         return $this->post('api/v1/settings/domain/alias/', [
             'oldName' => $oldName,
             'alias'   => $safe,
@@ -2121,14 +2200,35 @@ class SmarterMailApi
      */
     public function deleteAlias(string $aliasName, string $daToken): array
     {
+        $this->aliasListCache = [];  // la liste change → invalider le cache de repli
 
         // Endpoint dédié à la suppression d'alias (Domain Admin uniquement)
         // POST api/v1/settings/domain/alias-delete/{name}
-        return $this->post(
+        $resp = $this->post(
             'api/v1/settings/domain/alias-delete/' . urlencode($aliasName),
             [],
             $daToken
         );
+        if ($resp['success'] ?? false) {
+            return $resp;
+        }
+
+        // Même piège d'URL que getAlias() : un nom finissant par une extension
+        // protégée ASP.NET/IIS (« .master »…) est intercepté par IIS → 404 avant
+        // l'API, et la suppression échouait silencieusement. Le slash final
+        // supprime l'« extension » apparente.
+        if (str_contains($aliasName, '.')) {
+            $retry = $this->post(
+                'api/v1/settings/domain/alias-delete/' . urlencode($aliasName) . '/',
+                [],
+                $daToken
+            );
+            if ($retry['success'] ?? false) {
+                return $retry;
+            }
+        }
+
+        return $resp;
     }
 
 

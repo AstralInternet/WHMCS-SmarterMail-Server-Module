@@ -474,6 +474,8 @@ $_lang = [
     'err_admin_user_missing'   => 'Nom d\'utilisateur admin non configuré dans WHMCS.',
     'err_create_failed'        => 'Impossible de créer l\'adresse courriel. Veuillez réessayer ou ouvrir un ticket de support.',
     'err_save_failed'          => 'Impossible de sauvegarder les modifications. Veuillez réessayer ou ouvrir un ticket de support.',
+    // %s = liste des alias en échec. Les autres réglages ont bien été enregistrés.
+    'err_alias_save'           => 'Impossible d\'enregistrer le ou les alias : %s. Les autres modifications ont bien été enregistrées.',
     'err_delete_failed'        => 'Impossible de supprimer le compte. Veuillez réessayer ou ouvrir un ticket de support.',
 
     // ── Redirection (forwarding) ──────────────────────────────────────────────
