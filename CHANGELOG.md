@@ -10,6 +10,88 @@ versionnement respecte [Semantic Versioning](https://semver.org/lang/fr/) :
 - **MINEUR** — nouvelle fonctionnalité rétrocompatible.
 - **CORRECTIF** — correction de bug ou de sécurité, sans changement de comportement.
 
+## [1.27.9] - 2026-10-22
+
+### Corrigé — impersonification SA→DA : route héritée remplacée par une cascade
+
+`loginDomainAdmin()` n'utilisait que `POST …/sysadmin/manage-domain/{domaine}`. Sur
+SmarterMail 9777 cette route répond **`400 — NO_PERMISSIONS` même avec « Allow
+impersonation » activé** sur le compte : elle est **dépréciée** côté SmarterMail.
+
+- **Cascade dans un helper partagé** (`impersonateDomain()`), utilisé à la fois par
+  `loginDomainAdmin()` et `loginDomainAdminFull()` — un seul chemin de code, donc les deux
+  variantes ne peuvent plus diverger :
+  1. route **héritée** `sysadmin/manage-domain/{domaine}` (compatibilité anciens builds) ;
+  2. route **moderne** : `GET …/sysadmin/domain-admins/{domaine}` → puis
+     `POST …/domain/impersonate-user` `{"email": …}` → `impersonateAccessToken`. C'est le
+     **même endpoint que `loginUser()`**, dont on sait qu'il fonctionne sur les builds actuels.
+- **Parsing tolérant** de `domainAdmins` : accepte une liste de chaînes ou d'objets
+  (`email` / `userName`), ignore les entrées vides et complète un nom d'utilisateur seul en
+  adresse complète (`admin` → `admin@domaine`). 8 cas vérifiés.
+- **Traçabilité** : la réponse expose `via` (`manage-domain` | `impersonate-user` | `aucune`)
+  et le journal indique par quelle route le token a été obtenu.
+- Bénéficie aussi au **repli EAS/MAPI « live »** du hook de facturation, qui utilise la même
+  fonction.
+
+> ⚠️ Le token obtenu impersonifie un **administrateur de domaine** : il porte le contexte du
+> domaine mais pas forcément les privilèges SA (p. ex. le contournement de la vérification
+> MX). Sans importance en pratique : avec des MX correctement pointés, aucun contournement
+> n'est nécessaire — et en contourner un créerait un alias inerte.
+
+### Note de diagnostic — le refus MX du ticket `prisme2s.ca` était LÉGITIME
+
+Vérification DNS : `mail2.astralinternet.com` → `104.254.180.78/.119/.120`, alors que le MX
+de `prisme2s.ca` (et de `prisme2s.com`) pointe vers `mail.prismetechnologies.com` →
+`184.107.39.186`. Le courrier de ces domaines **ne transite pas par le serveur** : le refus
+de SmarterMail est correct, et la solution est de **repointer les MX**, pas de contourner.
+
+## [1.27.8] - 2026-10-22
+
+### Modifié — message d'alias de domaine aligné sur la cause réelle
+
+Le diagnostic livré par 1.27.7 a montré que l'échec MX peut être **indépendant du client** :
+SmarterMail compare la cible MX aux **IP liées à la machine**, ce qui échoue quand le serveur
+est derrière NAT/pare-feu (l'IP publique n'est pas « vue » comme locale) — même avec des MX
+parfaitement configurés. Le message invitait alors à corriger des DNS déjà corrects.
+
+- Message reformulé (FR + EN) : il explique le refus **et** oriente vers le soutien technique
+  si les MX sont déjà bons.
+
+> **Cause racine identifiée (action serveur, hors code)** : l'impersonification SA→DA renvoie
+> `HTTP 400 — NO_PERMISSIONS` sur SmarterMail 9777 — la route existe, c'est le **privilège
+> d'impersonification qui est désactivé** côté serveur (durcissement post-CVE). Or c'est lui
+> qui permet de contourner la vérification MX. **Réactiver ce privilège dans SmarterMail**
+> rétablit l'ajout d'alias de domaine *et* le repli EAS/MAPI « live » du hook de facturation.
+
+## [1.27.7] - 2026-10-22
+
+### Corrigé — ajout d'alias de domaine impossible (SmarterMail 9777)
+
+**Symptôme (prod)** : ajouter l'alias `prisme2s.ca` au domaine `prisme2s.com` échouait avec
+« Impossible d'ajouter l'alias de domaine ». Journal : `Impossible d'obtenir un token
+impersonifié … saToken: présent`.
+
+**Cause** : l'**impersonification SA→DA** (`POST …/sysadmin/manage-domain/{domaine}`) ne
+renvoie plus de `impersonateAccessToken` sur SmarterMail 9777 — même famille de panne que
+l'impersonification *utilisateur* corrigée en 1.24.2. Le code en faisait un **prérequis
+bloquant**, alors qu'elle ne sert **qu'à contourner la vérification MX**.
+
+- **Repli sur le token DA standard** quand l'impersonification est indisponible : l'ajout
+  n'est plus bloqué. SmarterMail applique alors sa vérification MX, qui **réussit dès que
+  l'alias pointe vers ce serveur** (cas normal — vérifié : les MX de `prisme2s.ca` et
+  `prisme2s.com` sont identiques).
+- **Diagnostic immédiat** : passage à `loginDomainAdminFull()`, qui expose le **code HTTP**
+  et l'erreur dans le journal (404 = route déplacée par une MAJ, 401/403 = privilège
+  d'impersonification désactivé) — plus besoin de fouiller le Module Log.
+- **Message actionnable** : en repli DA, un échec affiche désormais « vérifiez que les
+  enregistrements MX de *&lt;alias&gt;* pointent vers ce serveur » au lieu du générique
+  « contactez le soutien technique » (nouvelle clé `err_domain_alias_mx`, FR + EN).
+- Le journal indique aussi si la vérification MX était imposée, pour lever toute ambiguïté.
+
+⚠️ **À suivre** : la même impersonification SA→DA est utilisée par le hook de facturation
+(repli EAS/MAPI « live »). Elle ne casse pas la facturation — la Phase 1 `proto_usage`
+fonctionne sans API — mais la route devra être corrigée à la source.
+
 ## [1.27.6] - 2026-09-16
 
 ### Corrigé — alias dont le nom contient un point (ex. `harbour.master`)

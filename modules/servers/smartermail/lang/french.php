@@ -833,6 +833,8 @@ $_lang = [
     'err_domain_alias_limit_reached'    => 'Limite atteinte (%d alias de domaine maximum).',
     'err_domain_alias_already_exists'   => 'Cet alias de domaine existe déjà.',
     'err_domain_alias_add_failed'       => 'Impossible d\'ajouter l\'alias de domaine. Veuillez réessayer ou contacter le soutien technique.',
+    // %s = nom de l'alias refusé. Affiché quand SmarterMail impose la vérification MX.
+    'err_domain_alias_mx'               => 'Impossible d\'ajouter « %s » : le serveur de courriel a refusé l\'alias, ses enregistrements MX ne correspondant pas à ce serveur. Si vos MX sont déjà configurés correctement, contactez le soutien technique.',
     'err_domain_alias_not_found'        => 'Alias de domaine introuvable.',
     'err_domain_alias_delete_failed'    => 'Impossible de retirer l\'alias de domaine. Veuillez réessayer ou contacter le soutien technique.',
 

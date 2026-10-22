@@ -138,7 +138,7 @@ function smartermail_MetaData(): array
         // Version du module — incrémenter à chaque déploiement en production
         // Format : MAJEUR.MINEUR.CORRECTIF  (ex: 1.0.1 pour un correctif, 1.1.0 pour une nouveauté)
         // Voir CHANGELOG.md à la racine du dépôt pour l'historique détaillé.
-        'MODVersion' => '1.27.6',
+        'MODVersion' => '1.27.9',
 
         // Version de l'API WHMCS utilisée (1.1 = compatibilité large)
         'APIVersion' => '1.1',
@@ -3889,16 +3889,41 @@ function smartermail_adddomainalias(array $params): string
     //   - Il expire rapidement (JWT courte durée)
     //   - Le $saToken provient de _sm_initDomainAdmin qui l'obtient
     //     depuis les credentials serveur WHMCS (tblservers)
+    // On utilise la variante « Full » : elle expose le code HTTP et l'erreur, ce
+    // qui rend un échec d'impersonification diagnosticable directement depuis le
+    // journal d'activité (404 = route déplacée par une MAJ SmarterMail,
+    // 401/403 = privilège d'impersonification désactivé côté serveur).
     $impersonatedToken = null;
+    $impersonationDiag = 'token SA absent';
     if ($saToken) {
-        $impersonatedToken = $api->loginDomainAdmin($saToken, $params['domain']);
+        $full              = $api->loginDomainAdminFull($saToken, $params['domain']);
+        $impersonatedToken = $full['token'] ?? null;
+        $impersonationDiag = 'HTTP ' . ($full['code'] ?? '?')
+            . ' — ' . ($full['error'] ?? 'réponse sans impersonateAccessToken');
     }
 
-    if (!$impersonatedToken) {
-        logActivity('SmarterMail [adddomainalias] Impossible d\'obtenir un token impersonifié pour '
-            . $params['domain'] . ' | service: ' . $params['serviceid']
-            . ' | saToken: ' . ($saToken ? 'présent' : 'absent'));
-        return $lang['err_domain_alias_add_failed'] ?? 'Impossible d\'ajouter l\'alias de domaine.';
+    if ($impersonatedToken) {
+        logActivity('SmarterMail [adddomainalias] Impersonification SA→DA obtenue via « '
+            . ($full['via'] ?? '?') . ' » pour ' . $params['domain']
+            . ' | service: ' . $params['serviceid']);
+    }
+
+    // ── Repli : l'impersonification n'est PAS indispensable ──────────────
+    //
+    // Elle ne sert qu'à contourner la vérification MX (voir addDomainAlias()).
+    // Si elle est indisponible — p. ex. SmarterMail a déplacé la route
+    // sysadmin/manage-domain, comme ce fut le cas pour l'impersonification
+    // utilisateur — on NE bloque plus l'opération : on retombe sur le token DA
+    // standard. SmarterMail appliquera alors sa vérification MX, qui réussit dès
+    // que l'alias pointe bien vers ce serveur (le cas normal et attendu).
+    $addToken   = $impersonatedToken ?: $daToken;
+    $mxEnforced = ($impersonatedToken === null);
+
+    if ($mxEnforced) {
+        logActivity('SmarterMail [adddomainalias] Impersonification SA→DA indisponible ('
+            . $impersonationDiag . ') — repli sur le token DA ; SmarterMail appliquera la '
+            . 'vérification MX. domaine=' . $params['domain']
+            . ' | service: ' . $params['serviceid']);
     }
 
     // ── Vérifier la limite EN TEMPS RÉEL ─────────────────────────────────
@@ -3921,7 +3946,7 @@ function smartermail_adddomainalias(array $params): string
     // ── Appel API — Création de l'alias ──────────────────────────────────
     // On utilise le token DA impersonifié (SA → DA) qui possède à la fois
     // le contexte du domaine ET les privilèges pour contourner checkMx.
-    $resp = $api->addDomainAlias($aliasName, $impersonatedToken, false);
+    $resp = $api->addDomainAlias($aliasName, $addToken, false);
 
     if (!$resp['success']) {
         // Journaliser l'erreur API avec le maximum de détails pour le diagnostic.
@@ -3932,9 +3957,21 @@ function smartermail_adddomainalias(array $params): string
         //   0   = erreur réseau (timeout, DNS, SSL)
         logActivity('SmarterMail [adddomainalias] Échec API pour '
             . $params['domain'] . ' | alias=' . $aliasName
+            . ' | vérification MX imposée: ' . ($mxEnforced ? 'oui' : 'non')
             . ' | HTTP ' . ($resp['code'] ?? '?')
             . ' | erreur: ' . ($resp['error'] ?? 'inconnue')
             . ' | réponse: ' . json_encode($resp['data'] ?? null));
+
+        // En repli DA, la cause de loin la plus probable est la vérification MX.
+        // On donne alors un message ACTIONNABLE plutôt qu'un « contactez le
+        // soutien technique » qui ne dit rien au client.
+        if ($mxEnforced) {
+            return sprintf(
+                $lang['err_domain_alias_mx']
+                    ?? 'Impossible d\'ajouter « %s ». Vérifiez que ses enregistrements MX pointent vers ce serveur de courriel, puis réessayez.',
+                $aliasName
+            );
+        }
         return $lang['err_domain_alias_add_failed'] ?? 'Impossible d\'ajouter l\'alias de domaine.';
     }
 

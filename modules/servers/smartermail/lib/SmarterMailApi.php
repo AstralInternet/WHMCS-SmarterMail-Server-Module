@@ -558,13 +558,104 @@ class SmarterMailApi
      */
     public function loginDomainAdmin(string $saToken, string $domain): ?string
     {
-        $resp = $this->request(
+        return $this->impersonateDomain($saToken, $domain)['token'];
+    }
+
+    /**
+     * Obtient un token à CONTEXTE DOMAINE depuis un token SysAdmin, en cascade.
+     *
+     * 1. Route HÉRITÉE : POST api/v1/settings/sysadmin/manage-domain/{domaine}
+     *    Historiquement la seule méthode. Sur les builds récents (observé en
+     *    9777), elle répond « 400 — NO_PERMISSIONS » MÊME quand le privilège
+     *    « Allow impersonation » est activé sur le compte : la route est
+     *    désormais dépréciée côté SmarterMail.
+     *
+     * 2. Route MODERNE (celle qu'utilisent aujourd'hui les outils SmarterMail) :
+     *    a) GET  api/v1/settings/sysadmin/domain-admins/{domaine}  → liste des
+     *       administrateurs du domaine (champ « domainAdmins ») ;
+     *    b) POST api/v1/settings/domain/impersonate-user  avec {"email": …} →
+     *       « impersonateAccessToken ». C'est le MÊME endpoint que loginUser(),
+     *       dont on sait qu'il fonctionne sur les builds actuels.
+     *
+     * Le token rendu impersonifie un ADMINISTRATEUR DE DOMAINE : il possède le
+     * contexte du domaine, mais pas nécessairement les privilèges SA (p. ex. le
+     * contournement de la vérification MX à l'ajout d'un alias de domaine).
+     *
+     * @param  string $saToken Token SysAdmin
+     * @param  string $domain  Nom de domaine
+     * @return array  ['token'=>?string, 'code'=>int, 'error'=>?string,
+     *                 'rawData'=>array, 'via'=>string]  via ∈ manage-domain |
+     *                 impersonate-user | aucune
+     */
+    private function impersonateDomain(string $saToken, string $domain): array
+    {
+        // ── 1. Route héritée ─────────────────────────────────────────────
+        $resp  = $this->request(
             'POST',
             'api/v1/settings/sysadmin/manage-domain/' . urlencode($domain),
             [],       // Corps vide — l'identité du domaine est dans l'URL
             $saToken
         );
-        return $resp['success'] ? ($resp['data']['impersonateAccessToken'] ?? null) : null;
+        $token = ($resp['success'] ?? false) ? ($resp['data']['impersonateAccessToken'] ?? null) : null;
+        if ($token) {
+            return [
+                'token' => $token, 'code' => $resp['code'], 'error' => null,
+                'rawData' => $resp['data'] ?? [], 'via' => 'manage-domain',
+            ];
+        }
+
+        // ── 2. Route moderne : impersonifier un admin du domaine ─────────
+        $adminEmail = $this->firstDomainAdminEmail($saToken, $domain);
+        if ($adminEmail === null) {
+            return [
+                'token' => null, 'code' => $resp['code'],
+                'error' => ($resp['error'] ?? 'impersonification refusée')
+                    . ' ; aucun administrateur de domaine utilisable pour le repli',
+                'rawData' => $resp['data'] ?? [], 'via' => 'aucune',
+            ];
+        }
+
+        $imp   = $this->request('POST', 'api/v1/settings/domain/impersonate-user', ['email' => $adminEmail], $saToken);
+        $token = ($imp['success'] ?? false) ? ($imp['data']['impersonateAccessToken'] ?? null) : null;
+
+        return [
+            'token'   => $token,
+            'code'    => $imp['code'],
+            'error'   => $token ? null : ($imp['error'] ?? 'réponse sans impersonateAccessToken'),
+            'rawData' => $imp['data'] ?? [],
+            'via'     => $token ? 'impersonate-user' : 'aucune',
+        ];
+    }
+
+    /**
+     * Première adresse d'administrateur du domaine, pour l'impersonification.
+     * Tolère les deux formes rencontrées dans « domainAdmins » : une simple
+     * chaîne, ou un objet exposant email/userName. Complète en adresse pleine
+     * si seul le nom d'utilisateur est fourni.
+     *
+     * @return string|null null si aucun admin exploitable
+     */
+    private function firstDomainAdminEmail(string $saToken, string $domain): ?string
+    {
+        $resp = $this->get('api/v1/settings/sysadmin/domain-admins/' . urlencode($domain), $saToken);
+        if (!($resp['success'] ?? false)) {
+            return null;
+        }
+
+        foreach ((array) ($resp['data']['domainAdmins'] ?? []) as $admin) {
+            $candidate = is_array($admin)
+                ? (string) ($admin['email'] ?? $admin['userName'] ?? '')
+                : (string) $admin;
+
+            $candidate = trim($candidate);
+            if ($candidate === '') {
+                continue;
+            }
+            // Un username seul (« admin ») doit devenir « admin@domaine ».
+            return str_contains($candidate, '@') ? $candidate : $candidate . '@' . $domain;
+        }
+
+        return null;
     }
 
     /**
@@ -647,24 +738,10 @@ class SmarterMailApi
      */
     public function loginDomainAdminFull(string $saToken, string $domain): array
     {
-        $resp = $this->request(
-            'POST',
-            'api/v1/settings/sysadmin/manage-domain/' . urlencode($domain),
-            [],
-            $saToken
-        );
-
-        $token = null;
-        if ($resp['success']) {
-            $token = $resp['data']['impersonateAccessToken'] ?? null;
-        }
-
-        return [
-            'token'   => $token,
-            'code'    => $resp['code'],
-            'error'   => $resp['error'],
-            'rawData' => $resp['data'] ?? [],
-        ];
+        // Même cascade que loginDomainAdmin() — un seul chemin de code, donc les
+        // deux variantes ne peuvent pas diverger. 'via' indique la route ayant
+        // abouti (précieux dans le journal pour diagnostiquer un build donné).
+        return $this->impersonateDomain($saToken, $domain);
     }
 
     /**
